@@ -14,37 +14,25 @@ const TEMPLATE := "{\n    \n}"
 
 var _mode: DocMode = DocMode.INSERT
 var _edit_index := -1
-var _editor: CodeEdit
-var _status: Label
-var _primary_btn: Button
+
+@onready var _editor: CodeEdit = %Editor
+@onready var _status: Label = %Status
+@onready var _primary_btn: Button = %PrimaryBtn
+@onready var _validate_btn: Button = %ValidateBtn
+@onready var _cancel_btn: Button = %CancelBtn
 
 
 func _ready() -> void:
-	visible = false
-	theme = AppTheme.shared()
-	min_size = Vector2i(420, 300)
-	exclusive = true
-	transient = true
 	close_requested.connect(hide)
+	_apply_style()
+	_validate_btn.pressed.connect(func() -> void: _validate())
+	_primary_btn.pressed.connect(_on_primary)
+	_cancel_btn.pressed.connect(hide)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
 
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
-	margin.add_child(col)
-
-	_editor = CodeEdit.new()
-	_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_editor.gutters_draw_line_numbers = true
-	col.add_child(_editor)
-
-	col.add_child(_build_buttons())
+func _apply_style() -> void:
+	_status.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_primary_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
 
 
 # Public API ------------------------------------------------------------------
@@ -86,34 +74,6 @@ func open_view(text: String) -> void:
 func _popup() -> void:
 	popup_centered(Vector2i(560, 460))
 	_editor.grab_focus()
-
-
-func _build_buttons() -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-
-	var validate_btn := Button.new()
-	validate_btn.text = "Validate"
-	validate_btn.pressed.connect(func() -> void: _validate())
-	row.add_child(validate_btn)
-
-	_status = Label.new()
-	_status.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(_status)
-
-	_primary_btn = Button.new()
-	_primary_btn.text = "Insert"
-	_primary_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
-	_primary_btn.pressed.connect(_on_primary)
-	row.add_child(_primary_btn)
-
-	var cancel_btn := Button.new()
-	cancel_btn.text = "Close"
-	cancel_btn.pressed.connect(hide)
-	row.add_child(cancel_btn)
-
-	return row
 
 
 func _validate() -> bool:

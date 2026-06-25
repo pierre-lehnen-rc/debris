@@ -6,6 +6,8 @@ extends Control
 ## seeds the menu items, applies palette styling and wires the sidebar's
 ## collection activation to the workspace so double-clicking opens a query tab.
 
+const CONNECTION_DIALOG_SCENE := preload("res://source/ui/dialogs/connection_dialog.tscn")
+
 @onready var _background: ColorRect = %Background
 @onready var _file_menu: PopupMenu = %File
 @onready var _view_menu: PopupMenu = %View
@@ -28,7 +30,7 @@ func _ready() -> void:
 
 	_connect_btn.pressed.connect(_open_connection_dialog)
 
-	_connection_dialog = ConnectionDialog.new()
+	_connection_dialog = CONNECTION_DIALOG_SCENE.instantiate()
 	add_child(_connection_dialog)
 	_connection_dialog.saved.connect(_on_connection_saved)
 	_connection_dialog.updated.connect(_on_connection_updated)

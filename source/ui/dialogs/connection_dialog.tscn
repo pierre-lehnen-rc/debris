@@ -1,0 +1,279 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_p78re"]
+[ext_resource type="Script" path="res://source/ui/dialogs/connection_dialog.gd" id="2_2tupt"]
+
+[node name="ConnectionDialog" type="Window" unique_id=178844896]
+size = Vector2i(480, 420)
+visible = false
+transient = true
+exclusive = true
+min_size = Vector2i(480, 420)
+theme = ExtResource("1_p78re")
+script = ExtResource("2_2tupt")
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=790974713]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Col" type="VBoxContainer" parent="Margin" unique_id=825507468]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Tabs" type="TabContainer" parent="Margin/Col" unique_id=1651412986]
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+
+[node name="Connection" type="VBoxContainer" parent="Margin/Col/Tabs" unique_id=1424842267]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+metadata/_tab_index = 0
+
+[node name="Grid1" type="GridContainer" parent="Margin/Col/Tabs/Connection" unique_id=1408429962]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label2" type="Label" parent="Margin/Col/Tabs/Connection/Grid1" unique_id=218940986]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Name"
+horizontal_alignment = 2
+
+[node name="NameEdit" type="LineEdit" parent="Margin/Col/Tabs/Connection/Grid1" unique_id=1305478362]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "New Connection"
+
+[node name="Grid3" type="GridContainer" parent="Margin/Col/Tabs/Connection" unique_id=1468704896]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label4" type="Label" parent="Margin/Col/Tabs/Connection/Grid3" unique_id=394005199]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Address"
+horizontal_alignment = 2
+
+[node name="Address" type="HBoxContainer" parent="Margin/Col/Tabs/Connection/Grid3" unique_id=1181029824]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HostEdit" type="LineEdit" parent="Margin/Col/Tabs/Connection/Grid3/Address" unique_id=1495216058]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "localhost"
+
+[node name="Colon" type="Label" parent="Margin/Col/Tabs/Connection/Grid3/Address" unique_id=417037255]
+layout_mode = 2
+text = ":"
+
+[node name="PortEdit" type="LineEdit" parent="Margin/Col/Tabs/Connection/Grid3/Address" unique_id=350541385]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+text = "27017"
+
+[node name="Authentication" type="VBoxContainer" parent="Margin/Col/Tabs" unique_id=1399468581]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+metadata/_tab_index = 1
+
+[node name="AuthCheck" type="CheckBox" parent="Margin/Col/Tabs/Authentication" unique_id=1748538627]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Perform authentication"
+
+[node name="Grid5" type="GridContainer" parent="Margin/Col/Tabs/Authentication" unique_id=1747699345]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label6" type="Label" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=886253501]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Database"
+horizontal_alignment = 2
+
+[node name="AuthDbEdit" type="LineEdit" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=1015191337]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "admin"
+
+[node name="Label7" type="Label" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=934806299]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "User Name"
+horizontal_alignment = 2
+
+[node name="UserEdit" type="LineEdit" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=1577842522]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label8" type="Label" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=1705788923]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Password"
+horizontal_alignment = 2
+
+[node name="PassEdit" type="LineEdit" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=917702270]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+secret = true
+
+[node name="Label9" type="Label" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=819412275]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Auth Mechanism"
+horizontal_alignment = 2
+
+[node name="MechOption" type="OptionButton" parent="Margin/Col/Tabs/Authentication/Grid5" unique_id=97434711]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SSH" type="VBoxContainer" parent="Margin/Col/Tabs" unique_id=637965040]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+metadata/_tab_index = 2
+
+[node name="SshCheck" type="CheckBox" parent="Margin/Col/Tabs/SSH" unique_id=339015637]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Use SSH tunnel"
+
+[node name="Grid10" type="GridContainer" parent="Margin/Col/Tabs/SSH" unique_id=75311088]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label11" type="Label" parent="Margin/Col/Tabs/SSH/Grid10" unique_id=1332305149]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "SSH Address"
+horizontal_alignment = 2
+
+[node name="SshHostEdit" type="LineEdit" parent="Margin/Col/Tabs/SSH/Grid10" unique_id=749346244]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "ssh.example.com:22"
+
+[node name="Label12" type="Label" parent="Margin/Col/Tabs/SSH/Grid10" unique_id=1834304036]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "SSH User"
+horizontal_alignment = 2
+
+[node name="SshUserEdit" type="LineEdit" parent="Margin/Col/Tabs/SSH/Grid10" unique_id=2716218]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SSL" type="VBoxContainer" parent="Margin/Col/Tabs" unique_id=1470098782]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+metadata/_tab_index = 3
+
+[node name="SslCheck" type="CheckBox" parent="Margin/Col/Tabs/SSL" unique_id=1365964778]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Use SSL/TLS protocol"
+
+[node name="Grid13" type="GridContainer" parent="Margin/Col/Tabs/SSL" unique_id=1665638677]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label14" type="Label" parent="Margin/Col/Tabs/SSL/Grid13" unique_id=1092936856]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "CA File"
+horizontal_alignment = 2
+
+[node name="SslCaEdit" type="LineEdit" parent="Margin/Col/Tabs/SSL/Grid13" unique_id=558340290]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Path to CA certificate"
+
+[node name="Advanced" type="VBoxContainer" parent="Margin/Col/Tabs" unique_id=609212644]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+metadata/_tab_index = 4
+
+[node name="Grid15" type="GridContainer" parent="Margin/Col/Tabs/Advanced" unique_id=1220720478]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="Label16" type="Label" parent="Margin/Col/Tabs/Advanced/Grid15" unique_id=977108171]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Default Database"
+horizontal_alignment = 2
+
+[node name="DefaultDbEdit" type="LineEdit" parent="Margin/Col/Tabs/Advanced/Grid15" unique_id=573249676]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "(show all databases)"
+
+[node name="Label17" type="Label" parent="Margin/Col/Tabs/Advanced/Grid15" unique_id=1252562996]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Timeout (s)"
+horizontal_alignment = 2
+
+[node name="TimeoutEdit" type="LineEdit" parent="Margin/Col/Tabs/Advanced/Grid15" unique_id=1744562923]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "30"
+
+[node name="Buttons" type="HBoxContainer" parent="Margin/Col" unique_id=111653223]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TestBtn" type="Button" parent="Margin/Col/Buttons" unique_id=416401010]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Test"
+
+[node name="Status" type="Label" parent="Margin/Col/Buttons" unique_id=1592853431]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SaveBtn" type="Button" parent="Margin/Col/Buttons" unique_id=1981201715]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save"
+
+[node name="CancelBtn" type="Button" parent="Margin/Col/Buttons" unique_id=162974287]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"

@@ -12,6 +12,7 @@ extends VBoxContainer
 enum ViewMode { TREE, TABLE, TEXT }
 
 const DEFAULT_LIMIT := 50
+const DOCUMENT_DIALOG_SCENE := preload("res://source/ui/dialogs/document_dialog.tscn")
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
@@ -55,7 +56,7 @@ func _ready() -> void:
 		view.insert_requested.connect(request_insert)
 		view.delete_requested.connect(_on_delete_requested)
 
-	_doc_dialog = DocumentDialog.new()
+	_doc_dialog = DOCUMENT_DIALOG_SCENE.instantiate()
 	_doc_dialog.inserted.connect(_on_document_inserted)
 	_doc_dialog.updated.connect(_on_document_updated)
 	add_child(_doc_dialog)
