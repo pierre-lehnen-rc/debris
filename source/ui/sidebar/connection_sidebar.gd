@@ -6,13 +6,18 @@ extends PanelContainer
 ## query tab targeting it.
 
 signal collection_activated(connection: String, database: String, collection: String)
+signal add_connection_requested()
 
 const META_TYPE := "type"  # "connection" | "database" | "collection"
 
 var _tree: Tree
+# Runtime, mutable copy seeded from MockData so new connections can be appended.
+var _connections: Array = []
 
 
 func _ready() -> void:
+	_connections = MockData.CONNECTIONS.duplicate(true)
+
 	var root_box := VBoxContainer.new()
 	root_box.add_theme_constant_override("separation", 0)
 	add_child(root_box)
@@ -26,6 +31,17 @@ func _ready() -> void:
 	_tree.item_activated.connect(_on_item_activated)
 	root_box.add_child(_tree)
 
+	_populate()
+
+
+## Appends a connection config (as produced by ConnectionDialog) and refreshes.
+func add_connection(config: Dictionary) -> void:
+	_connections.append({
+		"name": config.get("name", "New Connection"),
+		"host": config.get("host", ""),
+		"connected": false,
+		"databases": config.get("databases", []),
+	})
 	_populate()
 
 
@@ -52,6 +68,7 @@ func _build_header() -> Control:
 	add_btn.text = "+"
 	add_btn.tooltip_text = "New connection"
 	add_btn.focus_mode = Control.FOCUS_NONE
+	add_btn.pressed.connect(func() -> void: add_connection_requested.emit())
 	row.add_child(add_btn)
 
 	return header
@@ -61,7 +78,7 @@ func _populate() -> void:
 	_tree.clear()
 	var root := _tree.create_item()
 
-	for conn in MockData.CONNECTIONS:
+	for conn in _connections:
 		var conn_item := _tree.create_item(root)
 		var dot := "●" if conn.get("connected", false) else "○"
 		conn_item.set_text(0, "%s  %s" % [dot, conn["name"]])

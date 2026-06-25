@@ -19,6 +19,16 @@ const TEXT := Color("#c7ccd6")
 const TEXT_DIM := Color("#8b919e")
 const TEXT_BRIGHT := Color("#e8ebf0")
 
+static var _cached: Theme
+
+## Returns a single shared theme instance, built on first use. Use this for the
+## root Control and every dialog so the whole app shares one palette.
+static func shared() -> Theme:
+	if _cached == null:
+		_cached = build()
+	return _cached
+
+
 static func build() -> Theme:
 	var theme := Theme.new()
 	theme.default_font_size = 14
@@ -34,6 +44,8 @@ static func build() -> Theme:
 	_style_popup(theme)
 	_style_splits(theme)
 	_style_scrollbars(theme)
+	_style_window(theme)
+	_style_misc(theme)
 	return theme
 
 
@@ -172,3 +184,35 @@ static func _style_scrollbars(theme: Theme) -> void:
 		theme.set_stylebox("grabber", type, _flat(Color("#454b58"), 6))
 		theme.set_stylebox("grabber_highlight", type, _flat(Color("#525a6a"), 6))
 		theme.set_stylebox("grabber_pressed", type, _flat(ACCENT, 6))
+
+
+static func _style_window(theme: Theme) -> void:
+	# Embedded sub-windows (dialogs) draw a frame whose top content margin holds
+	# the title; leave room for it so dialog content doesn't overlap the title.
+	var border := _flat(BG_DARK, 6, 1)
+	border.content_margin_left = 1
+	border.content_margin_right = 1
+	border.content_margin_bottom = 1
+	border.content_margin_top = 34
+	border.shadow_color = Color(0, 0, 0, 0.4)
+	border.shadow_size = 8
+	theme.set_stylebox("embedded_border", "Window", border)
+	var unfocused: StyleBoxFlat = border.duplicate()
+	unfocused.border_color = BORDER
+	theme.set_stylebox("embedded_unfocused_border", "Window", unfocused)
+	theme.set_color("title_color", "Window", TEXT_BRIGHT)
+	theme.set_color("title_outline_modulate", "Window", BG_DARK)
+	theme.set_constant("title_height", "Window", 30)
+	theme.set_constant("resize_margin", "Window", 4)
+
+
+static func _style_misc(theme: Theme) -> void:
+	for type in ["CheckBox", "CheckButton"]:
+		theme.set_color("font_color", type, TEXT)
+		theme.set_color("font_hover_color", type, TEXT_BRIGHT)
+		theme.set_color("font_pressed_color", type, TEXT_BRIGHT)
+		theme.set_color("font_disabled_color", type, TEXT_DIM)
+		theme.set_stylebox("normal", type, StyleBoxEmpty.new())
+		theme.set_stylebox("hover", type, StyleBoxEmpty.new())
+		theme.set_stylebox("pressed", type, StyleBoxEmpty.new())
+	theme.set_color("font_color", "SpinBox", TEXT)

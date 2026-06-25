@@ -8,11 +8,12 @@ extends Control
 var _sidebar: ConnectionSidebar
 var _workspace: Workspace
 var _status_label: Label
+var _connection_dialog: ConnectionDialog
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	theme = AppTheme.build()
+	theme = AppTheme.shared()
 
 	var bg := ColorRect.new()
 	bg.color = AppTheme.BG_DARKEST
@@ -43,7 +44,16 @@ func _ready() -> void:
 
 	root.add_child(_build_status_bar())
 
+	_connection_dialog = ConnectionDialog.new()
+	add_child(_connection_dialog)
+	_connection_dialog.saved.connect(_on_connection_saved)
+
 	_sidebar.collection_activated.connect(_on_collection_activated)
+	_sidebar.add_connection_requested.connect(_open_connection_dialog)
+
+
+func _open_connection_dialog() -> void:
+	_connection_dialog.open_new()
 
 
 func _build_menu_bar() -> Control:
@@ -56,6 +66,7 @@ func _build_menu_bar() -> Control:
 	file.add_item("Open Shell", 1)
 	file.add_separator()
 	file.add_item("Quit", 2)
+	file.id_pressed.connect(_on_file_menu)
 	bar.add_child(file)
 
 	var edit := PopupMenu.new()
@@ -94,11 +105,16 @@ func _build_toolbar() -> Control:
 	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
 
-	for label in ["Connect", "Refresh"]:
-		var btn := Button.new()
-		btn.text = label
-		btn.focus_mode = Control.FOCUS_NONE
-		row.add_child(btn)
+	var connect_btn := Button.new()
+	connect_btn.text = "Connect"
+	connect_btn.focus_mode = Control.FOCUS_NONE
+	connect_btn.pressed.connect(_open_connection_dialog)
+	row.add_child(connect_btn)
+
+	var refresh_btn := Button.new()
+	refresh_btn.text = "Refresh"
+	refresh_btn.focus_mode = Control.FOCUS_NONE
+	row.add_child(refresh_btn)
 
 	return panel
 
@@ -126,3 +142,16 @@ func _build_status_bar() -> Control:
 func _on_collection_activated(conn: String, database: String, collection: String) -> void:
 	_workspace.open_collection(conn, database, collection)
 	_status_label.text = "Opened %s.%s on %s" % [database, collection, conn]
+
+
+func _on_file_menu(id: int) -> void:
+	match id:
+		0:  # New Connection…
+			_open_connection_dialog()
+		2:  # Quit
+			get_tree().quit()
+
+
+func _on_connection_saved(config: Dictionary) -> void:
+	_sidebar.add_connection(config)
+	_status_label.text = "Added connection '%s'" % config.get("name", "")
