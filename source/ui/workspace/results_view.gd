@@ -53,6 +53,7 @@ func _ready() -> void:
 	_tree_view.allow_rmb_select = true
 	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
 	_tree_view.gui_input.connect(_on_tree_gui_input.bind(_tree_view))
+	_tree_view.item_activated.connect(_on_tree_item_activated.bind(_tree_view))
 	_tree_view.columns = 3
 	_tree_view.set_column_title(0, "Key")
 	_tree_view.set_column_title(1, "Value")
@@ -384,6 +385,13 @@ func _on_doc_action(id: int) -> void:
 			_documents.remove_at(_menu_doc_index)
 			_update_count()
 			_rebuild()
+
+
+func _on_tree_item_activated(tree: Tree) -> void:
+	# Double-click (or Enter) on an object/array row toggles it non-recursively.
+	var item := tree.get_selected()
+	if item != null and item.get_child_count() > 0:
+		item.set_collapsed(not item.is_collapsed())
 
 
 func _collapse_or_select_parent(item: TreeItem, tree: Tree) -> void:
