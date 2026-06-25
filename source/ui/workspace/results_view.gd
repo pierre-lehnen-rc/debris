@@ -21,6 +21,7 @@ enum DocAction {
 }
 
 const DEFAULT_LIMIT := 50
+const TABLE_COLUMN_MIN_WIDTH := 160
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
@@ -344,7 +345,12 @@ func _rebuild_table() -> void:
 	_table_view.columns = max(1, columns.size())
 	for c in columns.size():
 		_table_view.set_column_title(c, columns[c])
+		# Expand to share width when there are few columns, but hold a minimum so
+		# that many columns overflow into a horizontal scrollbar instead of being
+		# squeezed unreadably narrow. Clip long cell text rather than wrapping.
 		_table_view.set_column_expand(c, true)
+		_table_view.set_column_custom_minimum_width(c, TABLE_COLUMN_MIN_WIDTH)
+		_table_view.set_column_clip_content(c, true)
 
 	var root := _table_view.create_item()
 	for i in range(bounds.x, bounds.y):
