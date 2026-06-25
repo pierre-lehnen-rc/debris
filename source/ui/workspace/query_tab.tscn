@@ -1,0 +1,49 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/query_tab.gd" id="1_i88w5"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/results_view.tscn" id="2_m7gy8"]
+[ext_resource type="Script" path="res://source/ui/workspace/results_view.gd" id="3_0youk"]
+
+[node name="QueryTab" type="VBoxContainer" unique_id=1223911229]
+theme_override_constants/separation = 0
+script = ExtResource("1_i88w5")
+
+[node name="Toolbar" type="PanelContainer" parent="." unique_id=1455541509]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Toolbar" unique_id=1564282284]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RunBtn" type="Button" parent="Toolbar/Row" unique_id=1949800038]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Run query (loads mock data for now)"
+focus_mode = 0
+text = "Run"
+
+[node name="TargetLabel" type="Label" parent="Toolbar/Row" unique_id=1525425623]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Split" type="VSplitContainer" parent="." unique_id=664523523]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+split_offsets = PackedInt32Array(140)
+split_offset = 140
+
+[node name="QueryEdit" type="CodeEdit" parent="Split" unique_id=1514647853]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+placeholder_text = "db.getCollection(\"...\").find({})"
+gutters_draw_line_numbers = true
+
+[node name="Results" type="VBoxContainer" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 0
+script = ExtResource("3_0youk")

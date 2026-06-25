@@ -6,6 +6,8 @@ extends VBoxContainer
 ##   - Table: one row per document, columns = union of top-level fields
 ##   - Text: pretty-printed JSON
 ## Call set_documents() to feed data; the active view rebuilds on demand.
+## Layout lives in results_view.tscn; this script handles styling, wiring and the
+## dynamic tree/table/text content.
 
 enum ViewMode { TREE, TABLE, TEXT }
 enum DocAction {
@@ -28,19 +30,21 @@ var _mode: ViewMode = ViewMode.TREE
 var _offset := 0
 var _limit := DEFAULT_LIMIT
 
-var _count_label: Label
-var _page_label: Label
-var _offset_field: LineEdit
-var _limit_field: LineEdit
-var _prev_btn: Button
-var _next_btn: Button
-var _view_host: Control
-var _tree_view: Tree
-var _table_view: Tree
-var _text_view: CodeEdit
-var _mode_buttons: Array[Button] = []
+@onready var _header: PanelContainer = %Header
+@onready var _count_label: Label = %CountLabel
+@onready var _offset_label: Label = %OffsetLabel
+@onready var _limit_label: Label = %LimitLabel
+@onready var _page_label: Label = %PageLabel
+@onready var _offset_field: LineEdit = %OffsetField
+@onready var _limit_field: LineEdit = %LimitField
+@onready var _prev_btn: Button = %PrevBtn
+@onready var _next_btn: Button = %NextBtn
+@onready var _tree_view: Tree = %TreeView
+@onready var _table_view: Tree = %TableView
+@onready var _text_view: CodeEdit = %TextView
+@onready var _doc_menu: PopupMenu = %DocMenu
+@onready var _mode_buttons: Array[Button] = [%TreeBtn, %TableBtn, %TextBtn]
 
-var _doc_menu: PopupMenu
 var _doc_dialog: DocumentDialog
 var _menu_doc_index := -1
 var _menu_item: TreeItem
@@ -48,52 +52,34 @@ var _menu_tree: Tree
 
 
 func _ready() -> void:
-	add_theme_constant_override("separation", 0)
-	add_child(_build_header())
+	_apply_style()
 
-	_view_host = Control.new()
-	_view_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_view_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(_view_host)
+	for i in _mode_buttons.size():
+		var mode_value: ViewMode = i as ViewMode
+		_mode_buttons[i].pressed.connect(func() -> void: _set_mode(mode_value))
 
-	_tree_view = Tree.new()
-	_full_rect(_tree_view)
-	_tree_view.hide_root = true
-	_tree_view.select_mode = Tree.SELECT_ROW
-	_tree_view.allow_rmb_select = true
+	_offset_field.text_submitted.connect(_apply_offset_field)
+	_offset_field.focus_exited.connect(_apply_offset_field)
+	_limit_field.text_submitted.connect(_apply_limit_field)
+	_limit_field.focus_exited.connect(_apply_limit_field)
+	_prev_btn.pressed.connect(func() -> void: _set_offset(_offset - _limit))
+	_next_btn.pressed.connect(func() -> void: _set_offset(_offset + _limit))
+
 	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
 	_tree_view.gui_input.connect(_on_tree_gui_input.bind(_tree_view))
 	_tree_view.item_activated.connect(_on_tree_item_activated.bind(_tree_view))
-	_tree_view.columns = 3
 	_tree_view.set_column_title(0, "Key")
 	_tree_view.set_column_title(1, "Value")
 	_tree_view.set_column_title(2, "Type")
-	_tree_view.column_titles_visible = true
 	_tree_view.set_column_expand_ratio(0, 2)
 	_tree_view.set_column_expand_ratio(1, 4)
 	_tree_view.set_column_expand_ratio(2, 1)
-	_view_host.add_child(_tree_view)
 
-	_table_view = Tree.new()
-	_full_rect(_table_view)
-	_table_view.hide_root = true
-	_table_view.select_mode = Tree.SELECT_ROW
-	_table_view.allow_rmb_select = true
 	_table_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_table_view))
 	_table_view.gui_input.connect(_on_tree_gui_input.bind(_table_view))
-	_table_view.column_titles_visible = true
-	_view_host.add_child(_table_view)
 
-	_text_view = CodeEdit.new()
-	_full_rect(_text_view)
-	_text_view.editable = false
-	_text_view.gutters_draw_line_numbers = true
-	_view_host.add_child(_text_view)
-
-	_doc_menu = PopupMenu.new()
 	_doc_menu.theme = AppTheme.shared()
 	_doc_menu.id_pressed.connect(_on_doc_action)
-	add_child(_doc_menu)
 
 	_doc_dialog = DocumentDialog.new()
 	_doc_dialog.inserted.connect(_on_document_inserted)
@@ -102,6 +88,17 @@ func _ready() -> void:
 
 	_set_mode(ViewMode.TREE)
 	_update_pager()
+
+
+func _apply_style() -> void:
+	var sb := AppTheme._flat(AppTheme.BG_DARKEST, 0)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	_header.add_theme_stylebox_override("panel", sb)
+	for label in [_count_label, _offset_label, _limit_label, _page_label]:
+		label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
 ## Opens the document editor in insert mode (used by the sidebar's
@@ -119,104 +116,6 @@ func set_documents(documents: Array) -> void:
 func _update_count() -> void:
 	var n := _documents.size()
 	_count_label.text = "%d document%s" % [n, "" if n == 1 else "s"]
-
-
-func _build_header() -> Control:
-	var panel := PanelContainer.new()
-	var sb := AppTheme._flat(AppTheme.BG_DARKEST, 0)
-	sb.content_margin_left = 6
-	sb.content_margin_right = 8
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 4
-	panel.add_theme_stylebox_override("panel", sb)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	panel.add_child(row)
-
-	for entry in [["Tree", ViewMode.TREE], ["Table", ViewMode.TABLE], ["Text", ViewMode.TEXT]]:
-		var btn := Button.new()
-		btn.text = entry[0]
-		btn.toggle_mode = true
-		btn.focus_mode = Control.FOCUS_NONE
-		var mode_value: ViewMode = entry[1]
-		btn.pressed.connect(func() -> void: _set_mode(mode_value))
-		row.add_child(btn)
-		_mode_buttons.append(btn)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
-
-	_count_label = Label.new()
-	_count_label.text = "0 documents"
-	_count_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	row.add_child(_count_label)
-
-	row.add_child(_build_pager())
-
-	return panel
-
-
-func _build_pager() -> Control:
-	var box := HBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-
-	box.add_child(_make_dim_label("Offset"))
-	_offset_field = _make_num_field("0")
-	_offset_field.tooltip_text = "First document to show (0-based)"
-	_offset_field.text_submitted.connect(_apply_offset_field)
-	_offset_field.focus_exited.connect(_apply_offset_field)
-	box.add_child(_offset_field)
-
-	box.add_child(_make_dim_label("Limit"))
-	_limit_field = _make_num_field(str(DEFAULT_LIMIT))
-	_limit_field.tooltip_text = "Max documents per page"
-	_limit_field.text_submitted.connect(_apply_limit_field)
-	_limit_field.focus_exited.connect(_apply_limit_field)
-	box.add_child(_limit_field)
-
-	_prev_btn = Button.new()
-	_prev_btn.text = "<"
-	_prev_btn.focus_mode = Control.FOCUS_NONE
-	_prev_btn.tooltip_text = "Previous page"
-	_prev_btn.pressed.connect(func() -> void: _set_offset(_offset - _limit))
-	box.add_child(_prev_btn)
-
-	_page_label = Label.new()
-	_page_label.text = "0-0"
-	_page_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_page_label.custom_minimum_size = Vector2(72, 0)
-	box.add_child(_page_label)
-
-	_next_btn = Button.new()
-	_next_btn.text = ">"
-	_next_btn.focus_mode = Control.FOCUS_NONE
-	_next_btn.tooltip_text = "Next page"
-	_next_btn.pressed.connect(func() -> void: _set_offset(_offset + _limit))
-	box.add_child(_next_btn)
-
-	return box
-
-
-func _make_dim_label(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	return label
-
-
-func _make_num_field(value: String) -> LineEdit:
-	var field := LineEdit.new()
-	field.text = value
-	field.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	field.custom_minimum_size = Vector2(56, 0)
-	return field
-
-
-func _full_rect(node: Control) -> void:
-	node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 func _set_mode(mode: ViewMode) -> void:

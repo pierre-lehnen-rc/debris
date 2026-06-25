@@ -1,0 +1,130 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/results_view.gd" id="1_llaxb"]
+
+[node name="ResultsView" type="VBoxContainer" unique_id=2080887661]
+theme_override_constants/separation = 0
+script = ExtResource("1_llaxb")
+
+[node name="Header" type="PanelContainer" parent="." unique_id=1187834381]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Header" unique_id=2035200304]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TreeBtn" type="Button" parent="Header/Row" unique_id=1021792055]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Tree"
+
+[node name="TableBtn" type="Button" parent="Header/Row" unique_id=202102812]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Table"
+
+[node name="TextBtn" type="Button" parent="Header/Row" unique_id=2080179602]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Text"
+
+[node name="Spacer" type="Control" parent="Header/Row" unique_id=659188755]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CountLabel" type="Label" parent="Header/Row" unique_id=2098233406]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0 documents"
+
+[node name="Pager" type="HBoxContainer" parent="Header/Row" unique_id=912487866]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="OffsetLabel" type="Label" parent="Header/Row/Pager" unique_id=1968376836]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Offset"
+
+[node name="OffsetField" type="LineEdit" parent="Header/Row/Pager" unique_id=461114898]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+text = "0"
+alignment = 2
+
+[node name="LimitLabel" type="Label" parent="Header/Row/Pager" unique_id=622793973]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Limit"
+
+[node name="LimitField" type="LineEdit" parent="Header/Row/Pager" unique_id=1106482565]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+text = "50"
+alignment = 2
+
+[node name="PrevBtn" type="Button" parent="Header/Row/Pager" unique_id=257446962]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "<"
+
+[node name="PageLabel" type="Label" parent="Header/Row/Pager" unique_id=1646579087]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+text = "0-0"
+horizontal_alignment = 1
+
+[node name="NextBtn" type="Button" parent="Header/Row/Pager" unique_id=436421974]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = ">"
+
+[node name="ViewHost" type="Control" parent="." unique_id=866062115]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TreeView" type="Tree" parent="ViewHost" unique_id=238801753]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+columns = 3
+column_titles_visible = true
+allow_rmb_select = true
+hide_root = true
+select_mode = 1
+
+[node name="TableView" type="Tree" parent="ViewHost" unique_id=1523199163]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+column_titles_visible = true
+allow_rmb_select = true
+hide_root = true
+select_mode = 1
+
+[node name="TextView" type="CodeEdit" parent="ViewHost" unique_id=981783145]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+editable = false
+gutters_draw_line_numbers = true
+
+[node name="DocMenu" type="PopupMenu" parent="." unique_id=342638357]
+unique_name_in_owner = true

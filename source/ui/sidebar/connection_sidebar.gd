@@ -27,8 +27,12 @@ enum Action {
 	REFRESH,
 }
 
-var _tree: Tree
-var _context_menu: PopupMenu
+@onready var _header: PanelContainer = %Header
+@onready var _title: Label = %Title
+@onready var _add_btn: Button = %AddBtn
+@onready var _tree: Tree = %Tree
+@onready var _context_menu: PopupMenu = %ContextMenu
+
 var _menu_target: Dictionary = {}
 # Runtime, mutable copy seeded from MockData so connections can be edited.
 var _connections: Array = []
@@ -37,25 +41,14 @@ var _connections: Array = []
 func _ready() -> void:
 	_connections = MockData.CONNECTIONS.duplicate(true)
 
-	var root_box := VBoxContainer.new()
-	root_box.add_theme_constant_override("separation", 0)
-	add_child(root_box)
+	_apply_style()
 
-	root_box.add_child(_build_header())
-
-	_tree = Tree.new()
-	_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_tree.hide_root = true
-	_tree.select_mode = Tree.SELECT_ROW
-	_tree.allow_rmb_select = true
+	_add_btn.pressed.connect(func() -> void: add_connection_requested.emit())
 	_tree.item_activated.connect(_on_item_activated)
 	_tree.item_mouse_selected.connect(_on_item_mouse_selected)
-	root_box.add_child(_tree)
 
-	_context_menu = PopupMenu.new()
 	_context_menu.theme = AppTheme.shared()
 	_context_menu.id_pressed.connect(_on_context_action)
-	add_child(_context_menu)
 
 	_populate()
 
@@ -79,33 +72,16 @@ func update_connection(index: int, config: Dictionary) -> void:
 	_populate()
 
 
-func _build_header() -> Control:
-	var header := PanelContainer.new()
+func _apply_style() -> void:
 	var sb := AppTheme._flat(AppTheme.BG_DARKEST, 0)
 	sb.content_margin_left = 8
 	sb.content_margin_right = 6
 	sb.content_margin_top = 6
 	sb.content_margin_bottom = 6
-	header.add_theme_stylebox_override("panel", sb)
+	_header.add_theme_stylebox_override("panel", sb)
 
-	var row := HBoxContainer.new()
-	header.add_child(row)
-
-	var title := Label.new()
-	title.text = "CONNECTIONS"
-	title.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	title.add_theme_font_size_override("font_size", 11)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(title)
-
-	var add_btn := Button.new()
-	add_btn.text = "+"
-	add_btn.tooltip_text = "New connection"
-	add_btn.focus_mode = Control.FOCUS_NONE
-	add_btn.pressed.connect(func() -> void: add_connection_requested.emit())
-	row.add_child(add_btn)
-
-	return header
+	_title.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_title.add_theme_font_size_override("font_size", 11)
 
 
 func _populate() -> void:

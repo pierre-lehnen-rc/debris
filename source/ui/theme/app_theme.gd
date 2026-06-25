@@ -19,13 +19,19 @@ const TEXT := Color("#c7ccd6")
 const TEXT_DIM := Color("#8b919e")
 const TEXT_BRIGHT := Color("#e8ebf0")
 
+const THEME_PATH := "res://source/ui/theme/app_theme.tres"
+
 static var _cached: Theme
 
-## Returns a single shared theme instance, built on first use. Use this for the
-## root Control and every dialog so the whole app shares one palette.
+## Returns a single shared theme instance. Loads the saved .tres (the runtime
+## source of truth, assigned on the Main scene root); use this for popups and
+## dialogs that need the theme explicitly. Falls back to building from code if
+## the resource is missing. Regenerate the .tres with source/tools/gen_theme.gd
+## (or call build()) after editing the palette below.
 static func shared() -> Theme:
 	if _cached == null:
-		_cached = build()
+		var loaded := load(THEME_PATH) as Theme
+		_cached = loaded if loaded != null else build()
 	return _cached
 
 

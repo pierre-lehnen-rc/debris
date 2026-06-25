@@ -1,12 +1,93 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://source/ui/main.gd" id="1_main"]
+[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_61xnp"]
+[ext_resource type="Script" path="res://source/ui/main.gd" id="2_2lg2j"]
+[ext_resource type="PackedScene" path="res://source/ui/sidebar/connection_sidebar.tscn" id="3_7tgfe"]
+[ext_resource type="Script" path="res://source/ui/sidebar/connection_sidebar.gd" id="4_c2ens"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/workspace.tscn" id="5_dkx7x"]
+[ext_resource type="Script" path="res://source/ui/workspace/workspace.gd" id="6_0jodg"]
 
-[node name="Main" type="Control"]
+[node name="Main" type="Control" unique_id=1258944514]
 layout_mode = 3
-anchors_preset = 15
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("1_main")
+theme = ExtResource("1_61xnp")
+script = ExtResource("2_2lg2j")
+
+[node name="Background" type="ColorRect" parent="." unique_id=12300107]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1962489947]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/separation = 0
+
+[node name="MenuBar" type="MenuBar" parent="Box" unique_id=549202847]
+layout_mode = 2
+flat = true
+
+[node name="File" type="PopupMenu" parent="Box/MenuBar" unique_id=1662541177]
+unique_name_in_owner = true
+
+[node name="Edit" type="PopupMenu" parent="Box/MenuBar" unique_id=311597474]
+unique_name_in_owner = true
+
+[node name="View" type="PopupMenu" parent="Box/MenuBar" unique_id=1089238514]
+unique_name_in_owner = true
+
+[node name="Help" type="PopupMenu" parent="Box/MenuBar" unique_id=2145935029]
+unique_name_in_owner = true
+
+[node name="Toolbar" type="PanelContainer" parent="Box" unique_id=1017574385]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Box/Toolbar" unique_id=1598771408]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ConnectBtn" type="Button" parent="Box/Toolbar/Row" unique_id=1376067613]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "Connect"
+
+[node name="RefreshBtn" type="Button" parent="Box/Toolbar/Row" unique_id=156519815]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "Refresh"
+
+[node name="Split" type="HSplitContainer" parent="Box" unique_id=251711169]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+split_offsets = PackedInt32Array(260)
+split_offset = 260
+
+[node name="Sidebar" type="PanelContainer" parent="Box/Split" unique_id=1811904227 instance=ExtResource("3_7tgfe")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+script = ExtResource("4_c2ens")
+
+[node name="Workspace" type="Control" parent="Box/Split" unique_id=428728534 instance=ExtResource("5_dkx7x")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("6_0jodg")
+
+[node name="StatusBar" type="PanelContainer" parent="Box" unique_id=406884798]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="Box/StatusBar" unique_id=700990755]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Ready"

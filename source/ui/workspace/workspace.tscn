@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/workspace.gd" id="1_60do1"]
+
+[node name="Workspace" type="Control" unique_id=428728534]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_60do1")
+
+[node name="Tabs" type="TabContainer" parent="." unique_id=1908328140]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+tabs_rearrange_group = 0
+
+[node name="Welcome" type="CenterContainer" parent="." unique_id=976292319]
+unique_name_in_owner = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Box" type="VBoxContainer" parent="Welcome" unique_id=544720325]
+layout_mode = 2
+alignment = 1
+
+[node name="WelcomeTitle" type="Label" parent="Welcome/Box" unique_id=419301768]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Quetzalcoatl"
+horizontal_alignment = 1
+
+[node name="WelcomeHint" type="Label" parent="Welcome/Box" unique_id=1668374139]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Double-click a collection in the sidebar to open a query tab."
+horizontal_alignment = 1

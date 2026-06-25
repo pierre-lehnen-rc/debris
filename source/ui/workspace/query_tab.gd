@@ -4,13 +4,18 @@ extends VBoxContainer
 ## A single query workspace: a code editor on top, results below, split
 ## vertically. "Run" currently loads mock documents for the target collection;
 ## later it will execute the editor's query against a live connection.
+## Layout lives in query_tab.tscn; configure() must be called before the node
+## enters the tree so _ready() can seed the editor and target label.
 
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
 
-var _query_edit: CodeEdit
-var _results: ResultsView
+@onready var _toolbar: PanelContainer = %Toolbar
+@onready var _run_btn: Button = %RunBtn
+@onready var _target_label: Label = %TargetLabel
+@onready var _query_edit: CodeEdit = %QueryEdit
+@onready var _results: ResultsView = %Results
 
 
 func configure(conn: String, database: String, collection: String) -> void:
@@ -32,56 +37,25 @@ func tab_title() -> String:
 
 
 func _ready() -> void:
-	add_theme_constant_override("separation", 0)
-	add_child(_build_toolbar())
+	_apply_style()
 
-	var split := VSplitContainer.new()
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.split_offset = 140
-	add_child(split)
-
-	_query_edit = CodeEdit.new()
-	_query_edit.custom_minimum_size = Vector2(0, 90)
-	_query_edit.gutters_draw_line_numbers = true
-	_query_edit.placeholder_text = "db.getCollection(\"...\").find({})"
+	_target_label.text = "%s  ›  %s  ›  %s" % [connection_name, database_name, collection_name]
 	if not collection_name.is_empty():
 		_query_edit.text = "db.getCollection(\"%s\").find({})" % collection_name
-	split.add_child(_query_edit)
 
-	_results = ResultsView.new()
-	split.add_child(_results)
-
+	_run_btn.pressed.connect(_run)
 	_run()
 
 
-func _build_toolbar() -> Control:
-	var panel := PanelContainer.new()
+func _apply_style() -> void:
 	var sb := AppTheme._flat(AppTheme.BG_DARK, 0)
 	sb.content_margin_left = 8
 	sb.content_margin_right = 8
 	sb.content_margin_top = 5
 	sb.content_margin_bottom = 5
-	panel.add_theme_stylebox_override("panel", sb)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	panel.add_child(row)
-
-	var run_btn := Button.new()
-	run_btn.text = "Run"
-	run_btn.focus_mode = Control.FOCUS_NONE
-	run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
-	run_btn.tooltip_text = "Run query (loads mock data for now)"
-	run_btn.pressed.connect(_run)
-	row.add_child(run_btn)
-
-	var target := Label.new()
-	target.text = "%s  ›  %s  ›  %s" % [connection_name, database_name, collection_name]
-	target.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	target.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(target)
-
-	return panel
+	_toolbar.add_theme_stylebox_override("panel", sb)
+	_run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
+	_target_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
 func _run() -> void:
