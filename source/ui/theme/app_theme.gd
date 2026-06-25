@@ -194,6 +194,10 @@ static func _style_window(theme: Theme) -> void:
 	border.content_margin_right = 1
 	border.content_margin_bottom = 1
 	border.content_margin_top = 34
+	# The title bar is drawn in the region above the content; without an upward
+	# expand margin the stylebox background never fills it (title text floats on a
+	# transparent strip). Expand the painted box up by the title height + padding.
+	border.expand_margin_top = 34
 	border.shadow_color = Color(0, 0, 0, 0.4)
 	border.shadow_size = 8
 	theme.set_stylebox("embedded_border", "Window", border)
