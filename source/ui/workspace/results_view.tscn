@@ -1,103 +1,109 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://source/ui/workspace/results_view.gd" id="1_llaxb"]
+[ext_resource type="Script" path="res://source/ui/workspace/results_view.gd" id="1_kpuj7"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/results/tree_results_view.tscn" id="2_v1gr8"]
+[ext_resource type="Script" path="res://source/ui/workspace/results/tree_results_view.gd" id="3_s1b83"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/results/table_results_view.tscn" id="4_i1wbe"]
+[ext_resource type="Script" path="res://source/ui/workspace/results/table_results_view.gd" id="5_l1ggu"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/results/text_results_view.tscn" id="6_ewpu8"]
+[ext_resource type="Script" path="res://source/ui/workspace/results/text_results_view.gd" id="7_u75fy"]
 
-[node name="ResultsView" type="VBoxContainer" unique_id=2080887661]
+[node name="ResultsView" type="VBoxContainer" unique_id=345635311]
 theme_override_constants/separation = 0
-script = ExtResource("1_llaxb")
+script = ExtResource("1_kpuj7")
 
-[node name="Header" type="PanelContainer" parent="." unique_id=1187834381]
+[node name="Header" type="PanelContainer" parent="." unique_id=1835242518]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Row" type="HBoxContainer" parent="Header" unique_id=2035200304]
+[node name="Row" type="HBoxContainer" parent="Header" unique_id=481312313]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="TreeBtn" type="Button" parent="Header/Row" unique_id=1021792055]
+[node name="TreeBtn" type="Button" parent="Header/Row" unique_id=1670922338]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 text = "Tree"
 
-[node name="TableBtn" type="Button" parent="Header/Row" unique_id=202102812]
+[node name="TableBtn" type="Button" parent="Header/Row" unique_id=1878880927]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 text = "Table"
 
-[node name="TextBtn" type="Button" parent="Header/Row" unique_id=2080179602]
+[node name="TextBtn" type="Button" parent="Header/Row" unique_id=155414975]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
 text = "Text"
 
-[node name="Spacer" type="Control" parent="Header/Row" unique_id=659188755]
+[node name="Spacer" type="Control" parent="Header/Row" unique_id=982106052]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CountLabel" type="Label" parent="Header/Row" unique_id=2098233406]
+[node name="CountLabel" type="Label" parent="Header/Row" unique_id=674603655]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0 documents"
 
-[node name="Pager" type="HBoxContainer" parent="Header/Row" unique_id=912487866]
+[node name="Pager" type="HBoxContainer" parent="Header/Row" unique_id=1875871647]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="OffsetLabel" type="Label" parent="Header/Row/Pager" unique_id=1968376836]
+[node name="OffsetLabel" type="Label" parent="Header/Row/Pager" unique_id=1739105111]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Offset"
 
-[node name="OffsetField" type="LineEdit" parent="Header/Row/Pager" unique_id=461114898]
+[node name="OffsetField" type="LineEdit" parent="Header/Row/Pager" unique_id=1004294299]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 0)
 layout_mode = 2
 text = "0"
 alignment = 2
 
-[node name="LimitLabel" type="Label" parent="Header/Row/Pager" unique_id=622793973]
+[node name="LimitLabel" type="Label" parent="Header/Row/Pager" unique_id=1234735827]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Limit"
 
-[node name="LimitField" type="LineEdit" parent="Header/Row/Pager" unique_id=1106482565]
+[node name="LimitField" type="LineEdit" parent="Header/Row/Pager" unique_id=297314712]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 0)
 layout_mode = 2
 text = "50"
 alignment = 2
 
-[node name="PrevBtn" type="Button" parent="Header/Row/Pager" unique_id=257446962]
+[node name="PrevBtn" type="Button" parent="Header/Row/Pager" unique_id=99954818]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 text = "<"
 
-[node name="PageLabel" type="Label" parent="Header/Row/Pager" unique_id=1646579087]
+[node name="PageLabel" type="Label" parent="Header/Row/Pager" unique_id=2140325268]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
 text = "0-0"
 horizontal_alignment = 1
 
-[node name="NextBtn" type="Button" parent="Header/Row/Pager" unique_id=436421974]
+[node name="NextBtn" type="Button" parent="Header/Row/Pager" unique_id=854802551]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 text = ">"
 
-[node name="ViewHost" type="Control" parent="." unique_id=866062115]
+[node name="ViewHost" type="Control" parent="." unique_id=1288685961]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="TreeView" type="Tree" parent="ViewHost" unique_id=238801753]
+[node name="TreeView" type="Tree" parent="ViewHost" unique_id=1353931198 instance=ExtResource("2_v1gr8")]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_right = 1.0
@@ -107,8 +113,9 @@ column_titles_visible = true
 allow_rmb_select = true
 hide_root = true
 select_mode = 1
+script = ExtResource("3_s1b83")
 
-[node name="TableView" type="Tree" parent="ViewHost" unique_id=1523199163]
+[node name="TableView" type="Tree" parent="ViewHost" unique_id=1065542661 instance=ExtResource("4_i1wbe")]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_right = 1.0
@@ -117,14 +124,13 @@ column_titles_visible = true
 allow_rmb_select = true
 hide_root = true
 select_mode = 1
+script = ExtResource("5_l1ggu")
 
-[node name="TextView" type="CodeEdit" parent="ViewHost" unique_id=981783145]
+[node name="TextView" type="CodeEdit" parent="ViewHost" unique_id=409958440 instance=ExtResource("6_ewpu8")]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 editable = false
 gutters_draw_line_numbers = true
-
-[node name="DocMenu" type="PopupMenu" parent="." unique_id=342638357]
-unique_name_in_owner = true
+script = ExtResource("7_u75fy")

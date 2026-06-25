@@ -2,28 +2,16 @@ class_name ResultsView
 extends VBoxContainer
 
 ## Displays a set of documents in one of three modes, mirroring Robo3T:
-##   - Tree: expandable key/value/type per document
-##   - Table: one row per document, columns = union of top-level fields
-##   - Text: pretty-printed JSON
-## Call set_documents() to feed data; the active view rebuilds on demand.
-## Layout lives in results_view.tscn; this script handles styling, wiring and the
-## dynamic tree/table/text content.
+##   - Tree: expandable key/value/type per document   (TreeResultsView)
+##   - Table: one row per document, union of fields    (TableResultsView)
+##   - Text: pretty-printed JSON                        (TextResultsView)
+## This node owns the document array, pagination and the edit dialog; the active
+## sub-view (instanced in results_view.tscn under ViewHost) only renders the
+## current page and reports edit/view/insert/delete back through signals.
 
 enum ViewMode { TREE, TABLE, TEXT }
-enum DocAction {
-	EXPAND_RECURSIVE,
-	COLLAPSE_RECURSIVE,
-	EDIT,
-	VIEW,
-	INSERT,
-	COPY_NAME,
-	COPY_PATH,
-	COPY_JSON,
-	DELETE,
-}
 
 const DEFAULT_LIMIT := 50
-const TABLE_COLUMN_MIN_WIDTH := 160
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
@@ -39,16 +27,12 @@ var _limit := DEFAULT_LIMIT
 @onready var _limit_field: LineEdit = %LimitField
 @onready var _prev_btn: Button = %PrevBtn
 @onready var _next_btn: Button = %NextBtn
-@onready var _tree_view: Tree = %TreeView
-@onready var _table_view: Tree = %TableView
-@onready var _text_view: CodeEdit = %TextView
-@onready var _doc_menu: PopupMenu = %DocMenu
+@onready var _tree_view: TreeResultsView = %TreeView
+@onready var _table_view: TableResultsView = %TableView
+@onready var _text_view: TextResultsView = %TextView
 @onready var _mode_buttons: Array[Button] = [%TreeBtn, %TableBtn, %TextBtn]
 
 var _doc_dialog: DocumentDialog
-var _menu_doc_index := -1
-var _menu_item: TreeItem
-var _menu_tree: Tree
 
 
 func _ready() -> void:
@@ -65,21 +49,11 @@ func _ready() -> void:
 	_prev_btn.pressed.connect(func() -> void: _set_offset(_offset - _limit))
 	_next_btn.pressed.connect(func() -> void: _set_offset(_offset + _limit))
 
-	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
-	_tree_view.gui_input.connect(_on_tree_gui_input.bind(_tree_view))
-	_tree_view.item_activated.connect(_on_tree_item_activated.bind(_tree_view))
-	_tree_view.set_column_title(0, "Key")
-	_tree_view.set_column_title(1, "Value")
-	_tree_view.set_column_title(2, "Type")
-	_tree_view.set_column_expand_ratio(0, 2)
-	_tree_view.set_column_expand_ratio(1, 4)
-	_tree_view.set_column_expand_ratio(2, 1)
-
-	_table_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_table_view))
-	_table_view.gui_input.connect(_on_tree_gui_input.bind(_table_view))
-
-	_doc_menu.theme = AppTheme.shared()
-	_doc_menu.id_pressed.connect(_on_doc_action)
+	for view: DocResultsView in [_tree_view, _table_view]:
+		view.edit_requested.connect(_on_edit_requested)
+		view.view_requested.connect(_on_view_requested)
+		view.insert_requested.connect(request_insert)
+		view.delete_requested.connect(_on_delete_requested)
 
 	_doc_dialog = DocumentDialog.new()
 	_doc_dialog.inserted.connect(_on_document_inserted)
@@ -102,7 +76,7 @@ func _apply_style() -> void:
 
 
 ## Opens the document editor in insert mode (used by the sidebar's
-## "Insert Document…" action via the workspace).
+## "Insert Document…" action via the workspace, and the views' context menus).
 func request_insert() -> void:
 	_doc_dialog.open_insert()
 
@@ -129,13 +103,15 @@ func _set_mode(mode: ViewMode) -> void:
 
 
 func _rebuild() -> void:
+	var page := _page_documents()
+	var start := _page_bounds().x
 	match _mode:
 		ViewMode.TREE:
-			_rebuild_tree()
+			_tree_view.display(page, start)
 		ViewMode.TABLE:
-			_rebuild_table()
+			_table_view.display(page, start)
 		ViewMode.TEXT:
-			_text_view.text = JSON.stringify(_page_documents(), "  ")
+			_text_view.display(page)
 
 
 # Pagination ------------------------------------------------------------------
@@ -187,296 +163,24 @@ func _update_pager() -> void:
 	_next_btn.disabled = b.y >= _documents.size()
 
 
-# Tree view -------------------------------------------------------------------
-func _rebuild_tree() -> void:
-	_tree_view.clear()
-	var root := _tree_view.create_item()
-	var bounds := _page_bounds()
-	for i in range(bounds.x, bounds.y):
-		var doc: Dictionary = _documents[i]
-		var item := _tree_view.create_item(root)
-		var label: String = str(doc.get("_id", "(document)"))
-		item.set_text(0, "(%d) %s" % [i + 1, label])
-		item.set_custom_color(0, AppTheme.ACCENT)
-		item.set_text(1, "{%d fields}" % doc.size())
-		item.set_custom_color(1, AppTheme.TEXT_DIM)
-		item.set_text(2, "Object")
-		# Top-level item carries the document index plus name/value for copy actions.
-		item.set_metadata(0, {"doc_index": i, "key": "", "name": label, "value": doc})
-		_add_dict_children(item, doc)
-		item.set_collapsed(i != bounds.x)  # expand the first document on the page
-
-
-func _add_dict_children(parent: TreeItem, dict: Dictionary) -> void:
-	for key in dict:
-		_add_value_item(parent, str(key), dict[key])
-
-
-func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
-	var item := _tree_view.create_item(parent)
-	item.set_text(0, key)
-	item.set_custom_color(0, AppTheme.TEXT)
-	item.set_text(2, _type_name(value))
-	item.set_custom_color(2, AppTheme.TEXT_DIM)
-	item.set_metadata(0, {"key": key, "name": key, "value": value})
-
-	if value is Dictionary:
-		item.set_text(1, "{%d fields}" % value.size())
-		item.set_custom_color(1, AppTheme.TEXT_DIM)
-		_add_dict_children(item, value)
-		item.set_collapsed(true)
-	elif value is Array:
-		item.set_text(1, "[%d elements]" % value.size())
-		item.set_custom_color(1, AppTheme.TEXT_DIM)
-		for i in value.size():
-			_add_value_item(item, "[%d]" % i, value[i])
-		item.set_collapsed(true)
-	else:
-		item.set_text(1, _preview(value))
-		item.set_custom_color(1, _value_color(value))
-
-
-# Table view ------------------------------------------------------------------
-func _rebuild_table() -> void:
-	_table_view.clear()
-	var bounds := _page_bounds()
-	var columns := _collect_columns(_page_documents())
-	_table_view.columns = max(1, columns.size())
-	for c in columns.size():
-		_table_view.set_column_title(c, columns[c])
-		# Expand to share width when there are few columns, but hold a minimum so
-		# that many columns overflow into a horizontal scrollbar instead of being
-		# squeezed unreadably narrow. Clip long cell text rather than wrapping.
-		_table_view.set_column_expand(c, true)
-		_table_view.set_column_custom_minimum_width(c, TABLE_COLUMN_MIN_WIDTH)
-		_table_view.set_column_clip_content(c, true)
-
-	var root := _table_view.create_item()
-	for i in range(bounds.x, bounds.y):
-		var doc: Dictionary = _documents[i]
-		var row := _table_view.create_item(root)
-		row.set_metadata(0, {
-			"doc_index": i, "key": "", "name": str(doc.get("_id", "")), "value": doc,
-		})
-		for c in columns.size():
-			var key: String = columns[c]
-			if doc.has(key):
-				row.set_text(c, _preview(doc[key]))
-				row.set_custom_color(c, _value_color(doc[key]))
-			else:
-				row.set_text(c, "")
-
-
-func _collect_columns(docs: Array) -> Array:
-	var columns: Array = []
-	for doc in docs:
-		for key in doc:
-			if not columns.has(key):
-				columns.append(key)
-	return columns
-
-
-# Value formatting ------------------------------------------------------------
-func _preview(value: Variant) -> String:
-	if value is Dictionary:
-		return "{%d fields}" % value.size()
-	if value is Array:
-		return "[%d elements]" % value.size()
-	if value is String:
-		return value
-	if value is bool:
-		return "true" if value else "false"
-	return str(value)
-
-
-func _type_name(value: Variant) -> String:
-	if value is Dictionary:
-		return "Object"
-	if value is Array:
-		return "Array"
-	if value is bool:
-		return "Boolean"
-	if value is int:
-		return "Int32"
-	if value is float:
-		return "Double"
-	if value is String:
-		return "String"
-	return "Null"
-
-
-func _value_color(value: Variant) -> Color:
-	if value is String:
-		return AppTheme.ACCENT_GREEN
-	if value is bool or value is int or value is float:
-		return AppTheme.ACCENT
-	return AppTheme.TEXT
-
-
-# Document actions ------------------------------------------------------------
-func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int, tree: Tree) -> void:
-	if mouse_button_index != MOUSE_BUTTON_RIGHT:
+# Document actions (relayed from the active view) -----------------------------
+func _on_edit_requested(doc_index: int) -> void:
+	if doc_index < 0 or doc_index >= _documents.size():
 		return
-	var item := tree.get_selected()
-	if item == null:
+	_doc_dialog.open_edit(doc_index, JSON.stringify(_documents[doc_index], "  "))
+
+
+func _on_view_requested(doc_index: int) -> void:
+	if doc_index < 0 or doc_index >= _documents.size():
 		return
-	_menu_item = item
-	_menu_tree = tree
-	_menu_doc_index = _doc_index_from_item(item, tree)
-	if _menu_doc_index < 0:
+	_doc_dialog.open_view(JSON.stringify(_documents[doc_index], "  "))
+
+
+func _on_delete_requested(doc_index: int) -> void:
+	if doc_index < 0 or doc_index >= _documents.size():
 		return
-
-	var is_document := item.get_parent() == tree.get_root()
-	var has_children := item.get_child_count() > 0
-
-	_doc_menu.clear()
-	if has_children:
-		_doc_menu.add_item("Expand Recursively", DocAction.EXPAND_RECURSIVE)
-		_doc_menu.set_item_accelerator(
-			_doc_menu.get_item_index(DocAction.EXPAND_RECURSIVE), KEY_MASK_ALT | KEY_RIGHT
-		)
-		_doc_menu.add_item("Collapse Recursively", DocAction.COLLAPSE_RECURSIVE)
-		_doc_menu.set_item_accelerator(
-			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
-		)
-		_doc_menu.add_separator()
-	_doc_menu.add_item("Edit Document…", DocAction.EDIT)
-	_doc_menu.add_item("View Document", DocAction.VIEW)
-	_doc_menu.add_item("Insert Document…", DocAction.INSERT)
-	_doc_menu.add_separator()
-	if not is_document:
-		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)
-		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
-	# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
-	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
-	_doc_menu.add_separator()
-	_doc_menu.add_item("Delete Document", DocAction.DELETE)
-	_doc_menu.reset_size()
-	_doc_menu.position = Vector2i(tree.get_global_mouse_position())
-	_doc_menu.popup()
-
-
-func _on_tree_gui_input(event: InputEvent, tree: Tree) -> void:
-	if not (event is InputEventKey):
-		return
-	var key_event := event as InputEventKey
-	if not (key_event.pressed and key_event.alt_pressed):
-		return
-	var item := tree.get_selected()
-	if item == null:
-		return
-	if key_event.keycode == KEY_RIGHT:
-		_set_collapsed_recursive(item, false)
-		tree.accept_event()
-	elif key_event.keycode == KEY_LEFT:
-		_collapse_or_select_parent(item, tree)
-		tree.accept_event()
-
-
-func _doc_index_from_item(item: TreeItem, tree: Tree) -> int:
-	# Climb to the top-level ancestor (whose parent is the hidden root), which
-	# carries the document index in its metadata.
-	var root := tree.get_root()
-	var cur := item
-	while cur != null and cur.get_parent() != root:
-		cur = cur.get_parent()
-	if cur == null:
-		return -1
-	var meta: Variant = cur.get_metadata(0)
-	if meta is Dictionary:
-		return int(meta.get("doc_index", -1))
-	return -1
-
-
-func _on_doc_action(id: int) -> void:
-	if _menu_doc_index < 0 or _menu_doc_index >= _documents.size():
-		return
-	match id:
-		DocAction.EXPAND_RECURSIVE:
-			_set_collapsed_recursive(_menu_item, false)
-		DocAction.COLLAPSE_RECURSIVE:
-			_set_collapsed_recursive(_menu_item, true)
-		DocAction.EDIT:
-			_doc_dialog.open_edit(_menu_doc_index, JSON.stringify(_documents[_menu_doc_index], "  "))
-		DocAction.VIEW:
-			_doc_dialog.open_view(JSON.stringify(_documents[_menu_doc_index], "  "))
-		DocAction.INSERT:
-			_doc_dialog.open_insert()
-		DocAction.COPY_NAME:
-			DisplayServer.clipboard_set(_meta_name(_menu_item))
-		DocAction.COPY_PATH:
-			DisplayServer.clipboard_set(_meta_path(_menu_item, _menu_tree))
-		DocAction.COPY_JSON:
-			DisplayServer.clipboard_set(_meta_json(_menu_item))
-		DocAction.DELETE:
-			_documents.remove_at(_menu_doc_index)
-			_refresh_page()
-
-
-func _on_tree_item_activated(tree: Tree) -> void:
-	# Double-click (or Enter) on an object/array row toggles it non-recursively.
-	var item := tree.get_selected()
-	if item != null and item.get_child_count() > 0:
-		item.set_collapsed(not item.is_collapsed())
-
-
-func _collapse_or_select_parent(item: TreeItem, tree: Tree) -> void:
-	# Alt+Left collapses an expanded object; on an already-collapsed object (or a
-	# leaf) it walks the selection up to the parent row instead, so repeated
-	# presses climb the tree a level at a time before collapsing it.
-	if item.get_child_count() > 0 and not item.is_collapsed():
-		_set_collapsed_recursive(item, true)
-		return
-	var parent := item.get_parent()
-	if parent != null and parent != tree.get_root():
-		parent.select(0)
-		tree.scroll_to_item(parent)
-
-
-func _set_collapsed_recursive(item: TreeItem, collapsed: bool) -> void:
-	item.set_collapsed(collapsed)
-	var child := item.get_first_child()
-	while child != null:
-		_set_collapsed_recursive(child, collapsed)
-		child = child.get_next()
-
-
-func _meta_name(item: TreeItem) -> String:
-	var meta: Variant = item.get_metadata(0)
-	if meta is Dictionary:
-		return str(meta.get("name", meta.get("key", "")))
-	return ""
-
-
-func _meta_json(item: TreeItem) -> String:
-	var meta: Variant = item.get_metadata(0)
-	if meta is Dictionary and meta.has("value"):
-		return JSON.stringify(meta["value"], "  ")
-	return ""
-
-
-func _meta_path(item: TreeItem, tree: Tree) -> String:
-	# Build a dotted path from the document root down to the selected field,
-	# e.g. "address.city" or "roles[0]". The document item itself contributes
-	# nothing (its key is empty).
-	var root := tree.get_root()
-	var parts: Array[String] = []
-	var cur := item
-	while cur != null and cur.get_parent() != root:
-		var meta: Variant = cur.get_metadata(0)
-		if meta is Dictionary:
-			parts.push_front(str(meta.get("key", "")))
-		cur = cur.get_parent()
-
-	var path := ""
-	for p in parts:
-		if p.begins_with("["):
-			path += p
-		elif path.is_empty():
-			path = p
-		else:
-			path += "." + p
-	return path
+	_documents.remove_at(doc_index)
+	_refresh_page()
 
 
 func _on_document_inserted(text: String) -> void:
