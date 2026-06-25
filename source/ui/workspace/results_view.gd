@@ -1,0 +1,232 @@
+class_name ResultsView
+extends VBoxContainer
+
+## Displays a set of documents in one of three modes, mirroring Robo3T:
+##   - Tree: expandable key/value/type per document
+##   - Table: one row per document, columns = union of top-level fields
+##   - Text: pretty-printed JSON
+## Call set_documents() to feed data; the active view rebuilds on demand.
+
+enum ViewMode { TREE, TABLE, TEXT }
+
+var _documents: Array = []
+var _mode: ViewMode = ViewMode.TREE
+
+var _count_label: Label
+var _view_host: Control
+var _tree_view: Tree
+var _table_view: Tree
+var _text_view: CodeEdit
+var _mode_buttons: Array[Button] = []
+
+
+func _ready() -> void:
+	add_theme_constant_override("separation", 0)
+	add_child(_build_header())
+
+	_view_host = Control.new()
+	_view_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_view_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(_view_host)
+
+	_tree_view = Tree.new()
+	_full_rect(_tree_view)
+	_tree_view.hide_root = true
+	_tree_view.columns = 3
+	_tree_view.set_column_title(0, "Key")
+	_tree_view.set_column_title(1, "Value")
+	_tree_view.set_column_title(2, "Type")
+	_tree_view.column_titles_visible = true
+	_tree_view.set_column_expand_ratio(0, 2)
+	_tree_view.set_column_expand_ratio(1, 4)
+	_tree_view.set_column_expand_ratio(2, 1)
+	_view_host.add_child(_tree_view)
+
+	_table_view = Tree.new()
+	_full_rect(_table_view)
+	_table_view.hide_root = true
+	_table_view.column_titles_visible = true
+	_view_host.add_child(_table_view)
+
+	_text_view = CodeEdit.new()
+	_full_rect(_text_view)
+	_text_view.editable = false
+	_text_view.gutters_draw_line_numbers = true
+	_view_host.add_child(_text_view)
+
+	_set_mode(ViewMode.TREE)
+
+
+func set_documents(documents: Array) -> void:
+	_documents = documents
+	_count_label.text = "%d document%s" % [documents.size(), "" if documents.size() == 1 else "s"]
+	_rebuild()
+
+
+func _build_header() -> Control:
+	var panel := PanelContainer.new()
+	var sb := AppTheme._flat(AppTheme.BG_DARKEST, 0)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	panel.add_theme_stylebox_override("panel", sb)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	panel.add_child(row)
+
+	for entry in [["Tree", ViewMode.TREE], ["Table", ViewMode.TABLE], ["Text", ViewMode.TEXT]]:
+		var btn := Button.new()
+		btn.text = entry[0]
+		btn.toggle_mode = true
+		btn.focus_mode = Control.FOCUS_NONE
+		var mode_value: ViewMode = entry[1]
+		btn.pressed.connect(func() -> void: _set_mode(mode_value))
+		row.add_child(btn)
+		_mode_buttons.append(btn)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+
+	_count_label = Label.new()
+	_count_label.text = "0 documents"
+	_count_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	row.add_child(_count_label)
+
+	return panel
+
+
+func _full_rect(node: Control) -> void:
+	node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+
+func _set_mode(mode: ViewMode) -> void:
+	_mode = mode
+	for i in _mode_buttons.size():
+		_mode_buttons[i].button_pressed = (i == mode)
+	_tree_view.visible = mode == ViewMode.TREE
+	_table_view.visible = mode == ViewMode.TABLE
+	_text_view.visible = mode == ViewMode.TEXT
+	_rebuild()
+
+
+func _rebuild() -> void:
+	match _mode:
+		ViewMode.TREE:
+			_rebuild_tree()
+		ViewMode.TABLE:
+			_rebuild_table()
+		ViewMode.TEXT:
+			_text_view.text = JSON.stringify(_documents, "  ")
+
+
+# Tree view -------------------------------------------------------------------
+func _rebuild_tree() -> void:
+	_tree_view.clear()
+	var root := _tree_view.create_item()
+	for i in _documents.size():
+		var doc: Dictionary = _documents[i]
+		var item := _tree_view.create_item(root)
+		var label: String = str(doc.get("_id", "(document)"))
+		item.set_text(0, "(%d) %s" % [i + 1, label])
+		item.set_custom_color(0, AppTheme.ACCENT)
+		item.set_text(2, "Object")
+		_add_dict_children(item, doc)
+		item.set_collapsed(i != 0)
+
+
+func _add_dict_children(parent: TreeItem, dict: Dictionary) -> void:
+	for key in dict:
+		_add_value_item(parent, str(key), dict[key])
+
+
+func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
+	var item := _tree_view.create_item(parent)
+	item.set_text(0, key)
+	item.set_custom_color(0, AppTheme.TEXT)
+	item.set_text(2, _type_name(value))
+	item.set_custom_color(2, AppTheme.TEXT_DIM)
+
+	if value is Dictionary:
+		item.set_text(1, "{%d fields}" % value.size())
+		item.set_custom_color(1, AppTheme.TEXT_DIM)
+		_add_dict_children(item, value)
+		item.set_collapsed(true)
+	elif value is Array:
+		item.set_text(1, "[%d elements]" % value.size())
+		item.set_custom_color(1, AppTheme.TEXT_DIM)
+		for i in value.size():
+			_add_value_item(item, "[%d]" % i, value[i])
+		item.set_collapsed(true)
+	else:
+		item.set_text(1, _preview(value))
+		item.set_custom_color(1, _value_color(value))
+
+
+# Table view ------------------------------------------------------------------
+func _rebuild_table() -> void:
+	_table_view.clear()
+	var columns := _collect_columns()
+	_table_view.columns = max(1, columns.size())
+	for c in columns.size():
+		_table_view.set_column_title(c, columns[c])
+		_table_view.set_column_expand(c, true)
+
+	var root := _table_view.create_item()
+	for doc in _documents:
+		var row := _table_view.create_item(root)
+		for c in columns.size():
+			var key: String = columns[c]
+			if doc.has(key):
+				row.set_text(c, _preview(doc[key]))
+				row.set_custom_color(c, _value_color(doc[key]))
+			else:
+				row.set_text(c, "")
+
+
+func _collect_columns() -> Array:
+	var columns: Array = []
+	for doc in _documents:
+		for key in doc:
+			if not columns.has(key):
+				columns.append(key)
+	return columns
+
+
+# Value formatting ------------------------------------------------------------
+func _preview(value: Variant) -> String:
+	if value is Dictionary:
+		return "{%d fields}" % value.size()
+	if value is Array:
+		return "[%d elements]" % value.size()
+	if value is String:
+		return value
+	if value is bool:
+		return "true" if value else "false"
+	return str(value)
+
+
+func _type_name(value: Variant) -> String:
+	if value is Dictionary:
+		return "Object"
+	if value is Array:
+		return "Array"
+	if value is bool:
+		return "Boolean"
+	if value is int:
+		return "Int32"
+	if value is float:
+		return "Double"
+	if value is String:
+		return "String"
+	return "Null"
+
+
+func _value_color(value: Variant) -> Color:
+	if value is String:
+		return AppTheme.ACCENT_GREEN
+	if value is bool or value is int or value is float:
+		return AppTheme.ACCENT
+	return AppTheme.TEXT
