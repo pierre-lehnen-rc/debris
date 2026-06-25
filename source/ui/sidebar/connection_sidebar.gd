@@ -46,6 +46,7 @@ func _ready() -> void:
 	_tree = Tree.new()
 	_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tree.hide_root = true
+	_tree.select_mode = Tree.SELECT_ROW
 	_tree.allow_rmb_select = true
 	_tree.item_activated.connect(_on_item_activated)
 	_tree.item_mouse_selected.connect(_on_item_mouse_selected)

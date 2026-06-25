@@ -37,6 +37,7 @@ func _ready() -> void:
 	_tree_view = Tree.new()
 	_full_rect(_tree_view)
 	_tree_view.hide_root = true
+	_tree_view.select_mode = Tree.SELECT_ROW
 	_tree_view.allow_rmb_select = true
 	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
 	_tree_view.columns = 3
@@ -52,6 +53,7 @@ func _ready() -> void:
 	_table_view = Tree.new()
 	_full_rect(_table_view)
 	_table_view.hide_root = true
+	_table_view.select_mode = Tree.SELECT_ROW
 	_table_view.allow_rmb_select = true
 	_table_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_table_view))
 	_table_view.column_titles_visible = true
