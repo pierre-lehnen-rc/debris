@@ -8,6 +8,7 @@ extends VBoxContainer
 ## Call set_documents() to feed data; the active view rebuilds on demand.
 
 enum ViewMode { TREE, TABLE, TEXT }
+enum DocAction { VIEW, EDIT, INSERT, DELETE }
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
@@ -18,6 +19,10 @@ var _tree_view: Tree
 var _table_view: Tree
 var _text_view: CodeEdit
 var _mode_buttons: Array[Button] = []
+
+var _doc_menu: PopupMenu
+var _doc_dialog: DocumentDialog
+var _menu_doc_index := -1
 
 
 func _ready() -> void:
@@ -32,6 +37,8 @@ func _ready() -> void:
 	_tree_view = Tree.new()
 	_full_rect(_tree_view)
 	_tree_view.hide_root = true
+	_tree_view.allow_rmb_select = true
+	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
 	_tree_view.columns = 3
 	_tree_view.set_column_title(0, "Key")
 	_tree_view.set_column_title(1, "Value")
@@ -45,6 +52,8 @@ func _ready() -> void:
 	_table_view = Tree.new()
 	_full_rect(_table_view)
 	_table_view.hide_root = true
+	_table_view.allow_rmb_select = true
+	_table_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_table_view))
 	_table_view.column_titles_visible = true
 	_view_host.add_child(_table_view)
 
@@ -54,13 +63,34 @@ func _ready() -> void:
 	_text_view.gutters_draw_line_numbers = true
 	_view_host.add_child(_text_view)
 
+	_doc_menu = PopupMenu.new()
+	_doc_menu.theme = AppTheme.shared()
+	_doc_menu.id_pressed.connect(_on_doc_action)
+	add_child(_doc_menu)
+
+	_doc_dialog = DocumentDialog.new()
+	_doc_dialog.inserted.connect(_on_document_inserted)
+	_doc_dialog.updated.connect(_on_document_updated)
+	add_child(_doc_dialog)
+
 	_set_mode(ViewMode.TREE)
+
+
+## Opens the document editor in insert mode (used by the sidebar's
+## "Insert Document…" action via the workspace).
+func request_insert() -> void:
+	_doc_dialog.open_insert()
 
 
 func set_documents(documents: Array) -> void:
 	_documents = documents
-	_count_label.text = "%d document%s" % [documents.size(), "" if documents.size() == 1 else "s"]
+	_update_count()
 	_rebuild()
+
+
+func _update_count() -> void:
+	var n := _documents.size()
+	_count_label.text = "%d document%s" % [n, "" if n == 1 else "s"]
 
 
 func _build_header() -> Control:
@@ -133,6 +163,7 @@ func _rebuild_tree() -> void:
 		item.set_text(0, "(%d) %s" % [i + 1, label])
 		item.set_custom_color(0, AppTheme.ACCENT)
 		item.set_text(2, "Object")
+		item.set_metadata(0, i)  # top-level item -> document index
 		_add_dict_children(item, doc)
 		item.set_collapsed(i != 0)
 
@@ -175,8 +206,10 @@ func _rebuild_table() -> void:
 		_table_view.set_column_expand(c, true)
 
 	var root := _table_view.create_item()
-	for doc in _documents:
+	for i in _documents.size():
+		var doc: Dictionary = _documents[i]
 		var row := _table_view.create_item(root)
+		row.set_metadata(0, i)  # row -> document index
 		for c in columns.size():
 			var key: String = columns[c]
 			if doc.has(key):
@@ -230,3 +263,68 @@ func _value_color(value: Variant) -> Color:
 	if value is bool or value is int or value is float:
 		return AppTheme.ACCENT
 	return AppTheme.TEXT
+
+
+# Document actions ------------------------------------------------------------
+func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int, tree: Tree) -> void:
+	if mouse_button_index != MOUSE_BUTTON_RIGHT:
+		return
+	var item := tree.get_selected()
+	if item == null:
+		return
+	_menu_doc_index = _doc_index_from_item(item, tree)
+	if _menu_doc_index < 0:
+		return
+	_doc_menu.clear()
+	_doc_menu.add_item("View Document", DocAction.VIEW)
+	_doc_menu.add_item("Edit Document…", DocAction.EDIT)
+	_doc_menu.add_item("Insert Document…", DocAction.INSERT)
+	_doc_menu.add_separator()
+	_doc_menu.add_item("Delete Document", DocAction.DELETE)
+	_doc_menu.reset_size()
+	_doc_menu.position = Vector2i(tree.get_global_mouse_position())
+	_doc_menu.popup()
+
+
+func _doc_index_from_item(item: TreeItem, tree: Tree) -> int:
+	# Climb to the top-level ancestor (whose parent is the hidden root), which
+	# carries the document index in its metadata.
+	var root := tree.get_root()
+	var cur := item
+	while cur != null and cur.get_parent() != root:
+		cur = cur.get_parent()
+	if cur == null:
+		return -1
+	var meta: Variant = cur.get_metadata(0)
+	return int(meta) if meta != null else -1
+
+
+func _on_doc_action(id: int) -> void:
+	if _menu_doc_index < 0 or _menu_doc_index >= _documents.size():
+		return
+	match id:
+		DocAction.VIEW:
+			_doc_dialog.open_view(JSON.stringify(_documents[_menu_doc_index], "  "))
+		DocAction.EDIT:
+			_doc_dialog.open_edit(_menu_doc_index, JSON.stringify(_documents[_menu_doc_index], "  "))
+		DocAction.INSERT:
+			_doc_dialog.open_insert()
+		DocAction.DELETE:
+			_documents.remove_at(_menu_doc_index)
+			_update_count()
+			_rebuild()
+
+
+func _on_document_inserted(text: String) -> void:
+	var parsed: Variant = JSON.parse_string(text)
+	if parsed is Dictionary:
+		_documents.append(parsed)
+		_update_count()
+		_rebuild()
+
+
+func _on_document_updated(index: int, text: String) -> void:
+	var parsed: Variant = JSON.parse_string(text)
+	if parsed is Dictionary and index >= 0 and index < _documents.size():
+		_documents[index] = parsed
+		_rebuild()

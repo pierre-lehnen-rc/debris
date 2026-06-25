@@ -53,6 +53,7 @@ func _ready() -> void:
 	_sidebar.add_connection_requested.connect(_open_connection_dialog)
 	_sidebar.edit_connection_requested.connect(_on_edit_connection_requested)
 	_sidebar.shell_requested.connect(_on_shell_requested)
+	_sidebar.insert_document_requested.connect(_on_insert_document_requested)
 
 
 func _open_connection_dialog() -> void:
@@ -66,6 +67,12 @@ func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
 func _on_shell_requested(conn: String, database: String) -> void:
 	_workspace.open_collection(conn, database, "")
 	_status_label.text = "Opened shell on %s.%s" % [conn, database]
+
+
+func _on_insert_document_requested(conn: String, database: String, collection: String) -> void:
+	var tab := _workspace.open_collection(conn, database, collection)
+	tab.results().request_insert()
+	_status_label.text = "Insert document into %s.%s" % [database, collection]
 
 
 func _build_menu_bar() -> Control:

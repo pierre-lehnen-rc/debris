@@ -16,13 +16,13 @@ func _ready() -> void:
 	add_child(_tabs)
 
 
-func open_collection(conn: String, database: String, collection: String) -> void:
+func open_collection(conn: String, database: String, collection: String) -> QueryTab:
 	var target := "%s/%s/%s" % [conn, database, collection]
 	var existing := _open_targets.find(target)
 	if existing != -1:
 		# +1 because the welcome tab occupies index 0.
 		_tabs.current_tab = existing + 1
-		return
+		return _tabs.get_child(existing + 1) as QueryTab
 
 	var tab := QueryTab.new()
 	tab.configure(conn, database, collection)
@@ -31,6 +31,7 @@ func open_collection(conn: String, database: String, collection: String) -> void
 	_tabs.set_tab_title(_tabs.get_tab_count() - 1, tab.tab_title())
 	_tabs.current_tab = _tabs.get_tab_count() - 1
 	_open_targets.append(target)
+	return tab
 
 
 func _build_welcome() -> Control:

@@ -7,6 +7,7 @@ extends PanelContainer
 
 signal collection_activated(connection: String, database: String, collection: String)
 signal shell_requested(connection: String, database: String)
+signal insert_document_requested(connection: String, database: String, collection: String)
 signal add_connection_requested()
 signal edit_connection_requested(index: int, config: Dictionary)
 
@@ -227,7 +228,9 @@ func _on_context_action(id: int) -> void:
 				_menu_target["connection"], _menu_target["database"], _menu_target["collection"]
 			)
 		Action.INSERT_DOCUMENT:
-			pass  # placeholder until the document editor exists
+			insert_document_requested.emit(
+				_menu_target["connection"], _menu_target["database"], _menu_target["collection"]
+			)
 		Action.DROP_COLLECTION:
 			_drop_collection(ci, _menu_target["database"], _menu_target["collection"])
 		Action.REFRESH:

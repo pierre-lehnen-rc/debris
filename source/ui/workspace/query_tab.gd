@@ -19,6 +19,12 @@ func configure(conn: String, database: String, collection: String) -> void:
 	collection_name = collection
 
 
+## Exposes the results view so callers (e.g. the sidebar's "Insert Document…"
+## action) can drive document actions on this tab.
+func results() -> ResultsView:
+	return _results
+
+
 func tab_title() -> String:
 	if collection_name.is_empty():
 		return "Query"
