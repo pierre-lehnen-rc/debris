@@ -179,6 +179,8 @@ func _rebuild_tree() -> void:
 		var label: String = str(doc.get("_id", "(document)"))
 		item.set_text(0, "(%d) %s" % [i + 1, label])
 		item.set_custom_color(0, AppTheme.ACCENT)
+		item.set_text(1, "{%d fields}" % doc.size())
+		item.set_custom_color(1, AppTheme.TEXT_DIM)
 		item.set_text(2, "Object")
 		# Top-level item carries the document index plus name/value for copy actions.
 		item.set_metadata(0, {"doc_index": i, "key": "", "name": label, "value": doc})
