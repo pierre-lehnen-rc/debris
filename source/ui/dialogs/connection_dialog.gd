@@ -6,6 +6,7 @@ extends Window
 ## Dictionary and emits `saved`; actually connecting to Mongo comes later.
 
 signal saved(config: Dictionary)
+signal updated(index: int, config: Dictionary)
 
 const MECHANISMS := ["SCRAM-SHA-256", "SCRAM-SHA-1", "MONGODB-CR"]
 
@@ -29,6 +30,7 @@ var _status: Label
 var _auth_controls: Array[Control] = []
 var _ssh_controls: Array[Control] = []
 var _ssl_controls: Array[Control] = []
+var _edit_index := -1  # >= 0 when editing an existing connection
 
 
 func _ready() -> void:
@@ -71,11 +73,15 @@ func _ready() -> void:
 # Public API ------------------------------------------------------------------
 func open_new() -> void:
 	_reset()
+	_edit_index = -1
+	title = "New Connection"
 	popup_centered(Vector2i(540, 460))
 
 
-func open_edit(config: Dictionary) -> void:
+func open_edit(index: int, config: Dictionary) -> void:
 	_reset()
+	_edit_index = index
+	title = "Edit Connection"
 	_name_edit.text = config.get("name", "")
 	var hostport: String = config.get("host", "")
 	if hostport.contains(":"):
@@ -322,7 +328,10 @@ func _on_save() -> void:
 	if _host_edit.text.strip_edges().is_empty():
 		_status.text = "A host is required."
 		return
-	saved.emit(_gather())
+	if _edit_index >= 0:
+		updated.emit(_edit_index, _gather())
+	else:
+		saved.emit(_gather())
 	hide()
 
 

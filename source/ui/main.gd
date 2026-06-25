@@ -47,13 +47,25 @@ func _ready() -> void:
 	_connection_dialog = ConnectionDialog.new()
 	add_child(_connection_dialog)
 	_connection_dialog.saved.connect(_on_connection_saved)
+	_connection_dialog.updated.connect(_on_connection_updated)
 
 	_sidebar.collection_activated.connect(_on_collection_activated)
 	_sidebar.add_connection_requested.connect(_open_connection_dialog)
+	_sidebar.edit_connection_requested.connect(_on_edit_connection_requested)
+	_sidebar.shell_requested.connect(_on_shell_requested)
 
 
 func _open_connection_dialog() -> void:
 	_connection_dialog.open_new()
+
+
+func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
+	_connection_dialog.open_edit(index, config)
+
+
+func _on_shell_requested(conn: String, database: String) -> void:
+	_workspace.open_collection(conn, database, "")
+	_status_label.text = "Opened shell on %s.%s" % [conn, database]
 
 
 func _build_menu_bar() -> Control:
@@ -155,3 +167,8 @@ func _on_file_menu(id: int) -> void:
 func _on_connection_saved(config: Dictionary) -> void:
 	_sidebar.add_connection(config)
 	_status_label.text = "Added connection '%s'" % config.get("name", "")
+
+
+func _on_connection_updated(index: int, config: Dictionary) -> void:
+	_sidebar.update_connection(index, config)
+	_status_label.text = "Updated connection '%s'" % config.get("name", "")
