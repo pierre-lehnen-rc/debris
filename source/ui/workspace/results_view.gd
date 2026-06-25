@@ -341,7 +341,7 @@ func _on_tree_gui_input(event: InputEvent, tree: Tree) -> void:
 		_set_collapsed_recursive(item, false)
 		tree.accept_event()
 	elif key_event.keycode == KEY_LEFT:
-		_set_collapsed_recursive(item, true)
+		_collapse_or_select_parent(item, tree)
 		tree.accept_event()
 
 
@@ -384,6 +384,19 @@ func _on_doc_action(id: int) -> void:
 			_documents.remove_at(_menu_doc_index)
 			_update_count()
 			_rebuild()
+
+
+func _collapse_or_select_parent(item: TreeItem, tree: Tree) -> void:
+	# Alt+Left collapses an expanded object; on an already-collapsed object (or a
+	# leaf) it walks the selection up to the parent row instead, so repeated
+	# presses climb the tree a level at a time before collapsing it.
+	if item.get_child_count() > 0 and not item.is_collapsed():
+		_set_collapsed_recursive(item, true)
+		return
+	var parent := item.get_parent()
+	if parent != null and parent != tree.get_root():
+		parent.select(0)
+		tree.scroll_to_item(parent)
 
 
 func _set_collapsed_recursive(item: TreeItem, collapsed: bool) -> void:
