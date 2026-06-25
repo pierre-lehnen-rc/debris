@@ -20,10 +20,16 @@ enum DocAction {
 	DELETE,
 }
 
+const PAGE_SIZE := 50
+
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
+var _page := 0
 
 var _count_label: Label
+var _page_label: Label
+var _prev_btn: Button
+var _next_btn: Button
 var _view_host: Control
 var _tree_view: Tree
 var _table_view: Tree
@@ -91,6 +97,7 @@ func _ready() -> void:
 	add_child(_doc_dialog)
 
 	_set_mode(ViewMode.TREE)
+	_update_pager()
 
 
 ## Opens the document editor in insert mode (used by the sidebar's
@@ -101,8 +108,8 @@ func request_insert() -> void:
 
 func set_documents(documents: Array) -> void:
 	_documents = documents
-	_update_count()
-	_rebuild()
+	_page = 0
+	_refresh_page()
 
 
 func _update_count() -> void:
@@ -142,7 +149,37 @@ func _build_header() -> Control:
 	_count_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	row.add_child(_count_label)
 
+	row.add_child(_build_pager())
+
 	return panel
+
+
+func _build_pager() -> Control:
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+
+	_prev_btn = Button.new()
+	_prev_btn.text = "<"
+	_prev_btn.focus_mode = Control.FOCUS_NONE
+	_prev_btn.tooltip_text = "Previous page"
+	_prev_btn.pressed.connect(func() -> void: _go_to_page(_page - 1))
+	box.add_child(_prev_btn)
+
+	_page_label = Label.new()
+	_page_label.text = "0-0"
+	_page_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_page_label.custom_minimum_size = Vector2(72, 0)
+	box.add_child(_page_label)
+
+	_next_btn = Button.new()
+	_next_btn.text = ">"
+	_next_btn.focus_mode = Control.FOCUS_NONE
+	_next_btn.tooltip_text = "Next page"
+	_next_btn.pressed.connect(func() -> void: _go_to_page(_page + 1))
+	box.add_child(_next_btn)
+
+	return box
 
 
 func _full_rect(node: Control) -> void:
@@ -166,14 +203,51 @@ func _rebuild() -> void:
 		ViewMode.TABLE:
 			_rebuild_table()
 		ViewMode.TEXT:
-			_text_view.text = JSON.stringify(_documents, "  ")
+			_text_view.text = JSON.stringify(_page_documents(), "  ")
+
+
+# Pagination ------------------------------------------------------------------
+func _page_count() -> int:
+	return maxi(1, (_documents.size() + PAGE_SIZE - 1) / PAGE_SIZE)
+
+
+func _page_bounds() -> Vector2i:
+	var start := _page * PAGE_SIZE
+	var end := mini(start + PAGE_SIZE, _documents.size())
+	return Vector2i(start, end)
+
+
+func _page_documents() -> Array:
+	var b := _page_bounds()
+	return _documents.slice(b.x, b.y)
+
+
+## Clamp the page (the document set may have shrunk), then refresh counts,
+## the pager controls and the active view together.
+func _refresh_page() -> void:
+	_update_count()
+	_go_to_page(_page)
+
+
+func _go_to_page(page: int) -> void:
+	_page = clampi(page, 0, _page_count() - 1)
+	_update_pager()
+	_rebuild()
+
+
+func _update_pager() -> void:
+	var b := _page_bounds()
+	_page_label.text = "0-0" if _documents.is_empty() else "%d-%d" % [b.x + 1, b.y]
+	_prev_btn.disabled = _page <= 0
+	_next_btn.disabled = _page >= _page_count() - 1
 
 
 # Tree view -------------------------------------------------------------------
 func _rebuild_tree() -> void:
 	_tree_view.clear()
 	var root := _tree_view.create_item()
-	for i in _documents.size():
+	var bounds := _page_bounds()
+	for i in range(bounds.x, bounds.y):
 		var doc: Dictionary = _documents[i]
 		var item := _tree_view.create_item(root)
 		var label: String = str(doc.get("_id", "(document)"))
@@ -185,7 +259,7 @@ func _rebuild_tree() -> void:
 		# Top-level item carries the document index plus name/value for copy actions.
 		item.set_metadata(0, {"doc_index": i, "key": "", "name": label, "value": doc})
 		_add_dict_children(item, doc)
-		item.set_collapsed(i != 0)
+		item.set_collapsed(i != bounds.x)  # expand the first document on the page
 
 
 func _add_dict_children(parent: TreeItem, dict: Dictionary) -> void:
@@ -220,14 +294,15 @@ func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
 # Table view ------------------------------------------------------------------
 func _rebuild_table() -> void:
 	_table_view.clear()
-	var columns := _collect_columns()
+	var bounds := _page_bounds()
+	var columns := _collect_columns(_page_documents())
 	_table_view.columns = max(1, columns.size())
 	for c in columns.size():
 		_table_view.set_column_title(c, columns[c])
 		_table_view.set_column_expand(c, true)
 
 	var root := _table_view.create_item()
-	for i in _documents.size():
+	for i in range(bounds.x, bounds.y):
 		var doc: Dictionary = _documents[i]
 		var row := _table_view.create_item(root)
 		row.set_metadata(0, {
@@ -242,9 +317,9 @@ func _rebuild_table() -> void:
 				row.set_text(c, "")
 
 
-func _collect_columns() -> Array:
+func _collect_columns(docs: Array) -> Array:
 	var columns: Array = []
-	for doc in _documents:
+	for doc in docs:
 		for key in doc:
 			if not columns.has(key):
 				columns.append(key)
@@ -385,8 +460,7 @@ func _on_doc_action(id: int) -> void:
 			DisplayServer.clipboard_set(_meta_json(_menu_item))
 		DocAction.DELETE:
 			_documents.remove_at(_menu_doc_index)
-			_update_count()
-			_rebuild()
+			_refresh_page()
 
 
 func _on_tree_item_activated(tree: Tree) -> void:
@@ -460,7 +534,8 @@ func _on_document_inserted(text: String) -> void:
 	if parsed is Dictionary:
 		_documents.append(parsed)
 		_update_count()
-		_rebuild()
+		# Jump to the last page so the newly inserted document is visible.
+		_go_to_page(_page_count() - 1)
 
 
 func _on_document_updated(index: int, text: String) -> void:
