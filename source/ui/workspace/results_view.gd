@@ -8,7 +8,17 @@ extends VBoxContainer
 ## Call set_documents() to feed data; the active view rebuilds on demand.
 
 enum ViewMode { TREE, TABLE, TEXT }
-enum DocAction { VIEW, EDIT, INSERT, DELETE }
+enum DocAction {
+	EXPAND_RECURSIVE,
+	COLLAPSE_RECURSIVE,
+	EDIT,
+	VIEW,
+	INSERT,
+	COPY_NAME,
+	COPY_PATH,
+	COPY_JSON,
+	DELETE,
+}
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
@@ -23,6 +33,8 @@ var _mode_buttons: Array[Button] = []
 var _doc_menu: PopupMenu
 var _doc_dialog: DocumentDialog
 var _menu_doc_index := -1
+var _menu_item: TreeItem
+var _menu_tree: Tree
 
 
 func _ready() -> void:
@@ -40,6 +52,7 @@ func _ready() -> void:
 	_tree_view.select_mode = Tree.SELECT_ROW
 	_tree_view.allow_rmb_select = true
 	_tree_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_tree_view))
+	_tree_view.gui_input.connect(_on_tree_gui_input.bind(_tree_view))
 	_tree_view.columns = 3
 	_tree_view.set_column_title(0, "Key")
 	_tree_view.set_column_title(1, "Value")
@@ -56,6 +69,7 @@ func _ready() -> void:
 	_table_view.select_mode = Tree.SELECT_ROW
 	_table_view.allow_rmb_select = true
 	_table_view.item_mouse_selected.connect(_on_doc_mouse_selected.bind(_table_view))
+	_table_view.gui_input.connect(_on_tree_gui_input.bind(_table_view))
 	_table_view.column_titles_visible = true
 	_view_host.add_child(_table_view)
 
@@ -165,7 +179,8 @@ func _rebuild_tree() -> void:
 		item.set_text(0, "(%d) %s" % [i + 1, label])
 		item.set_custom_color(0, AppTheme.ACCENT)
 		item.set_text(2, "Object")
-		item.set_metadata(0, i)  # top-level item -> document index
+		# Top-level item carries the document index plus name/value for copy actions.
+		item.set_metadata(0, {"doc_index": i, "key": "", "name": label, "value": doc})
 		_add_dict_children(item, doc)
 		item.set_collapsed(i != 0)
 
@@ -181,6 +196,7 @@ func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
 	item.set_custom_color(0, AppTheme.TEXT)
 	item.set_text(2, _type_name(value))
 	item.set_custom_color(2, AppTheme.TEXT_DIM)
+	item.set_metadata(0, {"key": key, "name": key, "value": value})
 
 	if value is Dictionary:
 		item.set_text(1, "{%d fields}" % value.size())
@@ -211,7 +227,9 @@ func _rebuild_table() -> void:
 	for i in _documents.size():
 		var doc: Dictionary = _documents[i]
 		var row := _table_view.create_item(root)
-		row.set_metadata(0, i)  # row -> document index
+		row.set_metadata(0, {
+			"doc_index": i, "key": "", "name": str(doc.get("_id", "")), "value": doc,
+		})
 		for c in columns.size():
 			var key: String = columns[c]
 			if doc.has(key):
@@ -274,18 +292,56 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int, tree: Tree) 
 	var item := tree.get_selected()
 	if item == null:
 		return
+	_menu_item = item
+	_menu_tree = tree
 	_menu_doc_index = _doc_index_from_item(item, tree)
 	if _menu_doc_index < 0:
 		return
+
+	var is_document := item.get_parent() == tree.get_root()
+	var has_children := item.get_child_count() > 0
+
 	_doc_menu.clear()
-	_doc_menu.add_item("View Document", DocAction.VIEW)
+	if has_children:
+		_doc_menu.add_item("Expand Recursively", DocAction.EXPAND_RECURSIVE)
+		_doc_menu.set_item_accelerator(
+			_doc_menu.get_item_index(DocAction.EXPAND_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
+		)
+		_doc_menu.add_item("Collapse Recursively", DocAction.COLLAPSE_RECURSIVE)
+		_doc_menu.set_item_accelerator(
+			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_RIGHT
+		)
+		_doc_menu.add_separator()
 	_doc_menu.add_item("Edit Document…", DocAction.EDIT)
+	_doc_menu.add_item("View Document", DocAction.VIEW)
 	_doc_menu.add_item("Insert Document…", DocAction.INSERT)
+	_doc_menu.add_separator()
+	if not is_document:
+		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)
+		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
+	_doc_menu.add_item("Copy JSON", DocAction.COPY_JSON)
 	_doc_menu.add_separator()
 	_doc_menu.add_item("Delete Document", DocAction.DELETE)
 	_doc_menu.reset_size()
 	_doc_menu.position = Vector2i(tree.get_global_mouse_position())
 	_doc_menu.popup()
+
+
+func _on_tree_gui_input(event: InputEvent, tree: Tree) -> void:
+	if not (event is InputEventKey):
+		return
+	var key_event := event as InputEventKey
+	if not (key_event.pressed and key_event.alt_pressed):
+		return
+	var item := tree.get_selected()
+	if item == null:
+		return
+	if key_event.keycode == KEY_LEFT:
+		_set_collapsed_recursive(item, false)
+		tree.accept_event()
+	elif key_event.keycode == KEY_RIGHT:
+		_set_collapsed_recursive(item, true)
+		tree.accept_event()
 
 
 func _doc_index_from_item(item: TreeItem, tree: Tree) -> int:
@@ -298,23 +354,81 @@ func _doc_index_from_item(item: TreeItem, tree: Tree) -> int:
 	if cur == null:
 		return -1
 	var meta: Variant = cur.get_metadata(0)
-	return int(meta) if meta != null else -1
+	if meta is Dictionary:
+		return int(meta.get("doc_index", -1))
+	return -1
 
 
 func _on_doc_action(id: int) -> void:
 	if _menu_doc_index < 0 or _menu_doc_index >= _documents.size():
 		return
 	match id:
-		DocAction.VIEW:
-			_doc_dialog.open_view(JSON.stringify(_documents[_menu_doc_index], "  "))
+		DocAction.EXPAND_RECURSIVE:
+			_set_collapsed_recursive(_menu_item, false)
+		DocAction.COLLAPSE_RECURSIVE:
+			_set_collapsed_recursive(_menu_item, true)
 		DocAction.EDIT:
 			_doc_dialog.open_edit(_menu_doc_index, JSON.stringify(_documents[_menu_doc_index], "  "))
+		DocAction.VIEW:
+			_doc_dialog.open_view(JSON.stringify(_documents[_menu_doc_index], "  "))
 		DocAction.INSERT:
 			_doc_dialog.open_insert()
+		DocAction.COPY_NAME:
+			DisplayServer.clipboard_set(_meta_name(_menu_item))
+		DocAction.COPY_PATH:
+			DisplayServer.clipboard_set(_meta_path(_menu_item, _menu_tree))
+		DocAction.COPY_JSON:
+			DisplayServer.clipboard_set(_meta_json(_menu_item))
 		DocAction.DELETE:
 			_documents.remove_at(_menu_doc_index)
 			_update_count()
 			_rebuild()
+
+
+func _set_collapsed_recursive(item: TreeItem, collapsed: bool) -> void:
+	item.set_collapsed(collapsed)
+	var child := item.get_first_child()
+	while child != null:
+		_set_collapsed_recursive(child, collapsed)
+		child = child.get_next()
+
+
+func _meta_name(item: TreeItem) -> String:
+	var meta: Variant = item.get_metadata(0)
+	if meta is Dictionary:
+		return str(meta.get("name", meta.get("key", "")))
+	return ""
+
+
+func _meta_json(item: TreeItem) -> String:
+	var meta: Variant = item.get_metadata(0)
+	if meta is Dictionary and meta.has("value"):
+		return JSON.stringify(meta["value"], "  ")
+	return ""
+
+
+func _meta_path(item: TreeItem, tree: Tree) -> String:
+	# Build a dotted path from the document root down to the selected field,
+	# e.g. "address.city" or "roles[0]". The document item itself contributes
+	# nothing (its key is empty).
+	var root := tree.get_root()
+	var parts: Array[String] = []
+	var cur := item
+	while cur != null and cur.get_parent() != root:
+		var meta: Variant = cur.get_metadata(0)
+		if meta is Dictionary:
+			parts.push_front(str(meta.get("key", "")))
+		cur = cur.get_parent()
+
+	var path := ""
+	for p in parts:
+		if p.begins_with("["):
+			path += p
+		elif path.is_empty():
+			path = p
+		else:
+			path += "." + p
+	return path
 
 
 func _on_document_inserted(text: String) -> void:
