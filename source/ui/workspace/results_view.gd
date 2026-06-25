@@ -20,14 +20,17 @@ enum DocAction {
 	DELETE,
 }
 
-const PAGE_SIZE := 50
+const DEFAULT_LIMIT := 50
 
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
-var _page := 0
+var _offset := 0
+var _limit := DEFAULT_LIMIT
 
 var _count_label: Label
 var _page_label: Label
+var _offset_field: LineEdit
+var _limit_field: LineEdit
 var _prev_btn: Button
 var _next_btn: Button
 var _view_host: Control
@@ -108,7 +111,7 @@ func request_insert() -> void:
 
 func set_documents(documents: Array) -> void:
 	_documents = documents
-	_page = 0
+	_offset = 0
 	_refresh_page()
 
 
@@ -158,11 +161,25 @@ func _build_pager() -> Control:
 	var box := HBoxContainer.new()
 	box.add_theme_constant_override("separation", 4)
 
+	box.add_child(_make_dim_label("Offset"))
+	_offset_field = _make_num_field("0")
+	_offset_field.tooltip_text = "First document to show (0-based)"
+	_offset_field.text_submitted.connect(_apply_offset_field)
+	_offset_field.focus_exited.connect(_apply_offset_field)
+	box.add_child(_offset_field)
+
+	box.add_child(_make_dim_label("Limit"))
+	_limit_field = _make_num_field(str(DEFAULT_LIMIT))
+	_limit_field.tooltip_text = "Max documents per page"
+	_limit_field.text_submitted.connect(_apply_limit_field)
+	_limit_field.focus_exited.connect(_apply_limit_field)
+	box.add_child(_limit_field)
+
 	_prev_btn = Button.new()
 	_prev_btn.text = "<"
 	_prev_btn.focus_mode = Control.FOCUS_NONE
 	_prev_btn.tooltip_text = "Previous page"
-	_prev_btn.pressed.connect(func() -> void: _go_to_page(_page - 1))
+	_prev_btn.pressed.connect(func() -> void: _set_offset(_offset - _limit))
 	box.add_child(_prev_btn)
 
 	_page_label = Label.new()
@@ -176,10 +193,25 @@ func _build_pager() -> Control:
 	_next_btn.text = ">"
 	_next_btn.focus_mode = Control.FOCUS_NONE
 	_next_btn.tooltip_text = "Next page"
-	_next_btn.pressed.connect(func() -> void: _go_to_page(_page + 1))
+	_next_btn.pressed.connect(func() -> void: _set_offset(_offset + _limit))
 	box.add_child(_next_btn)
 
 	return box
+
+
+func _make_dim_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	return label
+
+
+func _make_num_field(value: String) -> LineEdit:
+	var field := LineEdit.new()
+	field.text = value
+	field.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	field.custom_minimum_size = Vector2(56, 0)
+	return field
 
 
 func _full_rect(node: Control) -> void:
@@ -207,13 +239,15 @@ func _rebuild() -> void:
 
 
 # Pagination ------------------------------------------------------------------
-func _page_count() -> int:
-	return maxi(1, (_documents.size() + PAGE_SIZE - 1) / PAGE_SIZE)
+## Largest valid offset: the first document is always reachable, so this is the
+## index of the last document (or 0 when empty).
+func _max_offset() -> int:
+	return maxi(0, _documents.size() - 1)
 
 
 func _page_bounds() -> Vector2i:
-	var start := _page * PAGE_SIZE
-	var end := mini(start + PAGE_SIZE, _documents.size())
+	var start := clampi(_offset, 0, _documents.size())
+	var end := mini(start + _limit, _documents.size())
 	return Vector2i(start, end)
 
 
@@ -222,24 +256,35 @@ func _page_documents() -> Array:
 	return _documents.slice(b.x, b.y)
 
 
-## Clamp the page (the document set may have shrunk), then refresh counts,
+## Clamp the offset (the document set may have shrunk), then refresh counts,
 ## the pager controls and the active view together.
 func _refresh_page() -> void:
 	_update_count()
-	_go_to_page(_page)
+	_set_offset(_offset)
 
 
-func _go_to_page(page: int) -> void:
-	_page = clampi(page, 0, _page_count() - 1)
+func _set_offset(offset: int) -> void:
+	_offset = clampi(offset, 0, _max_offset())
 	_update_pager()
 	_rebuild()
+
+
+func _apply_offset_field(_text: String = "") -> void:
+	_set_offset(int(_offset_field.text))
+
+
+func _apply_limit_field(_text: String = "") -> void:
+	_limit = maxi(1, int(_limit_field.text))
+	_set_offset(_offset)
 
 
 func _update_pager() -> void:
 	var b := _page_bounds()
 	_page_label.text = "0-0" if _documents.is_empty() else "%d-%d" % [b.x + 1, b.y]
-	_prev_btn.disabled = _page <= 0
-	_next_btn.disabled = _page >= _page_count() - 1
+	_offset_field.text = str(_offset)
+	_limit_field.text = str(_limit)
+	_prev_btn.disabled = _offset <= 0
+	_next_btn.disabled = b.y >= _documents.size()
 
 
 # Tree view -------------------------------------------------------------------
@@ -535,7 +580,7 @@ func _on_document_inserted(text: String) -> void:
 		_documents.append(parsed)
 		_update_count()
 		# Jump to the last page so the newly inserted document is visible.
-		_go_to_page(_page_count() - 1)
+		_set_offset(((_documents.size() - 1) / _limit) * _limit)
 
 
 func _on_document_updated(index: int, text: String) -> void:
