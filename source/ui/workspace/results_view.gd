@@ -305,11 +305,11 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int, tree: Tree) 
 	if has_children:
 		_doc_menu.add_item("Expand Recursively", DocAction.EXPAND_RECURSIVE)
 		_doc_menu.set_item_accelerator(
-			_doc_menu.get_item_index(DocAction.EXPAND_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
+			_doc_menu.get_item_index(DocAction.EXPAND_RECURSIVE), KEY_MASK_ALT | KEY_RIGHT
 		)
 		_doc_menu.add_item("Collapse Recursively", DocAction.COLLAPSE_RECURSIVE)
 		_doc_menu.set_item_accelerator(
-			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_RIGHT
+			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
 		)
 		_doc_menu.add_separator()
 	_doc_menu.add_item("Edit Document…", DocAction.EDIT)
@@ -319,7 +319,8 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int, tree: Tree) 
 	if not is_document:
 		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)
 		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
-	_doc_menu.add_item("Copy JSON", DocAction.COPY_JSON)
+	# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
+	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
 	_doc_menu.add_separator()
 	_doc_menu.add_item("Delete Document", DocAction.DELETE)
 	_doc_menu.reset_size()
@@ -336,10 +337,10 @@ func _on_tree_gui_input(event: InputEvent, tree: Tree) -> void:
 	var item := tree.get_selected()
 	if item == null:
 		return
-	if key_event.keycode == KEY_LEFT:
+	if key_event.keycode == KEY_RIGHT:
 		_set_collapsed_recursive(item, false)
 		tree.accept_event()
-	elif key_event.keycode == KEY_RIGHT:
+	elif key_event.keycode == KEY_LEFT:
 		_set_collapsed_recursive(item, true)
 		tree.accept_event()
 
