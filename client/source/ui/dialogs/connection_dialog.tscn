@@ -277,3 +277,11 @@ text = "Save"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Cancel"
+
+[connection signal="close_requested" from="." to="." method="_on_cancel"]
+[connection signal="toggled" from="Margin/Col/Tabs/Authentication/AuthCheck" to="." method="_on_auth_toggled"]
+[connection signal="toggled" from="Margin/Col/Tabs/SSH/SshCheck" to="." method="_on_ssh_toggled"]
+[connection signal="toggled" from="Margin/Col/Tabs/SSL/SslCheck" to="." method="_on_ssl_toggled"]
+[connection signal="pressed" from="Margin/Col/Buttons/TestBtn" to="." method="_on_test"]
+[connection signal="pressed" from="Margin/Col/Buttons/SaveBtn" to="." method="_on_save"]
+[connection signal="pressed" from="Margin/Col/Buttons/CancelBtn" to="." method="_on_cancel"]

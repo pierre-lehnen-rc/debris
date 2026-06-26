@@ -58,3 +58,8 @@ gutters_draw_line_numbers = true
 [node name="Results" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]
 unique_name_in_owner = true
 layout_mode = 2
+
+[connection signal="pressed" from="Toolbar/Row/RunBtn" to="." method="_run"]
+[connection signal="text_submitted" from="Toolbar/Row/CollectionEdit" to="." method="_run"]
+[connection signal="pressed" from="Toolbar/Row/NewTabBtn" to="." method="_on_new_tab_pressed"]
+[connection signal="page_requested" from="Split/Results" to="." method="_fetch_page"]

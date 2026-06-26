@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://source/ui/sidebar/connection_sidebar.gd" id="4_c2ens"]
 [ext_resource type="PackedScene" path="res://source/ui/workspace/workspace.tscn" id="5_dkx7x"]
 [ext_resource type="Script" path="res://source/ui/workspace/workspace.gd" id="6_0jodg"]
+[ext_resource type="PackedScene" path="res://source/ui/dialogs/connection_dialog.tscn" id="7_cdlg0"]
 
 [node name="Main" type="Control" unique_id=1258944514]
 layout_mode = 3
@@ -91,3 +92,17 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "Ready"
+
+[node name="ConnectionDialog" parent="." instance=ExtResource("7_cdlg0")]
+
+[connection signal="pressed" from="Box/Toolbar/Row/ConnectBtn" to="." method="_open_connection_dialog"]
+[connection signal="id_pressed" from="Box/MenuBar/File" to="." method="_on_file_menu"]
+[connection signal="collection_activated" from="Box/Split/Sidebar" to="." method="_on_collection_activated"]
+[connection signal="shell_requested" from="Box/Split/Sidebar" to="." method="_on_shell_requested"]
+[connection signal="insert_document_requested" from="Box/Split/Sidebar" to="." method="_on_insert_document_requested"]
+[connection signal="add_connection_requested" from="Box/Split/Sidebar" to="." method="_open_connection_dialog"]
+[connection signal="edit_connection_requested" from="Box/Split/Sidebar" to="." method="_on_edit_connection_requested"]
+[connection signal="status_changed" from="Box/Split/Sidebar" to="." method="_on_status_changed"]
+[connection signal="status_changed" from="Box/Split/Workspace" to="." method="_on_status_changed"]
+[connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
+[connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]

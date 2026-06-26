@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://source/ui/workspace/results/table_results_view.gd" id="5_l1ggu"]
 [ext_resource type="PackedScene" path="res://source/ui/workspace/results/text_results_view.tscn" id="6_ewpu8"]
 [ext_resource type="Script" path="res://source/ui/workspace/results/text_results_view.gd" id="7_u75fy"]
+[ext_resource type="PackedScene" path="res://source/ui/dialogs/document_dialog.tscn" id="8_ddlg0"]
 
 [node name="ResultsView" type="VBoxContainer" unique_id=345635311]
 theme_override_constants/separation = 0
@@ -134,3 +135,25 @@ anchor_bottom = 1.0
 editable = false
 gutters_draw_line_numbers = true
 script = ExtResource("7_u75fy")
+
+[node name="DocumentDialog" parent="." instance=ExtResource("8_ddlg0")]
+
+[connection signal="pressed" from="Header/Row/TreeBtn" to="." method="_set_mode" binds=[0]]
+[connection signal="pressed" from="Header/Row/TableBtn" to="." method="_set_mode" binds=[1]]
+[connection signal="pressed" from="Header/Row/TextBtn" to="." method="_set_mode" binds=[2]]
+[connection signal="text_submitted" from="Header/Row/Pager/OffsetField" to="." method="_apply_offset_field"]
+[connection signal="focus_exited" from="Header/Row/Pager/OffsetField" to="." method="_apply_offset_field"]
+[connection signal="text_submitted" from="Header/Row/Pager/LimitField" to="." method="_apply_limit_field"]
+[connection signal="focus_exited" from="Header/Row/Pager/LimitField" to="." method="_apply_limit_field"]
+[connection signal="pressed" from="Header/Row/Pager/PrevBtn" to="." method="_on_prev_pressed"]
+[connection signal="pressed" from="Header/Row/Pager/NextBtn" to="." method="_on_next_pressed"]
+[connection signal="edit_requested" from="ViewHost/TreeView" to="." method="_on_edit_requested"]
+[connection signal="view_requested" from="ViewHost/TreeView" to="." method="_on_view_requested"]
+[connection signal="insert_requested" from="ViewHost/TreeView" to="." method="request_insert"]
+[connection signal="delete_requested" from="ViewHost/TreeView" to="." method="_on_delete_requested"]
+[connection signal="edit_requested" from="ViewHost/TableView" to="." method="_on_edit_requested"]
+[connection signal="view_requested" from="ViewHost/TableView" to="." method="_on_view_requested"]
+[connection signal="insert_requested" from="ViewHost/TableView" to="." method="request_insert"]
+[connection signal="delete_requested" from="ViewHost/TableView" to="." method="_on_delete_requested"]
+[connection signal="inserted" from="DocumentDialog" to="." method="_on_document_inserted"]
+[connection signal="updated" from="DocumentDialog" to="." method="_on_document_updated"]

@@ -37,8 +37,6 @@ var _edit_index := -1  # >= 0 when editing an existing connection
 
 
 func _ready() -> void:
-	close_requested.connect(_on_cancel)
-
 	for mech in MECHANISMS:
 		_mech_option.add_item(mech)
 
@@ -46,19 +44,24 @@ func _ready() -> void:
 	_ssh_controls = [_ssh_host_edit, _ssh_user_edit]
 	_ssl_controls = [_ssl_ca_edit]
 
-	_auth_check.toggled.connect(func(on: bool) -> void: _set_enabled(_auth_controls, on))
-	_ssh_check.toggled.connect(func(on: bool) -> void: _set_enabled(_ssh_controls, on))
-	_ssl_check.toggled.connect(func(on: bool) -> void: _set_enabled(_ssl_controls, on))
-
-	_test_btn.pressed.connect(_on_test)
-	_save_btn.pressed.connect(_on_save)
-	_cancel_btn.pressed.connect(_on_cancel)
-
 	_apply_style()
 
 	_set_enabled(_auth_controls, false)
 	_set_enabled(_ssh_controls, false)
 	_set_enabled(_ssl_controls, false)
+
+
+# Section toggles (wired in connection_dialog.tscn) ---------------------------
+func _on_auth_toggled(on: bool) -> void:
+	_set_enabled(_auth_controls, on)
+
+
+func _on_ssh_toggled(on: bool) -> void:
+	_set_enabled(_ssh_controls, on)
+
+
+func _on_ssl_toggled(on: bool) -> void:
+	_set_enabled(_ssl_controls, on)
 
 
 func _apply_style() -> void:

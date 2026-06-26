@@ -18,7 +18,6 @@ signal page_requested(offset: int, limit: int)
 enum ViewMode { TREE, TABLE, TEXT }
 
 const DEFAULT_LIMIT := 50
-const DOCUMENT_DIALOG_SCENE := preload("res://source/ui/dialogs/document_dialog.tscn")
 
 ## The current page of documents (not the whole result set).
 var _documents: Array = []
@@ -39,37 +38,22 @@ var _limit := DEFAULT_LIMIT
 @onready var _table_view: TableResultsView = %TableView
 @onready var _text_view: TextResultsView = %TextView
 @onready var _mode_buttons: Array[Button] = [%TreeBtn, %TableBtn, %TextBtn]
-
-var _doc_dialog: DocumentDialog
+@onready var _doc_dialog: DocumentDialog = $DocumentDialog
 
 
 func _ready() -> void:
 	_apply_style()
-
-	for i in _mode_buttons.size():
-		var mode_value: ViewMode = i as ViewMode
-		_mode_buttons[i].pressed.connect(func() -> void: _set_mode(mode_value))
-
-	_offset_field.text_submitted.connect(_apply_offset_field)
-	_offset_field.focus_exited.connect(_apply_offset_field)
-	_limit_field.text_submitted.connect(_apply_limit_field)
-	_limit_field.focus_exited.connect(_apply_limit_field)
-	_prev_btn.pressed.connect(func() -> void: _set_offset(_offset - _limit))
-	_next_btn.pressed.connect(func() -> void: _set_offset(_offset + _limit))
-
-	for view: DocResultsView in [_tree_view, _table_view]:
-		view.edit_requested.connect(_on_edit_requested)
-		view.view_requested.connect(_on_view_requested)
-		view.insert_requested.connect(request_insert)
-		view.delete_requested.connect(_on_delete_requested)
-
-	_doc_dialog = DOCUMENT_DIALOG_SCENE.instantiate()
-	_doc_dialog.inserted.connect(_on_document_inserted)
-	_doc_dialog.updated.connect(_on_document_updated)
-	add_child(_doc_dialog)
-
 	_set_mode(ViewMode.TREE)
 	_update_pager()
+
+
+# Pager buttons (wired in results_view.tscn) ----------------------------------
+func _on_prev_pressed() -> void:
+	_set_offset(_offset - _limit)
+
+
+func _on_next_pressed() -> void:
+	_set_offset(_offset + _limit)
 
 
 func _apply_style() -> void:

@@ -23,11 +23,7 @@ var _edit_index := -1
 
 
 func _ready() -> void:
-	close_requested.connect(hide)
 	_apply_style()
-	_validate_btn.pressed.connect(func() -> void: _validate())
-	_primary_btn.pressed.connect(_on_primary)
-	_cancel_btn.pressed.connect(hide)
 
 
 func _apply_style() -> void:

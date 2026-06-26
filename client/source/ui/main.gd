@@ -6,42 +6,28 @@ extends Control
 ## seeds the menu items, applies palette styling and wires the sidebar's
 ## collection activation to the workspace so double-clicking opens a query tab.
 
-const CONNECTION_DIALOG_SCENE := preload("res://source/ui/dialogs/connection_dialog.tscn")
-
 @onready var _background: ColorRect = %Background
 @onready var _file_menu: PopupMenu = %File
 @onready var _view_menu: PopupMenu = %View
 @onready var _help_menu: PopupMenu = %Help
 @onready var _edit_menu: PopupMenu = %Edit
 @onready var _toolbar: PanelContainer = %Toolbar
-@onready var _connect_btn: Button = %ConnectBtn
-@onready var _refresh_btn: Button = %RefreshBtn
 @onready var _status_bar: PanelContainer = %StatusBar
 @onready var _status_label: Label = %StatusLabel
 @onready var _sidebar: ConnectionSidebar = %Sidebar
 @onready var _workspace: Workspace = %Workspace
-
-var _connection_dialog: ConnectionDialog
+@onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
 
 
 func _ready() -> void:
 	_apply_style()
 	_populate_menus()
 
-	_connect_btn.pressed.connect(_open_connection_dialog)
 
-	_connection_dialog = CONNECTION_DIALOG_SCENE.instantiate()
-	add_child(_connection_dialog)
-	_connection_dialog.saved.connect(_on_connection_saved)
-	_connection_dialog.updated.connect(_on_connection_updated)
-
-	_sidebar.collection_activated.connect(_on_collection_activated)
-	_sidebar.add_connection_requested.connect(_open_connection_dialog)
-	_sidebar.edit_connection_requested.connect(_on_edit_connection_requested)
-	_sidebar.shell_requested.connect(_on_shell_requested)
-	_sidebar.insert_document_requested.connect(_on_insert_document_requested)
-	_sidebar.status_changed.connect(func(text: String) -> void: _status_label.text = text)
-	_workspace.status_changed.connect(func(text: String) -> void: _status_label.text = text)
+## Relays a child's status message to the status bar. Wired in main.tscn from
+## both the sidebar and the workspace.
+func _on_status_changed(text: String) -> void:
+	_status_label.text = text
 
 
 func _apply_style() -> void:
@@ -74,7 +60,6 @@ func _populate_menus() -> void:
 	_file_menu.add_item("Open Shell", 1)
 	_file_menu.add_separator()
 	_file_menu.add_item("Quit", 2)
-	_file_menu.id_pressed.connect(_on_file_menu)
 
 	_edit_menu.add_item("Copy", 0)
 	_edit_menu.add_item("Paste", 1)

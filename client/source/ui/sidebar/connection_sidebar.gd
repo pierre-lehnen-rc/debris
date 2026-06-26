@@ -53,16 +53,12 @@ func _ready() -> void:
 	}]
 
 	_apply_style()
-
-	_add_btn.pressed.connect(func() -> void: add_connection_requested.emit())
-	_tree.item_activated.connect(_on_item_activated)
-	_tree.item_mouse_selected.connect(_on_item_mouse_selected)
-	_tree.item_collapsed.connect(_on_item_collapsed)
-
-	_context_menu.theme = AppTheme.shared()
-	_context_menu.id_pressed.connect(_on_context_action)
-
 	_populate()
+
+
+## Wired in connection_sidebar.tscn from the header "+" button.
+func _on_add_pressed() -> void:
+	add_connection_requested.emit()
 
 
 # Public mutations (called by Main) -------------------------------------------

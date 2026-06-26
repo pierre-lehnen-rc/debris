@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c88vioc0keauu"]
 
 [ext_resource type="Script" uid="uid://dhbftwuqa2pdp" path="res://source/ui/sidebar/connection_sidebar.gd" id="1_pa5yq"]
+[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="2_theme"]
 
 [node name="ConnectionSidebar" type="PanelContainer" unique_id=1811904227]
 script = ExtResource("1_pa5yq")
@@ -43,3 +44,10 @@ select_mode = 1
 
 [node name="ContextMenu" type="PopupMenu" parent="." unique_id=1367346729]
 unique_name_in_owner = true
+theme = ExtResource("2_theme")
+
+[connection signal="pressed" from="Box/Header/Row/AddBtn" to="." method="_on_add_pressed"]
+[connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
+[connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
+[connection signal="item_collapsed" from="Box/Tree" to="." method="_on_item_collapsed"]
+[connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]

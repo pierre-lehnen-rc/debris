@@ -59,15 +59,13 @@ func _ready() -> void:
 	_collection_edit.text = collection_name
 	if not collection_name.is_empty():
 		_query_edit.text = "{}"
-
-	_run_btn.pressed.connect(_run)
-	_collection_edit.text_submitted.connect(func(_t: String) -> void: _run())
-	_new_tab_btn.pressed.connect(
-		func() -> void: new_tab_requested.emit(connection_config, database_name)
-	)
-	_results.page_requested.connect(_fetch_page)
-	if not collection_name.is_empty():
 		_run()
+
+
+## Asks the workspace for a fresh empty tab on this same database. Wired in
+## query_tab.tscn from the "+ New Tab" button.
+func _on_new_tab_pressed() -> void:
+	new_tab_requested.emit(connection_config, database_name)
 
 
 func _apply_style() -> void:
