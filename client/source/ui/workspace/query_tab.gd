@@ -13,8 +13,6 @@ signal status_changed(text: String)
 ## Emitted when the tab's title should change (collection retargeted), so the
 ## workspace can relabel the tab.
 signal title_changed(title: String)
-## Emitted when the user asks for a new empty tab on this same database.
-signal new_tab_requested(connection: Dictionary, database: String)
 
 var connection_config: Dictionary = {}
 ## Filter from the last "Run". Page navigation reuses it so paging through
@@ -31,7 +29,6 @@ var _has_run := false
 @onready var _run_btn: Button = %RunBtn
 @onready var _target_label: Label = %TargetLabel
 @onready var _collection_edit: LineEdit = %CollectionEdit
-@onready var _new_tab_btn: Button = %NewTabBtn
 @onready var _query_edit: CodeEdit = %QueryEdit
 @onready var _results: ResultsView = %Results
 
@@ -75,12 +72,6 @@ func _ready() -> void:
 	if not collection_name.is_empty():
 		_query_edit.text = "{}"
 		_run()
-
-
-## Asks the workspace for a fresh empty tab on this same database. Wired in
-## query_tab.tscn from the "+ New Tab" button.
-func _on_new_tab_pressed() -> void:
-	new_tab_requested.emit(connection_config, database_name)
 
 
 func _apply_style() -> void:

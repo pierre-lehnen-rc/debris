@@ -13,8 +13,13 @@ const QUERY_TAB_SCENE := preload("res://source/ui/workspace/query_tab.tscn")
 @onready var _welcome: Control = %Welcome
 @onready var _welcome_title: Label = %WelcomeTitle
 @onready var _welcome_hint: Label = %WelcomeHint
+@onready var _new_tab_btn: Button = %NewTabBtn
 
 var _tab_counter := 0
+# Connection + database this workspace is bound to, so the "+" button (which
+# lives in the tab strip, outside any single query tab) can open new tabs.
+var _bound_connection: Dictionary = {}
+var _bound_database := ""
 
 
 func _ready() -> void:
@@ -35,12 +40,16 @@ func open_collection(connection: Dictionary, database: String, collection: Strin
 	# Connect before add_child so the tab's initial _run() status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
-	tab.new_tab_requested.connect(_on_new_tab_requested)
 	tab.name = "tab_%d" % _tab_counter
 	_tab_counter += 1
 
-	# If the active tab is a blank scratch tab, the new tab takes its place.
-	var replaced := _current_empty_tab()
+	# Remember the database so the strip's "+" button can open further tabs.
+	_bound_connection = connection
+	_bound_database = database
+
+	# Opening a real collection replaces the active blank scratch tab (if any);
+	# opening a blank tab (e.g. the "+" button) always adds a fresh one.
+	var replaced := _current_empty_tab() if not collection.is_empty() else null
 
 	_tabs.add_child(tab)
 	if replaced != null:
@@ -72,8 +81,12 @@ func _on_tab_title_changed(title: String, tab: QueryTab) -> void:
 		_tabs.set_tab_title(index, title)
 
 
-func _on_new_tab_requested(connection: Dictionary, database: String) -> void:
-	open_collection(connection, database, "")
+## Wired in workspace.tscn from the "+" button in the tab strip. Opens a fresh
+## empty tab on the database this workspace is bound to.
+func _on_new_tab_pressed() -> void:
+	if _bound_database.is_empty():
+		return
+	open_collection(_bound_connection, _bound_database, "")
 
 
 func _on_tab_close_pressed(tab_index: int) -> void:
