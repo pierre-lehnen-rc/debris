@@ -3,8 +3,9 @@ extends PanelContainer
 
 ## Per-workspace sidebar: shows the grouped collection tree for a single,
 ## pre-selected database. Collection names are loaded from the backend and the
-## folder tree is built by CollectionGrouper. Double-clicking a collection opens
-## a query tab; right-clicking one shows collection actions.
+## folder tree is built by the selected DatabaseSchema (Generic/Rocket.Chat).
+## Double-clicking a collection opens a query tab; right-clicking one shows
+## collection actions.
 
 signal collection_activated(connection: Dictionary, database: String, collection: String)
 signal insert_document_requested(connection: Dictionary, database: String, collection: String)
@@ -30,6 +31,9 @@ var _database := ""
 var _names: Array = []
 var _menu_target: Dictionary = {}
 var _loading := false
+# Schema driving the grouping; swapped by the header's schema selector. Index
+# order matches the SchemaOption items (0 = Generic, 1 = Rocket.Chat).
+var _schema: DatabaseSchema = GenericSchema.new()
 
 
 func _ready() -> void:
@@ -65,10 +69,11 @@ func _on_refresh_pressed() -> void:
 	_load()
 
 
-## Schema selector in the header. No behavioural effect yet — reserved for
-## schema-aware grouping/labels later.
-func _on_schema_selected(_index: int) -> void:
-	pass
+## Schema selector in the header. Swaps the grouping schema and re-renders the
+## current collection list (no reload needed — only the layout changes).
+func _on_schema_selected(index: int) -> void:
+	_schema = RocketChatSchema.new() if index == 1 else GenericSchema.new()
+	_render()
 
 
 # Loading / rendering ---------------------------------------------------------
@@ -106,9 +111,9 @@ func _render() -> void:
 	if _names.is_empty():
 		_add_placeholder(root, "(no collections)")
 		return
-	var structure := CollectionGrouper.build_structure(_names)
+	var structure := _schema.build_structure(_names)
 	for coll in _names:
-		var path := CollectionGrouper.path_for(structure, coll)
+		var path := _schema.path_for(structure, coll)
 		var parent := root
 		for i in path.size() - 1:
 			parent = _get_or_create_group(parent, path[i])

@@ -1,16 +1,21 @@
-class_name CollectionGrouper
+class_name DatabaseSchema
 extends RefCounted
 
-## Pure (UI-free) grouping logic for collection lists. Given a flat list of
-## collection names it determines a folder tree by shared leading words
-## (splitting on "_", "." and camelCase) and then maps each name to the tree
-## path it should live at. It never touches the Tree and never sorts — order is
-## the caller's concern; this class only decides structure.
+## Base class for database schemas. A schema owns the (UI-free) grouping logic
+## for collection lists: given a flat list of collection names it determines a
+## folder tree by shared leading words (splitting on "_", "." and camelCase) and
+## then maps each name to the tree path it should live at. It never touches the
+## Tree and never sorts — order is the caller's concern; a schema only decides
+## structure.
+##
+## Subclasses (GenericSchema, RocketChatSchema) can override the grouping rules
+## for schema-specific layouts. The base implementation is the generic default.
 ##
 ## Typical use:
-##     var structure := CollectionGrouper.build_structure(names)
+##     var schema := GenericSchema.new()
+##     var structure := schema.build_structure(names)
 ##     for name in names:
-##         var path := CollectionGrouper.path_for(structure, name)
+##         var path := schema.path_for(structure, name)
 ##         # path[0..-2] are folder labels, path[-1] is the leaf's display label.
 
 # Grouping stops at this many levels deep; anything deeper is listed flat by the
@@ -32,7 +37,7 @@ const BUCKET_LOOSE_COLLECTIONS := false
 ## `label` is the displayed segment, `children` an Array of child nodes (empty
 ## for a leaf), and `full` the real collection name for a leaf (else "").
 ## Order here is incidental — the result is only used for path lookup.
-static func build_structure(names: Array) -> Array:
+func build_structure(names: Array) -> Array:
 	var trie := _build_trie(names)
 	return _build_display(trie, 1, [])
 
@@ -41,7 +46,7 @@ static func build_structure(names: Array) -> Array:
 ## an Array of labels from the top folder down to the leaf's display label, e.g.
 ## "rocketchat_apps_packages.chunk" -> ["rocketchat", "apps", "packages.chunk"].
 ## Falls back to [name] if the name isn't found in the structure.
-static func path_for(structure: Array, name: String) -> Array:
+func path_for(structure: Array, name: String) -> Array:
 	var path: Array = []
 	if _find_path(structure, name, path):
 		return path
@@ -52,7 +57,7 @@ static func path_for(structure: Array, name: String) -> Array:
 ## Turn a set of sibling trie nodes into display nodes, applying the bucketing,
 ## flatten and self-collection rules. `extra_colls` carries loose collection
 ## leaves from the caller (e.g. a folder's own same-named collection).
-static func _build_display(nodes: Array, depth: int, extra_colls: Array) -> Array:
+func _build_display(nodes: Array, depth: int, extra_colls: Array) -> Array:
 	var groups: Array = []
 	var colls: Array = extra_colls.duplicate()  # Array of leaf display nodes.
 	for node in nodes:
@@ -77,7 +82,7 @@ static func _build_display(nodes: Array, depth: int, extra_colls: Array) -> Arra
 
 
 ## Build a single folder display node from a branching trie node.
-static func _build_group(node: Dictionary, depth: int) -> Dictionary:
+func _build_group(node: Dictionary, depth: int) -> Dictionary:
 	# A collection whose name is exactly this folder's path becomes a loose
 	# collection within the folder (subject to the same bucketing rule).
 	var self_colls: Array = []
@@ -95,12 +100,12 @@ static func _build_group(node: Dictionary, depth: int) -> Dictionary:
 	return {"label": node["label"], "full": "", "children": children}
 
 
-static func _leaf(label: String, full: String) -> Dictionary:
+func _leaf(label: String, full: String) -> Dictionary:
 	return {"label": label, "full": full, "children": []}
 
 
 ## Depth-first search for the leaf matching `name`, recording labels into `path`.
-static func _find_path(nodes: Array, name: String, path: Array) -> bool:
+func _find_path(nodes: Array, name: String, path: Array) -> bool:
 	for node in nodes:
 		path.append(node["label"])
 		if node["children"].is_empty():
@@ -118,7 +123,7 @@ static func _find_path(nodes: Array, name: String, path: Array) -> bool:
 ## `sep` the separator that joined it to its parent, `full` the real collection
 ## name when a collection ends exactly here (else ""), `children` an ordered
 ## Array of child nodes.
-static func _build_trie(names: Array) -> Array:
+func _build_trie(names: Array) -> Array:
 	var root := {"children": [], "keys": {}}
 	for name in names:
 		var node: Dictionary = root
@@ -150,7 +155,7 @@ static func _build_trie(names: Array) -> Array:
 ## Reduce a word to a singular form for grouping purposes only (the displayed
 ## label keeps the original spelling). Handles basic English plurals; common
 ## non-plural "-s" endings ("status", "analysis", "class") are left untouched.
-static func _singularize(word: String) -> String:
+func _singularize(word: String) -> String:
 	var lower := word.to_lower()
 	if lower.length() <= 3 or not lower.ends_with("s"):
 		return word
@@ -168,7 +173,7 @@ static func _singularize(word: String) -> String:
 
 ## Collapse single-child chains into one node ("freeswitch" > "channel" becomes
 ## "freeswitch_channel"), stopping at branches and at real collections.
-static func _compress_nodes(nodes: Array) -> void:
+func _compress_nodes(nodes: Array) -> void:
 	for node in nodes:
 		while node["children"].size() == 1 and node["full"] == "":
 			var child: Dictionary = node["children"][0]
@@ -183,7 +188,7 @@ static func _compress_nodes(nodes: Array) -> void:
 ## A separator only splits when a word precedes it; a leading or doubled
 ## separator has no preceding word, so it stays as literal text on the next
 ## token ("_queue" stays "_queue", "x__trash" becomes "x" + "_trash").
-static func _tokenize(name: String) -> Array:
+func _tokenize(name: String) -> Array:
 	var segs: Array = []
 	var cur := ""
 	var pending_sep := ""
@@ -209,16 +214,16 @@ static func _tokenize(name: String) -> Array:
 	return segs
 
 
-static func _is_upper(c: String) -> bool:
+func _is_upper(c: String) -> bool:
 	return c >= "A" and c <= "Z"
 
 
-static func _is_lower_or_digit(c: String) -> bool:
+func _is_lower_or_digit(c: String) -> bool:
 	return (c >= "a" and c <= "z") or (c >= "0" and c <= "9")
 
 
 ## Total number of real collections within a node (including the node itself).
-static func _count_collections(node: Dictionary) -> int:
+func _count_collections(node: Dictionary) -> int:
 	var n := 1 if node["full"] != "" else 0
 	for child in node["children"]:
 		n += _count_collections(child)
@@ -228,7 +233,7 @@ static func _count_collections(node: Dictionary) -> int:
 ## Flatten subtrees into leaf display nodes, where `label` is the name below the
 ## flatten point (segments joined by their separators), so a deeply nested
 ## "rc_apps_packages.chunks" under the "packages" folder shows as "chunks".
-static func _collect_flat(nodes: Array, prefix: String, out: Array) -> void:
+func _collect_flat(nodes: Array, prefix: String, out: Array) -> void:
 	for node in nodes:
 		var label: String = node["label"] if prefix == "" else prefix + node["sep"] + node["label"]
 		if node["full"] != "":
