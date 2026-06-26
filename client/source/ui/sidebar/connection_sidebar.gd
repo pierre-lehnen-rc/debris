@@ -13,7 +13,14 @@ signal add_connection_requested()
 signal edit_connection_requested(index: int, config: Dictionary)
 signal status_changed(text: String)
 
-const META_TYPE := "type"  # "connection" | "database" | "collection"
+const META_TYPE := "type"  # "connection" | "database" | "collection" | "collection_group"
+
+# Collections sharing a leading word are grouped into a folder tree by
+# CollectionGrouper; the grouping rules live there. This sidebar only renders
+# the resulting paths into the Tree.
+
+# Create grouping folders collapsed by default. (Will become a user pref later.)
+const COLLAPSE_GROUPS := true
 
 # Context-menu action ids (shared across node types; only relevant ones shown).
 enum Action {
@@ -122,11 +129,11 @@ func _populate() -> void:
 			db_item.set_collapsed(true)
 
 			if loaded:
-				if (db.get("collections", []) as Array).is_empty():
+				var colls: Array = db.get("collections", [])
+				if colls.is_empty():
 					_add_placeholder(db_item, "(no collections)")
 				else:
-					for coll in db["collections"]:
-						_add_collection_item(db_item, ci, conn["name"], db["name"], coll)
+					_add_collection_tree(db_item, ci, conn["name"], db["name"], colls)
 			else:
 				# A placeholder child gives the node a fold arrow; expanding it
 				# triggers a lazy collection load from the backend.
@@ -149,6 +156,8 @@ func _on_item_activated() -> void:
 			item.set_collapsed(not item.is_collapsed())
 			if not item.is_collapsed() and not meta.get("loaded", false):
 				_load_collections(item, meta)
+		"collection_group":
+			item.set_collapsed(not item.is_collapsed())
 		_:
 			item.set_collapsed(not item.is_collapsed())
 
@@ -161,7 +170,9 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if item == null:
 		return
 	_menu_target = item.get_metadata(0)
-	if _menu_target.is_empty() or _menu_target[META_TYPE] == "placeholder":
+	if _menu_target.is_empty():
+		return
+	if _menu_target[META_TYPE] == "placeholder" or _menu_target[META_TYPE] == "collection_group":
 		return
 	_build_context_menu(_menu_target[META_TYPE])
 	_context_menu.reset_size()
@@ -314,8 +325,7 @@ func _load_collections(db_item: TreeItem, meta: Dictionary) -> void:
 	if names.is_empty():
 		_add_placeholder(db_item, "(no collections)")
 	else:
-		for coll in names:
-			_add_collection_item(db_item, ci, conn_name, db_name, coll)
+		_add_collection_tree(db_item, ci, conn_name, db_name, names)
 	db_item.set_metadata(0, _db_meta(ci, conn_name, db_name, true))
 	status_changed.emit("Loaded %d collections in %s" % [names.size(), db_name])
 
@@ -331,19 +341,68 @@ func _db_meta(ci: int, connection: String, db_name: String, loaded: bool) -> Dic
 	}
 
 
-func _add_collection_item(
-	db_item: TreeItem, ci: int, connection: String, db_name: String, coll: String
+## Group a flat list of collection names into a folder tree (by shared leading
+## words, via CollectionGrouper) and add it under the database node. The grouper
+## decides the structure; here we just walk each name's path and create folders
+## lazily, which preserves the input order wherever the structure allows.
+func _add_collection_tree(
+	db_item: TreeItem, ci: int, connection: String, db_name: String, names: Array
 ) -> void:
-	var coll_item := _tree.create_item(db_item)
-	coll_item.set_text(0, coll)
-	coll_item.set_custom_color(0, AppTheme.TEXT_DIM)
-	coll_item.set_metadata(0, {
+	var structure := CollectionGrouper.build_structure(names)
+	for coll in names:
+		var path := CollectionGrouper.path_for(structure, coll)
+		var parent := db_item
+		for i in path.size() - 1:
+			parent = _get_or_create_group(parent, ci, connection, db_name, path[i])
+		_add_collection_leaf(parent, ci, connection, db_name, path[path.size() - 1], coll)
+
+
+## Return the child folder of `parent` with the given label, creating it if it
+## doesn't exist yet (so repeated paths share the same TreeItem folders).
+func _get_or_create_group(
+	parent: TreeItem, ci: int, connection: String, db_name: String, label: String
+) -> TreeItem:
+	for child in parent.get_children():
+		var meta: Dictionary = child.get_metadata(0)
+		if meta.get(META_TYPE) == "collection_group" and child.get_text(0) == label:
+			return child
+	return _create_group(parent, ci, connection, db_name, label)
+
+
+func _create_group(
+	parent: TreeItem, ci: int, connection: String, db_name: String, label: String
+) -> TreeItem:
+	var group := _tree.create_item(parent)
+	group.set_text(0, label)
+	group.set_custom_color(0, AppTheme.TEXT)
+	group.set_collapsed(COLLAPSE_GROUPS)
+	group.set_metadata(0, {
+		META_TYPE: "collection_group",
+		"conn_index": ci,
+		"connection": connection,
+		"database": db_name,
+	})
+	return group
+
+
+func _add_collection_leaf(
+	parent: TreeItem, ci: int, connection: String, db_name: String,
+	label: String, full: String
+) -> void:
+	var leaf := _tree.create_item(parent)
+	leaf.set_text(0, label)
+	leaf.set_custom_color(0, AppTheme.TEXT_DIM)
+	leaf.set_metadata(0, _collection_meta(ci, connection, db_name, full))
+
+
+func _collection_meta(ci: int, connection: String, db_name: String, coll: String) -> Dictionary:
+	return {
 		META_TYPE: "collection",
 		"conn_index": ci,
 		"connection": connection,
 		"database": db_name,
 		"collection": coll,
-	})
+	}
 
 
 func _add_placeholder(db_item: TreeItem, text: String) -> void:
