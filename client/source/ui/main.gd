@@ -1,10 +1,13 @@
 class_name Main
 extends Control
 
-## Application shell: menu bar, toolbar, sidebar | workspace split, status bar.
-## Layout lives in main.tscn (which also carries the shared theme); this script
-## seeds the menu items, applies palette styling and wires the sidebar's
-## collection activation to the workspace so double-clicking opens a query tab.
+## Application shell: menu bar, toolbar, a bottom-tabbed stack of workspace tabs,
+## and a status bar. Each workspace tab is bound to one database (its own
+## collection sidebar + query workspace). Databases are chosen from the
+## connection picker popup, opened from the toolbar or automatically when no
+## tabs are open. Layout lives in main.tscn (which also carries the theme).
+
+const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.tscn")
 
 @onready var _background: ColorRect = %Background
 @onready var _file_menu: PopupMenu = %File
@@ -14,20 +17,99 @@ extends Control
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _status_bar: PanelContainer = %StatusBar
 @onready var _status_label: Label = %StatusLabel
-@onready var _sidebar: ConnectionSidebar = %Sidebar
-@onready var _workspace: Workspace = %Workspace
+@onready var _tabs: TabContainer = %WorkspaceTabs
 @onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
+@onready var _picker: ConnectionPicker = $ConnectionPicker
+
+var _tab_counter := 0
 
 
 func _ready() -> void:
 	_apply_style()
 	_populate_menus()
 
+	var bar := _tabs.get_tab_bar()
+	bar.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ALWAYS
+	bar.tab_close_pressed.connect(_on_tab_close_pressed)
 
-## Relays a child's status message to the status bar. Wired in main.tscn from
-## both the sidebar and the workspace.
+	# Nothing is open yet — prompt the user to pick a database to start.
+	_open_picker.call_deferred()
+
+
+## Relays a child's status message to the status bar. Wired in main.tscn.
 func _on_status_changed(text: String) -> void:
 	_status_label.text = text
+
+
+func _open_picker() -> void:
+	_picker.open()
+
+
+# Workspace tabs --------------------------------------------------------------
+func _on_database_selected(connection: Dictionary, database: String) -> void:
+	_open_workspace_tab(connection, database)
+
+
+func _open_workspace_tab(connection: Dictionary, database: String) -> WorkspaceTab:
+	var tab: WorkspaceTab = WORKSPACE_TAB_SCENE.instantiate()
+	tab.configure(connection, database)
+	tab.status_changed.connect(_on_status_changed)
+	tab.name = "ws_%d" % _tab_counter
+	_tab_counter += 1
+	_tabs.add_child(tab)
+	var index := _tabs.get_tab_count() - 1
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_tooltip(index, "%s · %s" % [connection.get("name", ""), database])
+	_tabs.current_tab = index
+	_status_label.text = "Opened %s on %s" % [database, connection.get("name", "")]
+	return tab
+
+
+func _on_tab_close_pressed(tab_index: int) -> void:
+	var control := _tabs.get_tab_control(tab_index)
+	if control == null:
+		return
+	_tabs.remove_child(control)
+	control.queue_free()
+	# Back to an empty shell — reopen the picker so the user can choose again.
+	if _tabs.get_tab_count() == 0:
+		_open_picker.call_deferred()
+
+
+# Connection picker / dialog --------------------------------------------------
+func _on_shell_requested(connection: Dictionary, database: String) -> void:
+	var tab := _open_workspace_tab(connection, database)
+	tab.open_collection(connection, database, "")
+	_status_label.text = "Opened shell on %s.%s" % [connection.get("name", ""), database]
+
+
+func _on_add_connection_requested() -> void:
+	_connection_dialog.open_new()
+
+
+func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
+	_connection_dialog.open_edit(index, config)
+
+
+func _on_connection_saved(config: Dictionary) -> void:
+	_picker.add_connection(config)
+	_status_label.text = "Added connection '%s'" % config.get("name", "")
+
+
+func _on_connection_updated(index: int, config: Dictionary) -> void:
+	_picker.update_connection(index, config)
+	_status_label.text = "Updated connection '%s'" % config.get("name", "")
+
+
+# Menus / styling -------------------------------------------------------------
+func _on_file_menu(id: int) -> void:
+	match id:
+		0:  # New Connection…
+			_connection_dialog.open_new()
+		1:  # Open Database…
+			_open_picker()
+		3:  # Quit
+			get_tree().quit()
 
 
 func _apply_style() -> void:
@@ -57,9 +139,9 @@ func _apply_style() -> void:
 
 func _populate_menus() -> void:
 	_file_menu.add_item("New Connection…", 0)
-	_file_menu.add_item("Open Shell", 1)
+	_file_menu.add_item("Open Database…", 1)
 	_file_menu.add_separator()
-	_file_menu.add_item("Quit", 2)
+	_file_menu.add_item("Quit", 3)
 
 	_edit_menu.add_item("Copy", 0)
 	_edit_menu.add_item("Paste", 1)
@@ -69,47 +151,3 @@ func _populate_menus() -> void:
 	_view_menu.add_item("Text", 2)
 
 	_help_menu.add_item("About Quetzalcoatl", 0)
-
-
-func _open_connection_dialog() -> void:
-	_connection_dialog.open_new()
-
-
-func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
-	_connection_dialog.open_edit(index, config)
-
-
-func _on_shell_requested(connection: Dictionary, database: String) -> void:
-	_workspace.open_collection(connection, database, "")
-	_status_label.text = "Opened shell on %s.%s" % [connection.get("name", ""), database]
-
-
-func _on_insert_document_requested(
-	connection: Dictionary, database: String, collection: String
-) -> void:
-	var tab := _workspace.open_collection(connection, database, collection)
-	tab.results().request_insert()
-	_status_label.text = "Insert document into %s.%s" % [database, collection]
-
-
-func _on_collection_activated(connection: Dictionary, database: String, collection: String) -> void:
-	_workspace.open_collection(connection, database, collection)
-	_status_label.text = "Opened %s.%s on %s" % [database, collection, connection.get("name", "")]
-
-
-func _on_file_menu(id: int) -> void:
-	match id:
-		0:  # New Connection…
-			_open_connection_dialog()
-		2:  # Quit
-			get_tree().quit()
-
-
-func _on_connection_saved(config: Dictionary) -> void:
-	_sidebar.add_connection(config)
-	_status_label.text = "Added connection '%s'" % config.get("name", "")
-
-
-func _on_connection_updated(index: int, config: Dictionary) -> void:
-	_sidebar.update_connection(index, config)
-	_status_label.text = "Updated connection '%s'" % config.get("name", "")
