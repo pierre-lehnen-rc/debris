@@ -14,21 +14,46 @@ theme_override_constants/separation = 0
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Row" type="HBoxContainer" parent="Box/Header"]
+[node name="HeaderBox" type="VBoxContainer" parent="Box/Header"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Row" type="HBoxContainer" parent="Box/Header/HeaderBox"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Box/Header/Row"]
+[node name="Title" type="Label" parent="Box/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "COLLECTIONS"
 
-[node name="RefreshBtn" type="Button" parent="Box/Header/Row"]
+[node name="RefreshBtn" type="Button" parent="Box/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Refresh collections"
 focus_mode = 0
 text = "⟳"
+
+[node name="SchemaRow" type="HBoxContainer" parent="Box/Header/HeaderBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="SchemaLabel" type="Label" parent="Box/Header/HeaderBox/SchemaRow"]
+layout_mode = 2
+text = "Schema"
+
+[node name="SchemaOption" type="OptionButton" parent="Box/Header/HeaderBox/SchemaRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Database schema"
+focus_mode = 0
+selected = 0
+item_count = 2
+popup/item_0/text = "Generic"
+popup/item_0/id = 0
+popup/item_1/text = "Rocket.Chat"
+popup/item_1/id = 1
 
 [node name="Tree" type="Tree" parent="Box"]
 unique_name_in_owner = true
@@ -46,7 +71,8 @@ select_mode = 1
 unique_name_in_owner = true
 theme = ExtResource("2_theme")
 
-[connection signal="pressed" from="Box/Header/Row/RefreshBtn" to="." method="_on_refresh_pressed"]
+[connection signal="pressed" from="Box/Header/HeaderBox/Row/RefreshBtn" to="." method="_on_refresh_pressed"]
+[connection signal="item_selected" from="Box/Header/HeaderBox/SchemaRow/SchemaOption" to="." method="_on_schema_selected"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
 [connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
 [connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]

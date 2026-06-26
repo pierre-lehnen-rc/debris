@@ -65,6 +65,12 @@ func _on_refresh_pressed() -> void:
 	_load()
 
 
+## Schema selector in the header. No behavioural effect yet — reserved for
+## schema-aware grouping/labels later.
+func _on_schema_selected(_index: int) -> void:
+	pass
+
+
 # Loading / rendering ---------------------------------------------------------
 func _load() -> void:
 	if _loading or _connection.is_empty() or _database.is_empty():
