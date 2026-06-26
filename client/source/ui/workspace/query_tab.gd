@@ -52,6 +52,12 @@ func tab_title() -> String:
 	return "%s.%s" % [database_name, collection_name]
 
 
+## True when this is a blank scratch tab (no collection targeted), so opening a
+## real collection can replace it instead of stacking a new tab.
+func is_empty() -> bool:
+	return _collection_edit.text.strip_edges().is_empty()
+
+
 func _ready() -> void:
 	_apply_style()
 

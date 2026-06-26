@@ -38,12 +38,32 @@ func open_collection(connection: Dictionary, database: String, collection: Strin
 	tab.new_tab_requested.connect(_on_new_tab_requested)
 	tab.name = "tab_%d" % _tab_counter
 	_tab_counter += 1
+
+	# If the active tab is a blank scratch tab, the new tab takes its place.
+	var replaced := _current_empty_tab()
+
 	_tabs.add_child(tab)
-	var index := _tabs.get_tab_count() - 1
+	if replaced != null:
+		var slot := _tabs.get_tab_idx_from_control(replaced)
+		_tabs.remove_child(replaced)
+		replaced.queue_free()
+		_tabs.move_child(tab, slot)
+
+	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.current_tab = index
 	_update_welcome()
 	return tab
+
+
+## The currently selected tab if it's a blank scratch tab, else null.
+func _current_empty_tab() -> QueryTab:
+	if _tabs.get_tab_count() == 0:
+		return null
+	var current := _tabs.get_current_tab_control() as QueryTab
+	if current != null and current.is_empty():
+		return current
+	return null
 
 
 func _on_tab_title_changed(title: String, tab: QueryTab) -> void:
