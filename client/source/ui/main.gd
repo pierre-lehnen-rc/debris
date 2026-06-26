@@ -40,6 +40,7 @@ func _ready() -> void:
 	_sidebar.edit_connection_requested.connect(_on_edit_connection_requested)
 	_sidebar.shell_requested.connect(_on_shell_requested)
 	_sidebar.insert_document_requested.connect(_on_insert_document_requested)
+	_sidebar.status_changed.connect(func(text: String) -> void: _status_label.text = text)
 
 
 func _apply_style() -> void:

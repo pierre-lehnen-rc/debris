@@ -135,16 +135,43 @@ func _gather() -> Dictionary:
 			"enabled": _auth_check.button_pressed,
 			"database": _auth_db_edit.text,
 			"username": _user_edit.text,
+			"password": _pass_edit.text,
 			"mechanism": MECHANISMS[_mech_option.selected],
 		},
 	}
+
+
+## Build the server connection spec directly from the current field values
+## (used by Test, before the config is saved).
+func _spec_from_fields() -> Dictionary:
+	var port := _port_edit.text.strip_edges().to_int()
+	if port == 0:
+		port = 27017
+	var spec := {
+		"host": _host_edit.text.strip_edges(),
+		"port": port,
+		"directConnection": true,
+	}
+	if _auth_check.button_pressed:
+		spec["username"] = _user_edit.text
+		spec["password"] = _pass_edit.text
+		spec["authSource"] = _auth_db_edit.text
+		spec["authMechanism"] = MECHANISMS[_mech_option.selected]
+	return spec
 
 
 func _on_test() -> void:
 	if _host_edit.text.strip_edges().is_empty():
 		_status.text = "Enter a host to test."
 		return
-	_status.text = "Testing not available yet (no driver)."
+	_status.text = "Testing…"
+	_test_btn.disabled = true
+	var result: Dictionary = await Backend.ping(_spec_from_fields())
+	_test_btn.disabled = false
+	if result.get("ok", false):
+		_status.text = "Connection successful."
+	else:
+		_status.text = "Failed: %s" % result.get("error", "unknown error")
 
 
 func _on_save() -> void:

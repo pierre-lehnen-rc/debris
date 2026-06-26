@@ -10,6 +10,7 @@ signal shell_requested(connection: String, database: String)
 signal insert_document_requested(connection: String, database: String, collection: String)
 signal add_connection_requested()
 signal edit_connection_requested(index: int, config: Dictionary)
+signal status_changed(text: String)
 
 const META_TYPE := "type"  # "connection" | "database" | "collection"
 
@@ -187,8 +188,11 @@ func _on_context_action(id: int) -> void:
 	var ci: int = _menu_target.get("conn_index", -1)
 	match id:
 		Action.CONNECT_TOGGLE:
-			_connections[ci]["connected"] = not _connections[ci].get("connected", false)
-			_populate()
+			if _connections[ci].get("connected", false):
+				_connections[ci]["connected"] = false
+				_populate()
+			else:
+				_connect(ci)
 		Action.EDIT_CONNECTION:
 			edit_connection_requested.emit(ci, _connections[ci].duplicate(true))
 		Action.REMOVE_CONNECTION:
@@ -212,6 +216,33 @@ func _on_context_action(id: int) -> void:
 			_drop_collection(ci, _menu_target["database"], _menu_target["collection"])
 		Action.REFRESH:
 			_populate()
+
+
+## Connect to a connection's server via the backend and replace its database
+## list with the real databases reported by MongoDB.
+func _connect(ci: int) -> void:
+	var conn: Dictionary = _connections[ci]
+	status_changed.emit("Connecting to %s…" % conn.get("name", ""))
+
+	var result: Dictionary = await Backend.list_databases(Backend.to_spec(conn))
+	if not result.get("ok", false):
+		status_changed.emit("Connection to %s failed: %s" % [
+			conn.get("name", ""), result.get("error", "unknown error"),
+		])
+		return
+
+	var databases: Array = []
+	var data: Variant = result.get("data")
+	if data is Dictionary and data.get("databases") is Array:
+		for entry in data["databases"]:
+			databases.append({"name": entry.get("name", "(unknown)"), "collections": []})
+
+	conn["databases"] = databases
+	conn["connected"] = true
+	_populate()
+	status_changed.emit("Connected to %s — %d databases" % [
+		conn.get("name", ""), databases.size(),
+	])
 
 
 func _add_collection(ci: int, db_name: String, coll_name: String) -> void:
