@@ -1,6 +1,6 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cgwh62xl4hvec"]
 
-[ext_resource type="Script" path="res://source/ui/workspace/results/table_results_view.gd" id="1_s34to"]
+[ext_resource type="Script" uid="uid://btdtkvlqxj02i" path="res://source/ui/workspace/results/table_results_view.gd" id="1_s34to"]
 
 [node name="TableView" type="Tree" unique_id=1065542661]
 anchors_preset = 15

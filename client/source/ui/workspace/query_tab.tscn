@@ -1,8 +1,7 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cmfolvd02papp"]
 
-[ext_resource type="Script" path="res://source/ui/workspace/query_tab.gd" id="1_i88w5"]
+[ext_resource type="Script" uid="uid://bdq8jwx2m5n0t" path="res://source/ui/workspace/query_tab.gd" id="1_i88w5"]
 [ext_resource type="PackedScene" path="res://source/ui/workspace/results_view.tscn" id="2_m7gy8"]
-[ext_resource type="Script" path="res://source/ui/workspace/results_view.gd" id="3_0youk"]
 
 [node name="QueryTab" type="VBoxContainer" unique_id=1223911229]
 theme_override_constants/separation = 0
@@ -31,8 +30,8 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "collection name"
 tooltip_text = "Collection to query — edit and press Run (or Enter) to load another"
+placeholder_text = "collection name"
 
 [node name="NewTabBtn" type="Button" parent="Toolbar/Row" unique_id=1525425625]
 unique_name_in_owner = true
@@ -56,8 +55,6 @@ placeholder_text = "{ } — JSON filter, e.g. { \"status\": \"active\" }"
 tab_input_mode = false
 gutters_draw_line_numbers = true
 
-[node name="Results" type="VBoxContainer" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]
+[node name="Results" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 0
-script = ExtResource("3_0youk")
