@@ -24,6 +24,10 @@ func list_databases(connection: Dictionary) -> Dictionary:
 	return await _post("/api/databases", {"connection": connection})
 
 
+func list_collections(connection: Dictionary, database: String) -> Dictionary:
+	return await _post("/api/collections", {"connection": connection, "database": database})
+
+
 func ping(connection: Dictionary) -> Dictionary:
 	return await _post("/api/ping", {"connection": connection})
 

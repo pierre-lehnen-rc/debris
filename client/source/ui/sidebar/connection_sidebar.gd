@@ -37,6 +37,8 @@ enum Action {
 var _menu_target: Dictionary = {}
 # Runtime, mutable copy seeded from MockData so connections can be edited.
 var _connections: Array = []
+# Set of "ci/database" keys with an in-flight collection load, to de-dupe.
+var _loading_dbs: Dictionary = {}
 
 
 func _ready() -> void:
@@ -47,6 +49,7 @@ func _ready() -> void:
 	_add_btn.pressed.connect(func() -> void: add_connection_requested.emit())
 	_tree.item_activated.connect(_on_item_activated)
 	_tree.item_mouse_selected.connect(_on_item_mouse_selected)
+	_tree.item_collapsed.connect(_on_item_collapsed)
 
 	_context_menu.theme = AppTheme.shared()
 	_context_menu.id_pressed.connect(_on_context_action)
@@ -107,25 +110,23 @@ func _populate() -> void:
 			var db_item := _tree.create_item(conn_item)
 			db_item.set_text(0, db["name"])
 			db_item.set_custom_color(0, AppTheme.TEXT)
-			db_item.set_metadata(0, {
-				META_TYPE: "database",
-				"conn_index": ci,
-				"connection": conn["name"],
-				"database": db["name"],
-			})
+			# A database is "loaded" once its collections are known. Seed/mock
+			# data arrives with collections already filled in; real connections
+			# start empty and load lazily when the node is expanded.
+			var loaded: bool = db.get("loaded", not (db.get("collections", []) as Array).is_empty())
+			db_item.set_metadata(0, _db_meta(ci, conn["name"], db["name"], loaded))
 			db_item.set_collapsed(true)
 
-			for coll in db["collections"]:
-				var coll_item := _tree.create_item(db_item)
-				coll_item.set_text(0, coll)
-				coll_item.set_custom_color(0, AppTheme.TEXT_DIM)
-				coll_item.set_metadata(0, {
-					META_TYPE: "collection",
-					"conn_index": ci,
-					"connection": conn["name"],
-					"database": db["name"],
-					"collection": coll,
-				})
+			if loaded:
+				if (db.get("collections", []) as Array).is_empty():
+					_add_placeholder(db_item, "(no collections)")
+				else:
+					for coll in db["collections"]:
+						_add_collection_item(db_item, ci, conn["name"], db["name"], coll)
+			else:
+				# A placeholder child gives the node a fold arrow; expanding it
+				# triggers a lazy collection load from the backend.
+				_add_placeholder(db_item, "Loading…")
 
 
 func _on_item_activated() -> void:
@@ -138,6 +139,10 @@ func _on_item_activated() -> void:
 	match meta[META_TYPE]:
 		"collection":
 			collection_activated.emit(meta["connection"], meta["database"], meta["collection"])
+		"database":
+			item.set_collapsed(not item.is_collapsed())
+			if not item.is_collapsed() and not meta.get("loaded", false):
+				_load_collections(item, meta)
 		_:
 			item.set_collapsed(not item.is_collapsed())
 
@@ -150,7 +155,7 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if item == null:
 		return
 	_menu_target = item.get_metadata(0)
-	if _menu_target.is_empty():
+	if _menu_target.is_empty() or _menu_target[META_TYPE] == "placeholder":
 		return
 	_build_context_menu(_menu_target[META_TYPE])
 	_context_menu.reset_size()
@@ -243,6 +248,104 @@ func _connect(ci: int) -> void:
 	status_changed.emit("Connected to %s — %d databases" % [
 		conn.get("name", ""), databases.size(),
 	])
+
+
+## Lazily load a database's collections the first time its node is expanded
+## via the fold arrow.
+func _on_item_collapsed(item: TreeItem) -> void:
+	if item == null or item.is_collapsed():
+		return
+	var meta: Dictionary = item.get_metadata(0)
+	if meta.is_empty() or meta.get(META_TYPE) != "database" or meta.get("loaded", false):
+		return
+	_load_collections(item, meta)
+
+
+## Fetch a database's collections from the backend and graft them onto the
+## existing tree node in place (so the expanded state is preserved).
+func _load_collections(db_item: TreeItem, meta: Dictionary) -> void:
+	var ci: int = meta.get("conn_index", -1)
+	var db_name: String = meta.get("database", "")
+	if ci < 0 or db_name.is_empty():
+		return
+
+	var key := "%d/%s" % [ci, db_name]
+	if _loading_dbs.has(key):
+		return
+	_loading_dbs[key] = true
+
+	var conn_name: String = meta.get("connection", "")
+	status_changed.emit("Loading collections for %s…" % db_name)
+	var result: Dictionary = await Backend.list_collections(Backend.to_spec(_connections[ci]), db_name)
+	_loading_dbs.erase(key)
+
+	if not result.get("ok", false):
+		status_changed.emit("Failed to load collections for %s: %s" % [
+			db_name, result.get("error", "unknown error"),
+		])
+		return
+
+	var names: Array = []
+	var data: Variant = result.get("data")
+	if data is Array:
+		for entry in data:
+			if entry is Dictionary:
+				names.append(entry.get("name", "(unknown)"))
+	names.sort()
+
+	# Persist into the data model so later rebuilds (refresh, edits) keep them.
+	for db in _connections[ci]["databases"]:
+		if db["name"] == db_name:
+			db["collections"] = names
+			db["loaded"] = true
+			break
+
+	# The node may have been rebuilt while the request was in flight; bail if so.
+	if not is_instance_valid(db_item):
+		return
+	for child in db_item.get_children():
+		child.free()
+	if names.is_empty():
+		_add_placeholder(db_item, "(no collections)")
+	else:
+		for coll in names:
+			_add_collection_item(db_item, ci, conn_name, db_name, coll)
+	db_item.set_metadata(0, _db_meta(ci, conn_name, db_name, true))
+	status_changed.emit("Loaded %d collections in %s" % [names.size(), db_name])
+
+
+# Tree-building helpers -------------------------------------------------------
+func _db_meta(ci: int, connection: String, db_name: String, loaded: bool) -> Dictionary:
+	return {
+		META_TYPE: "database",
+		"conn_index": ci,
+		"connection": connection,
+		"database": db_name,
+		"loaded": loaded,
+	}
+
+
+func _add_collection_item(
+	db_item: TreeItem, ci: int, connection: String, db_name: String, coll: String
+) -> void:
+	var coll_item := _tree.create_item(db_item)
+	coll_item.set_text(0, coll)
+	coll_item.set_custom_color(0, AppTheme.TEXT_DIM)
+	coll_item.set_metadata(0, {
+		META_TYPE: "collection",
+		"conn_index": ci,
+		"connection": connection,
+		"database": db_name,
+		"collection": coll,
+	})
+
+
+func _add_placeholder(db_item: TreeItem, text: String) -> void:
+	var ph := _tree.create_item(db_item)
+	ph.set_text(0, text)
+	ph.set_selectable(0, false)
+	ph.set_custom_color(0, AppTheme.TEXT_DIM)
+	ph.set_metadata(0, {META_TYPE: "placeholder"})
 
 
 func _add_collection(ci: int, db_name: String, coll_name: String) -> void:
