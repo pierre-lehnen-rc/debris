@@ -15,6 +15,12 @@ signal status_changed(text: String)
 
 const META_TYPE := "type"  # "connection" | "database" | "collection" | "collection_group"
 
+# Node-type icons, tinted per row via set_icon_modulate to match the text color.
+const ICON_DATABASE := preload("res://source/ui/icons/database.svg")
+const ICON_GROUP := preload("res://source/ui/icons/group.svg")
+const ICON_COLLECTION := preload("res://source/ui/icons/collection.svg")
+const ICON_SIZE := 16
+
 # Collections sharing a leading word are grouped into a folder tree by
 # CollectionGrouper; the grouping rules live there. This sidebar only renders
 # the resulting paths into the Tree.
@@ -121,6 +127,9 @@ func _populate() -> void:
 			var db_item := _tree.create_item(conn_item)
 			db_item.set_text(0, db["name"])
 			db_item.set_custom_color(0, AppTheme.TEXT)
+			db_item.set_icon(0, ICON_DATABASE)
+			db_item.set_icon_max_width(0, ICON_SIZE)
+			db_item.set_icon_modulate(0, AppTheme.TEXT)
 			# A database is "loaded" once its collections are known. Seed/mock
 			# data arrives with collections already filled in; real connections
 			# start empty and load lazily when the node is expanded.
@@ -375,6 +384,9 @@ func _create_group(
 	var group := _tree.create_item(parent)
 	group.set_text(0, label)
 	group.set_custom_color(0, AppTheme.TEXT)
+	group.set_icon(0, ICON_GROUP)
+	group.set_icon_max_width(0, ICON_SIZE)
+	group.set_icon_modulate(0, AppTheme.TEXT_DIM)
 	group.set_collapsed(COLLAPSE_GROUPS)
 	group.set_metadata(0, {
 		META_TYPE: "collection_group",
@@ -392,6 +404,9 @@ func _add_collection_leaf(
 	var leaf := _tree.create_item(parent)
 	leaf.set_text(0, label)
 	leaf.set_custom_color(0, AppTheme.TEXT_DIM)
+	leaf.set_icon(0, ICON_COLLECTION)
+	leaf.set_icon_max_width(0, ICON_SIZE)
+	leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
 	leaf.set_metadata(0, _collection_meta(ci, connection, db_name, full))
 
 
