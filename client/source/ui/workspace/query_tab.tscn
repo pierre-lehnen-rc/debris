@@ -53,6 +53,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
 placeholder_text = "{ } — JSON filter, e.g. { \"status\": \"active\" }"
+tab_input_mode = false
 gutters_draw_line_numbers = true
 
 [node name="Results" type="VBoxContainer" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]

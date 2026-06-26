@@ -3,8 +3,13 @@
 [ext_resource type="Script" path="res://source/ui/workspace/results/table_results_view.gd" id="1_s34to"]
 
 [node name="TableView" type="Tree" unique_id=1065542661]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+focus_neighbor_left = NodePath(".")
+focus_neighbor_top = NodePath(".")
+focus_neighbor_right = NodePath(".")
+focus_neighbor_bottom = NodePath(".")
 column_titles_visible = true
 allow_rmb_select = true
 hide_root = true
