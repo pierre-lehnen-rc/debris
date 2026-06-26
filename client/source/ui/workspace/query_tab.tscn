@@ -26,7 +26,20 @@ text = "Run"
 [node name="TargetLabel" type="Label" parent="Toolbar/Row" unique_id=1525425623]
 unique_name_in_owner = true
 layout_mode = 2
+
+[node name="CollectionEdit" type="LineEdit" parent="Toolbar/Row" unique_id=1525425624]
+unique_name_in_owner = true
+layout_mode = 2
 size_flags_horizontal = 3
+placeholder_text = "collection name"
+tooltip_text = "Collection to query — edit and press Run (or Enter) to load another"
+
+[node name="NewTabBtn" type="Button" parent="Toolbar/Row" unique_id=1525425625]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Open a new empty tab on this database"
+focus_mode = 0
+text = "+ New Tab"
 
 [node name="Split" type="VSplitContainer" parent="." unique_id=664523523]
 unique_name_in_owner = true

@@ -1,13 +1,20 @@
 class_name QueryTab
 extends VBoxContainer
 
-## A single query workspace: a JSON filter editor on top, results below, split
-## vertically. "Run" executes a find against the configured collection via the
-## backend, using the JSON filter from the editor, and displays the results.
+## A single query workspace: an editable collection field plus a JSON filter
+## editor on top, results below, split vertically. "Run" executes a find against
+## the collection named in the field via the backend, using the JSON filter, and
+## displays the results. The collection can be retargeted freely; an empty field
+## means a blank tab that runs nothing until a name is entered.
 ## Layout lives in query_tab.tscn; configure() must be called before the node
 ## enters the tree so _ready() can seed the editor and target label.
 
 signal status_changed(text: String)
+## Emitted when the tab's title should change (collection retargeted), so the
+## workspace can relabel the tab.
+signal title_changed(title: String)
+## Emitted when the user asks for a new empty tab on this same database.
+signal new_tab_requested(connection: Dictionary, database: String)
 
 var connection_config: Dictionary = {}
 ## Filter from the last "Run". Page navigation reuses it so paging through
@@ -20,6 +27,8 @@ var collection_name := ""
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
 @onready var _target_label: Label = %TargetLabel
+@onready var _collection_edit: LineEdit = %CollectionEdit
+@onready var _new_tab_btn: Button = %NewTabBtn
 @onready var _query_edit: CodeEdit = %QueryEdit
 @onready var _results: ResultsView = %Results
 
@@ -46,13 +55,19 @@ func tab_title() -> String:
 func _ready() -> void:
 	_apply_style()
 
-	_target_label.text = "%s  ›  %s  ›  %s" % [connection_name, database_name, collection_name]
+	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
+	_collection_edit.text = collection_name
 	if not collection_name.is_empty():
 		_query_edit.text = "{}"
 
 	_run_btn.pressed.connect(_run)
+	_collection_edit.text_submitted.connect(func(_t: String) -> void: _run())
+	_new_tab_btn.pressed.connect(
+		func() -> void: new_tab_requested.emit(connection_config, database_name)
+	)
 	_results.page_requested.connect(_fetch_page)
-	_run()
+	if not collection_name.is_empty():
+		_run()
 
 
 func _apply_style() -> void:
@@ -66,11 +81,14 @@ func _apply_style() -> void:
 	_target_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
-## Parse the editor's filter and (re)load from the first page. The results view
-## then drives subsequent pages back through _fetch_page via page_requested.
+## Parse the editor's filter and (re)load from the first page. The collection is
+## read from the editable field each run, so it can be retargeted freely. The
+## results view then drives subsequent pages back through _fetch_page.
 func _run() -> void:
+	_retarget_collection()
 	if collection_name.is_empty():
 		_results.show_page([])
+		status_changed.emit("Enter a collection name to run a query")
 		return
 
 	var filter_variant: Variant = _parse_filter()
@@ -80,6 +98,16 @@ func _run() -> void:
 
 	_active_filter = filter_variant
 	_results.request_first_page()
+
+
+## Sync collection_name from the editable field, updating the tab title when it
+## changes.
+func _retarget_collection() -> void:
+	var entered := _collection_edit.text.strip_edges()
+	if entered == collection_name:
+		return
+	collection_name = entered
+	title_changed.emit(tab_title())
 
 
 ## Fetch a single page from the backend using the pager's offset/limit and the

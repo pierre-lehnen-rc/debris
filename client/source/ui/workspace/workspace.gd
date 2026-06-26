@@ -34,6 +34,8 @@ func open_collection(connection: Dictionary, database: String, collection: Strin
 	tab.configure(connection, database, collection)
 	# Connect before add_child so the tab's initial _run() status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
+	tab.new_tab_requested.connect(_on_new_tab_requested)
 	tab.name = "tab_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)
@@ -42,6 +44,16 @@ func open_collection(connection: Dictionary, database: String, collection: Strin
 	_tabs.current_tab = index
 	_update_welcome()
 	return tab
+
+
+func _on_tab_title_changed(title: String, tab: QueryTab) -> void:
+	var index := _tabs.get_tab_idx_from_control(tab)
+	if index != -1:
+		_tabs.set_tab_title(index, title)
+
+
+func _on_new_tab_requested(connection: Dictionary, database: String) -> void:
+	open_collection(connection, database, "")
 
 
 func _on_tab_close_pressed(tab_index: int) -> void:
