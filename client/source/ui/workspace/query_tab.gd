@@ -91,12 +91,15 @@ func _run() -> void:
 		status_changed.emit("Enter a collection name to run a query")
 		return
 
-	var filter_variant: Variant = _parse_filter()
-	if filter_variant == null:
-		status_changed.emit("Invalid filter: expected a JSON object")
+	var parsed: Dictionary = LaxJson.parse_string(_query_edit.text.strip_edges())
+	if not parsed.get("ok", false):
+		status_changed.emit("Invalid filter: %s" % parsed.get("error", "parse error"))
+		return
+	if not (parsed.get("value") is Dictionary):
+		status_changed.emit("Invalid filter: expected an object")
 		return
 
-	_active_filter = filter_variant
+	_active_filter = parsed["value"]
 	_results.request_first_page()
 
 
@@ -139,16 +142,3 @@ func _fetch_page(offset: int, limit: int) -> void:
 	var first := (offset + 1) if docs.size() > 0 else 0
 	var last := offset + docs.size()
 	status_changed.emit("%s.%s — showing %d–%d" % [database_name, collection_name, first, last])
-
-
-## Parse the query editor as a JSON filter object. Returns {} for an empty
-## query, or null when the text is not a valid JSON object (so the caller can
-## report the error).
-func _parse_filter() -> Variant:
-	var text := _query_edit.text.strip_edges()
-	if text.is_empty():
-		return {}
-	var parsed: Variant = JSON.parse_string(text)
-	if parsed is Dictionary:
-		return parsed
-	return null
