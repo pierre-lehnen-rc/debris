@@ -222,15 +222,62 @@ func _meta_path(item: TreeItem) -> String:
 
 
 # Extended JSON helpers -------------------------------------------------------
-## Recognise an Extended JSON date wrapper and return its Unix time in
-## milliseconds, or null when `value` is not a date. Handles the canonical form
-## ({ "$date": { "$numberLong": "ms" } }) the server emits, the relaxed numeric
-## form and the relaxed ISO-8601 string form.
+## Recognise an Extended JSON / BSON type wrapper and return a
+## { "type": String, "text": String } preview for it, or {} when `value` is a
+## plain object. This keeps the tree/table views from drilling into BSON
+## wrappers ({"$oid": …}, {"$numberInt": …}, …); they show the underlying scalar
+## with its real type instead. The number wrappers carry numeric flag so the
+## colouring can match plain numbers.
+func _ejson_scalar(value: Variant) -> Dictionary:
+	if not (value is Dictionary):
+		return {}
+	var dict: Dictionary = value
+
+	# Single-key scalar wrappers.
+	if dict.size() == 1:
+		if dict.has("$oid"):
+			return {"type": "ObjectId", "text": str(dict["$oid"])}
+		if dict.has("$numberInt"):
+			return {"type": "Int32", "text": str(dict["$numberInt"]), "numeric": true}
+		if dict.has("$numberLong"):
+			return {"type": "Int64", "text": str(dict["$numberLong"]), "numeric": true}
+		if dict.has("$numberDouble"):
+			return {"type": "Double", "text": str(dict["$numberDouble"]), "numeric": true}
+		if dict.has("$numberDecimal"):
+			return {"type": "Decimal128", "text": str(dict["$numberDecimal"]), "numeric": true}
+		if dict.has("$date"):
+			return {"type": "Date", "text": _format_date(value)}
+		if dict.has("$symbol"):
+			return {"type": "Symbol", "text": str(dict["$symbol"])}
+		if dict.has("$timestamp"):
+			return {"type": "Timestamp", "text": _format_timestamp(dict["$timestamp"])}
+		if dict.has("$regularExpression"):
+			return {"type": "Regex", "text": _format_regex(dict["$regularExpression"])}
+		if dict.has("$binary"):
+			return {"type": "Binary", "text": _format_binary(dict["$binary"])}
+		if dict.has("$undefined"):
+			return {"type": "Undefined", "text": "undefined"}
+		if dict.has("$minKey"):
+			return {"type": "MinKey", "text": "MinKey"}
+		if dict.has("$maxKey"):
+			return {"type": "MaxKey", "text": "MaxKey"}
+
+	# Multi-key wrappers.
+	if dict.has("$ref") and dict.has("$id"):
+		return {"type": "DBRef", "text": "%s(%s)" % [str(dict["$ref"]), _scalar_text(dict["$id"])]}
+	if dict.has("$code"):
+		return {"type": "JavaScript", "text": str(dict["$code"])}
+
+	return {}
+
+
+## Extract the milliseconds from an Extended JSON $date value (canonical
+## {"$numberLong"}, relaxed number, or ISO-8601 string), or null.
 func _ejson_date_ms(value: Variant) -> Variant:
 	if not (value is Dictionary):
 		return null
 	var dict: Dictionary = value
-	if dict.size() != 1 or not dict.has("$date"):
+	if not dict.has("$date"):
 		return null
 	var inner: Variant = dict["$date"]
 	if inner is Dictionary and (inner as Dictionary).has("$numberLong"):
@@ -242,10 +289,6 @@ func _ejson_date_ms(value: Variant) -> Variant:
 	return null
 
 
-func _is_date(value: Variant) -> bool:
-	return _ejson_date_ms(value) != null
-
-
 ## Format an Extended JSON date as a human-readable UTC string.
 func _format_date(value: Variant) -> String:
 	var ms: Variant = _ejson_date_ms(value)
@@ -254,10 +297,36 @@ func _format_date(value: Variant) -> String:
 	return Time.get_datetime_string_from_unix_time(int(ms) / 1000, true) + " UTC"
 
 
+func _format_timestamp(value: Variant) -> String:
+	if value is Dictionary:
+		return "%s:%s" % [_scalar_text(value.get("t", 0)), _scalar_text(value.get("i", 0))]
+	return str(value)
+
+
+func _format_regex(value: Variant) -> String:
+	if value is Dictionary:
+		return "/%s/%s" % [str(value.get("pattern", "")), str(value.get("options", ""))]
+	return str(value)
+
+
+func _format_binary(value: Variant) -> String:
+	if value is Dictionary:
+		return "Binary(0x%s)" % str(value.get("subType", "00"))
+	return str(value)
+
+
+## Render a possibly-wrapped scalar (e.g. a $numberInt nested in a $timestamp or
+## $id) to plain text.
+func _scalar_text(value: Variant) -> String:
+	var scalar := _ejson_scalar(value)
+	return scalar["text"] if not scalar.is_empty() else str(value)
+
+
 # Value formatting ------------------------------------------------------------
 func _preview(value: Variant) -> String:
-	if _is_date(value):
-		return _format_date(value)
+	var scalar := _ejson_scalar(value)
+	if not scalar.is_empty():
+		return scalar["text"]
 	if value is Dictionary:
 		return "{%d fields}" % value.size()
 	if value is Array:
@@ -270,8 +339,9 @@ func _preview(value: Variant) -> String:
 
 
 func _type_name(value: Variant) -> String:
-	if _is_date(value):
-		return "Date"
+	var scalar := _ejson_scalar(value)
+	if not scalar.is_empty():
+		return scalar["type"]
 	if value is Dictionary:
 		return "Object"
 	if value is Array:
@@ -288,8 +358,9 @@ func _type_name(value: Variant) -> String:
 
 
 func _value_color(value: Variant) -> Color:
-	if _is_date(value):
-		return AppTheme.ACCENT
+	var scalar := _ejson_scalar(value)
+	if not scalar.is_empty():
+		return AppTheme.ACCENT if scalar.get("numeric", false) else AppTheme.TEXT_BRIGHT
 	if value is String:
 		return AppTheme.ACCENT_GREEN
 	if value is bool or value is int or value is float:
