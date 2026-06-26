@@ -29,6 +29,17 @@ var _doc_menu: PopupMenu
 var _menu_doc_index := -1
 var _menu_item: TreeItem
 
+# Column resizing -------------------------------------------------------------
+## Godot's Tree has no built-in interactive column resize, so we implement it by
+## hand: dragging the boundary between two column headers sets a custom width on
+## the left column. RESIZE_GRAB is how close (px) the cursor must be to a
+## boundary to grab it; MIN_COL_WIDTH floors the result.
+const RESIZE_GRAB := 6.0
+const MIN_COL_WIDTH := 40
+var _resizing_col := -1
+var _resize_start_x := 0.0
+var _resize_start_width := 0
+
 
 func _ready() -> void:
 	_doc_menu = PopupMenu.new()
@@ -121,8 +132,10 @@ func _on_doc_action(id: int) -> void:
 			delete_requested.emit(_menu_doc_index)
 
 
-# Keyboard navigation ---------------------------------------------------------
+# Input handling --------------------------------------------------------------
 func _on_gui_input(event: InputEvent) -> void:
+	if _handle_resize_input(event):
+		return
 	if not (event is InputEventKey):
 		return
 	var key_event := event as InputEventKey
@@ -137,6 +150,75 @@ func _on_gui_input(event: InputEvent) -> void:
 	elif key_event.keycode == KEY_LEFT:
 		_collapse_or_select_parent(item)
 		accept_event()
+
+
+## Intercept mouse events for column-boundary dragging. Returns true when the
+## event was consumed (so the keyboard handler is skipped). The drag begins on a
+## left-click within RESIZE_GRAB of a header boundary, runs while the button is
+## held, and updates the cursor to a horizontal-resize arrow on hover.
+func _handle_resize_input(event: InputEvent) -> bool:
+	if not are_column_titles_visible() or columns <= 1:
+		return false
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		if mb.pressed:
+			var col := _column_boundary_at(mb.position)
+			if col >= 0:
+				_resizing_col = col
+				_resize_start_x = mb.position.x
+				_resize_start_width = get_column_width(col)
+				accept_event()
+				return true
+		elif _resizing_col >= 0:
+			_resizing_col = -1
+			accept_event()
+			return true
+		return false
+
+	if event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _resizing_col >= 0:
+			var delta := mm.position.x - _resize_start_x
+			var new_width := maxi(MIN_COL_WIDTH, _resize_start_width + int(delta))
+			set_column_expand(_resizing_col, false)
+			set_column_custom_minimum_width(_resizing_col, new_width)
+			accept_event()
+			return true
+		# Not dragging: show a resize cursor when hovering a boundary.
+		mouse_default_cursor_shape = (
+			CURSOR_HSIZE if _column_boundary_at(mm.position) >= 0 else CURSOR_ARROW
+		)
+		return false
+
+	return false
+
+
+## Return the column whose right edge is within RESIZE_GRAB pixels of `pos`, but
+## only while the cursor is over the header row. Returns -1 otherwise. The last
+## column's boundary is ignored (resizing it has no neighbour to give space to).
+func _column_boundary_at(pos: Vector2) -> int:
+	if pos.y < 0.0 or pos.y > _title_height():
+		return -1
+	var panel := get_theme_stylebox("panel")
+	var x := panel.get_content_margin(SIDE_LEFT) - get_scroll().x
+	for col in columns - 1:
+		x += get_column_width(col)
+		if absf(pos.x - x) <= RESIZE_GRAB:
+			return col
+	return -1
+
+
+## Height of the clickable header row, or 0 when titles are hidden.
+func _title_height() -> float:
+	if not are_column_titles_visible():
+		return 0.0
+	var sb := get_theme_stylebox("title_button_normal")
+	var font := get_theme_font("title_button_font")
+	var fs := get_theme_font_size("title_button_font_size")
+	return font.get_height(fs) + sb.get_minimum_size().y
 
 
 func _on_item_activated() -> void:

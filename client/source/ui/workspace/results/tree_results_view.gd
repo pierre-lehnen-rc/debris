@@ -12,6 +12,8 @@ func _ready_view() -> void:
 	set_column_expand_ratio(0, 2)
 	set_column_expand_ratio(1, 4)
 	set_column_expand_ratio(2, 1)
+	for c in 3:
+		set_column_clip_content(c, true)
 
 
 func display(documents: Array, start_index: int) -> void:
