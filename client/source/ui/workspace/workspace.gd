@@ -5,6 +5,8 @@ extends Control
 ## Each double-click opens a fresh tab (duplicates are allowed) and every tab
 ## carries a close button. A welcome overlay shows when no tabs are open.
 
+signal status_changed(text: String)
+
 const QUERY_TAB_SCENE := preload("res://source/ui/workspace/query_tab.tscn")
 
 @onready var _tabs: TabContainer = %Tabs
@@ -27,9 +29,11 @@ func _ready() -> void:
 	_update_welcome()
 
 
-func open_collection(conn: String, database: String, collection: String) -> QueryTab:
+func open_collection(connection: Dictionary, database: String, collection: String) -> QueryTab:
 	var tab: QueryTab = QUERY_TAB_SCENE.instantiate()
-	tab.configure(conn, database, collection)
+	tab.configure(connection, database, collection)
+	# Connect before add_child so the tab's initial _run() status is captured.
+	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.name = "tab_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)

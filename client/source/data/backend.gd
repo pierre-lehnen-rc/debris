@@ -28,6 +28,27 @@ func list_collections(connection: Dictionary, database: String) -> Dictionary:
 	return await _post("/api/collections", {"connection": connection, "database": database})
 
 
+func find(
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	filter: Dictionary = {},
+	limit: int = 0,
+	skip: int = 0,
+) -> Dictionary:
+	var body := {
+		"connection": connection,
+		"database": database,
+		"collection": collection,
+		"filter": filter,
+	}
+	if limit > 0:
+		body["limit"] = limit
+	if skip > 0:
+		body["skip"] = skip
+	return await _post("/api/find", body)
+
+
 func ping(connection: Dictionary) -> Dictionary:
 	return await _post("/api/ping", {"connection": connection})
 

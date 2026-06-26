@@ -6,9 +6,9 @@ extends PanelContainer
 ## connected / a database is expanded. Double-clicking a collection opens a
 ## query tab; right-clicking any node shows a context menu of actions.
 
-signal collection_activated(connection: String, database: String, collection: String)
-signal shell_requested(connection: String, database: String)
-signal insert_document_requested(connection: String, database: String, collection: String)
+signal collection_activated(connection: Dictionary, database: String, collection: String)
+signal shell_requested(connection: Dictionary, database: String)
+signal insert_document_requested(connection: Dictionary, database: String, collection: String)
 signal add_connection_requested()
 signal edit_connection_requested(index: int, config: Dictionary)
 signal status_changed(text: String)
@@ -146,7 +146,9 @@ func _on_item_activated() -> void:
 		return
 	match meta[META_TYPE]:
 		"collection":
-			collection_activated.emit(meta["connection"], meta["database"], meta["collection"])
+			collection_activated.emit(
+				_connections[meta["conn_index"]], meta["database"], meta["collection"]
+			)
 		"database":
 			item.set_collapsed(not item.is_collapsed())
 			if not item.is_collapsed() and not meta.get("loaded", false):
@@ -212,18 +214,18 @@ func _on_context_action(id: int) -> void:
 			_connections.remove_at(ci)
 			_populate()
 		Action.OPEN_SHELL:
-			shell_requested.emit(_menu_target["connection"], _menu_target["database"])
+			shell_requested.emit(_connections[ci], _menu_target["database"])
 		Action.CREATE_COLLECTION:
 			_add_collection(ci, _menu_target["database"], "new_collection")
 		Action.DROP_DATABASE:
 			_drop_database(ci, _menu_target["database"])
 		Action.VIEW_DOCUMENTS:
 			collection_activated.emit(
-				_menu_target["connection"], _menu_target["database"], _menu_target["collection"]
+				_connections[ci], _menu_target["database"], _menu_target["collection"]
 			)
 		Action.INSERT_DOCUMENT:
 			insert_document_requested.emit(
-				_menu_target["connection"], _menu_target["database"], _menu_target["collection"]
+				_connections[ci], _menu_target["database"], _menu_target["collection"]
 			)
 		Action.DROP_COLLECTION:
 			_drop_collection(ci, _menu_target["database"], _menu_target["collection"])

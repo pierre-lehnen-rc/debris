@@ -1,12 +1,20 @@
 class_name QueryTab
 extends VBoxContainer
 
-## A single query workspace: a code editor on top, results below, split
-## vertically. Document loading from a live connection is not wired up yet, so
-## "Run" currently clears the results view.
+## A single query workspace: a JSON filter editor on top, results below, split
+## vertically. "Run" executes a find against the configured collection via the
+## backend, using the JSON filter from the editor, and displays the results.
 ## Layout lives in query_tab.tscn; configure() must be called before the node
 ## enters the tree so _ready() can seed the editor and target label.
 
+signal status_changed(text: String)
+
+## Maximum documents fetched per run. Server-side pagination (wiring the results
+## pager to find's skip/limit) is a later step; for now we fetch one batch and
+## paginate it client-side.
+const FETCH_LIMIT := 200
+
+var connection_config: Dictionary = {}
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -18,8 +26,9 @@ var collection_name := ""
 @onready var _results: ResultsView = %Results
 
 
-func configure(conn: String, database: String, collection: String) -> void:
-	connection_name = conn
+func configure(connection: Dictionary, database: String, collection: String) -> void:
+	connection_config = connection
+	connection_name = connection.get("name", "")
 	database_name = database
 	collection_name = collection
 
@@ -41,7 +50,7 @@ func _ready() -> void:
 
 	_target_label.text = "%s  ›  %s  ›  %s" % [connection_name, database_name, collection_name]
 	if not collection_name.is_empty():
-		_query_edit.text = "db.getCollection(\"%s\").find({})" % collection_name
+		_query_edit.text = "{}"
 
 	_run_btn.pressed.connect(_run)
 	_run()
@@ -59,5 +68,46 @@ func _apply_style() -> void:
 
 
 func _run() -> void:
-	# Backend document loading is not wired up yet; clear the results for now.
-	_results.set_documents([])
+	if collection_name.is_empty():
+		_results.set_documents([])
+		return
+
+	var filter_variant: Variant = _parse_filter()
+	if filter_variant == null:
+		status_changed.emit("Invalid filter: expected a JSON object")
+		return
+
+	_run_btn.disabled = true
+	status_changed.emit("Running find on %s.%s…" % [database_name, collection_name])
+	var result: Dictionary = await Backend.find(
+		Backend.to_spec(connection_config),
+		database_name,
+		collection_name,
+		filter_variant,
+		FETCH_LIMIT,
+	)
+	_run_btn.disabled = false
+
+	if not result.get("ok", false):
+		_results.set_documents([])
+		status_changed.emit("Find failed: %s" % result.get("error", "unknown error"))
+		return
+
+	var docs: Array = result.get("data") if result.get("data") is Array else []
+	_results.set_documents(docs)
+	status_changed.emit("%s.%s — %d document%s" % [
+		database_name, collection_name, docs.size(), "" if docs.size() == 1 else "s",
+	])
+
+
+## Parse the query editor as a JSON filter object. Returns {} for an empty
+## query, or null when the text is not a valid JSON object (so the caller can
+## report the error).
+func _parse_filter() -> Variant:
+	var text := _query_edit.text.strip_edges()
+	if text.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(text)
+	if parsed is Dictionary:
+		return parsed
+	return null

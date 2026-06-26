@@ -41,6 +41,7 @@ func _ready() -> void:
 	_sidebar.shell_requested.connect(_on_shell_requested)
 	_sidebar.insert_document_requested.connect(_on_insert_document_requested)
 	_sidebar.status_changed.connect(func(text: String) -> void: _status_label.text = text)
+	_workspace.status_changed.connect(func(text: String) -> void: _status_label.text = text)
 
 
 func _apply_style() -> void:
@@ -93,20 +94,22 @@ func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
 	_connection_dialog.open_edit(index, config)
 
 
-func _on_shell_requested(conn: String, database: String) -> void:
-	_workspace.open_collection(conn, database, "")
-	_status_label.text = "Opened shell on %s.%s" % [conn, database]
+func _on_shell_requested(connection: Dictionary, database: String) -> void:
+	_workspace.open_collection(connection, database, "")
+	_status_label.text = "Opened shell on %s.%s" % [connection.get("name", ""), database]
 
 
-func _on_insert_document_requested(conn: String, database: String, collection: String) -> void:
-	var tab := _workspace.open_collection(conn, database, collection)
+func _on_insert_document_requested(
+	connection: Dictionary, database: String, collection: String
+) -> void:
+	var tab := _workspace.open_collection(connection, database, collection)
 	tab.results().request_insert()
 	_status_label.text = "Insert document into %s.%s" % [database, collection]
 
 
-func _on_collection_activated(conn: String, database: String, collection: String) -> void:
-	_workspace.open_collection(conn, database, collection)
-	_status_label.text = "Opened %s.%s on %s" % [database, collection, conn]
+func _on_collection_activated(connection: Dictionary, database: String, collection: String) -> void:
+	_workspace.open_collection(connection, database, collection)
+	_status_label.text = "Opened %s.%s on %s" % [database, collection, connection.get("name", "")]
 
 
 func _on_file_menu(id: int) -> void:

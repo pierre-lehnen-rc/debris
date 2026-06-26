@@ -19,7 +19,7 @@ theme_override_constants/separation = 8
 [node name="RunBtn" type="Button" parent="Toolbar/Row" unique_id=1949800038]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Run query (loads mock data for now)"
+tooltip_text = "Run find with the JSON filter"
 focus_mode = 0
 text = "Run"
 
@@ -39,7 +39,7 @@ split_offset = 140
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
-placeholder_text = "db.getCollection(\"...\").find({})"
+placeholder_text = "{ } — JSON filter, e.g. { \"status\": \"active\" }"
 gutters_draw_line_numbers = true
 
 [node name="Results" type="VBoxContainer" parent="Split" unique_id=2080887661 instance=ExtResource("2_m7gy8")]
