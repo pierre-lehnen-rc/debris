@@ -23,6 +23,9 @@ var _active_filter: Dictionary = {}
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
+## Set once the user runs a query, so a tab that produced results is never
+## treated as a blank scratch tab even after the fields are cleared.
+var _has_run := false
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
@@ -52,10 +55,16 @@ func tab_title() -> String:
 	return "%s.%s" % [database_name, collection_name]
 
 
-## True when this is a blank scratch tab (no collection targeted), so opening a
-## real collection can replace it instead of stacking a new tab.
+## True when this is a blank scratch tab — no collection targeted, no meaningful
+## filter typed, and no query ever run — so opening a real collection can replace
+## it instead of stacking a new tab.
 func is_empty() -> bool:
-	return _collection_edit.text.strip_edges().is_empty()
+	if _has_run:
+		return false
+	if not _collection_edit.text.strip_edges().is_empty():
+		return false
+	var filter := _query_edit.text.replace(" ", "").replace("\t", "").replace("\n", "")
+	return filter.is_empty() or filter == "{}"
 
 
 func _ready() -> void:
@@ -104,6 +113,7 @@ func _run() -> void:
 		return
 
 	_active_filter = parsed["value"]
+	_has_run = true
 	_results.request_first_page()
 
 
