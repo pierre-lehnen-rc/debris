@@ -46,7 +46,7 @@ func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
 	item.set_custom_color(2, AppTheme.TEXT_DIM)
 	item.set_metadata(0, {"key": key, "name": key, "value": value})
 
-	if value is Dictionary:
+	if value is Dictionary and not _is_date(value):
 		item.set_text(1, "{%d fields}" % value.size())
 		item.set_custom_color(1, AppTheme.TEXT_DIM)
 		_add_dict_children(item, value)

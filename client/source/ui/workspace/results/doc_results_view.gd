@@ -221,8 +221,43 @@ func _meta_path(item: TreeItem) -> String:
 	return path
 
 
+# Extended JSON helpers -------------------------------------------------------
+## Recognise an Extended JSON date wrapper and return its Unix time in
+## milliseconds, or null when `value` is not a date. Handles the canonical form
+## ({ "$date": { "$numberLong": "ms" } }) the server emits, the relaxed numeric
+## form and the relaxed ISO-8601 string form.
+func _ejson_date_ms(value: Variant) -> Variant:
+	if not (value is Dictionary):
+		return null
+	var dict: Dictionary = value
+	if dict.size() != 1 or not dict.has("$date"):
+		return null
+	var inner: Variant = dict["$date"]
+	if inner is Dictionary and (inner as Dictionary).has("$numberLong"):
+		return int((inner as Dictionary)["$numberLong"])
+	if inner is float or inner is int:
+		return int(inner)
+	if inner is String:
+		return int(Time.get_unix_time_from_datetime_string(inner) * 1000.0)
+	return null
+
+
+func _is_date(value: Variant) -> bool:
+	return _ejson_date_ms(value) != null
+
+
+## Format an Extended JSON date as a human-readable UTC string.
+func _format_date(value: Variant) -> String:
+	var ms: Variant = _ejson_date_ms(value)
+	if ms == null:
+		return ""
+	return Time.get_datetime_string_from_unix_time(int(ms) / 1000, true) + " UTC"
+
+
 # Value formatting ------------------------------------------------------------
 func _preview(value: Variant) -> String:
+	if _is_date(value):
+		return _format_date(value)
 	if value is Dictionary:
 		return "{%d fields}" % value.size()
 	if value is Array:
@@ -235,6 +270,8 @@ func _preview(value: Variant) -> String:
 
 
 func _type_name(value: Variant) -> String:
+	if _is_date(value):
+		return "Date"
 	if value is Dictionary:
 		return "Object"
 	if value is Array:
@@ -251,6 +288,8 @@ func _type_name(value: Variant) -> String:
 
 
 func _value_color(value: Variant) -> Color:
+	if _is_date(value):
+		return AppTheme.ACCENT
 	if value is String:
 		return AppTheme.ACCENT_GREEN
 	if value is bool or value is int or value is float:
