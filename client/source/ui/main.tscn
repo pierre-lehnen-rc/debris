@@ -81,7 +81,6 @@ text = "Ready"
 [connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
 [connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]
 [connection signal="database_selected" from="ConnectionPicker" to="." method="_on_database_selected"]
-[connection signal="shell_requested" from="ConnectionPicker" to="." method="_on_shell_requested"]
 [connection signal="add_connection_requested" from="ConnectionPicker" to="." method="_on_add_connection_requested"]
 [connection signal="edit_connection_requested" from="ConnectionPicker" to="." method="_on_edit_connection_requested"]
 [connection signal="status_changed" from="ConnectionPicker" to="." method="_on_status_changed"]

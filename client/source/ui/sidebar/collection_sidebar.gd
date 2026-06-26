@@ -18,7 +18,7 @@ const ICON_SIZE := 16
 # Create grouping folders collapsed by default. (Will become a user pref later.)
 const COLLAPSE_GROUPS := true
 
-enum Action { VIEW_DOCUMENTS, INSERT_DOCUMENT, DROP_COLLECTION }
+enum Action { VIEW_DOCUMENTS, INSERT_DOCUMENT }
 
 @onready var _header: PanelContainer = %Header
 @onready var _title: Label = %Title
@@ -61,12 +61,6 @@ func _apply_style() -> void:
 
 
 # Wired in collection_sidebar.tscn from the header buttons -------------------
-func _on_add_pressed() -> void:
-	# Local-only placeholder until backend collection creation lands.
-	_names.append("new_collection")
-	_render()
-
-
 func _on_refresh_pressed() -> void:
 	_load()
 
@@ -147,8 +141,6 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	_context_menu.clear()
 	_context_menu.add_item("View Documents", Action.VIEW_DOCUMENTS)
 	_context_menu.add_item("Insert Document…", Action.INSERT_DOCUMENT)
-	_context_menu.add_separator()
-	_context_menu.add_item("Drop Collection", Action.DROP_COLLECTION)
 	_context_menu.reset_size()
 	# Embedded sub-windows position popups in the parent viewport's space.
 	_context_menu.position = Vector2i(_tree.get_global_mouse_position())
@@ -162,9 +154,6 @@ func _on_context_action(id: int) -> void:
 			collection_activated.emit(_connection, _database, coll)
 		Action.INSERT_DOCUMENT:
 			insert_document_requested.emit(_connection, _database, coll)
-		Action.DROP_COLLECTION:
-			_names.erase(coll)
-			_render()
 
 
 # Tree-building helpers -------------------------------------------------------

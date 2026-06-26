@@ -77,12 +77,6 @@ func _on_tab_close_pressed(tab_index: int) -> void:
 
 
 # Connection picker / dialog --------------------------------------------------
-func _on_shell_requested(connection: Dictionary, database: String) -> void:
-	var tab := _open_workspace_tab(connection, database)
-	tab.open_collection(connection, database, "")
-	_status_label.text = "Opened shell on %s.%s" % [connection.get("name", ""), database]
-
-
 func _on_add_connection_requested() -> void:
 	_connection_dialog.open_new()
 

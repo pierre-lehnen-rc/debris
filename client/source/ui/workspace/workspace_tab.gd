@@ -16,7 +16,7 @@ var _database := ""
 
 func _ready() -> void:
 	if not _database.is_empty():
-		_sidebar.configure(_connection, _database)
+		_setup()
 
 
 ## Bind this tab to a connection + database. Safe to call before the node is in
@@ -25,7 +25,14 @@ func configure(connection: Dictionary, database: String) -> void:
 	_connection = connection
 	_database = database
 	if is_node_ready():
-		_sidebar.configure(_connection, _database)
+		_setup()
+
+
+## Point the sidebar at the database and open an initial (empty) query tab so the
+## workspace is immediately usable.
+func _setup() -> void:
+	_sidebar.configure(_connection, _database)
+	_workspace.open_collection(_connection, _database, "")
 
 
 func connection() -> Dictionary:

@@ -8,23 +8,20 @@ extends PanelContainer
 ## workspace tab's own CollectionSidebar.
 
 signal database_activated(connection: Dictionary, database: String)
-signal shell_requested(connection: Dictionary, database: String)
 signal add_connection_requested()
 signal edit_connection_requested(index: int, config: Dictionary)
 signal status_changed(text: String)
+signal selection_changed(has_database: bool)
 
 const META_TYPE := "type"  # "connection" | "database"
 const ICON_DATABASE := preload("res://source/ui/icons/database.svg")
 const ICON_SIZE := 16
 
-# Context-menu action ids (shared across node types; only relevant ones shown).
+# Context-menu action ids (connections only; databases have no context menu).
 enum Action {
 	CONNECT_TOGGLE,
 	EDIT_CONNECTION,
 	REMOVE_CONNECTION,
-	OPEN_TAB,
-	OPEN_SHELL,
-	DROP_DATABASE,
 	REFRESH,
 }
 
@@ -138,6 +135,27 @@ func _on_item_activated() -> void:
 				_connect(ci)
 
 
+# Selection tracking (drives the picker's "Open" footer button) ---------------
+func _on_item_selected() -> void:
+	selection_changed.emit(not selected_database().is_empty())
+
+
+func _on_nothing_selected() -> void:
+	selection_changed.emit(false)
+
+
+## The database currently selected in the tree, as {connection, database}, or an
+## empty dictionary when the selection isn't a database.
+func selected_database() -> Dictionary:
+	var item := _tree.get_selected()
+	if item == null:
+		return {}
+	var meta: Dictionary = item.get_metadata(0)
+	if meta.is_empty() or meta.get(META_TYPE) != "database":
+		return {}
+	return {"connection": _connections[meta["conn_index"]], "database": meta["database"]}
+
+
 # Context menu ----------------------------------------------------------------
 func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if mouse_button_index != MOUSE_BUTTON_RIGHT:
@@ -146,31 +164,25 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if item == null:
 		return
 	_menu_target = item.get_metadata(0)
-	if _menu_target.is_empty():
+	# Databases have no context menu — only connections do.
+	if _menu_target.is_empty() or _menu_target[META_TYPE] != "connection":
 		return
-	_build_context_menu(_menu_target[META_TYPE])
+	_build_context_menu()
 	_context_menu.reset_size()
 	# Embedded sub-windows position popups in the parent viewport's space.
 	_context_menu.position = Vector2i(_tree.get_global_mouse_position())
 	_context_menu.popup()
 
 
-func _build_context_menu(node_type: String) -> void:
+func _build_context_menu() -> void:
 	_context_menu.clear()
-	match node_type:
-		"connection":
-			var connected: bool = _connections[_menu_target["conn_index"]].get("connected", false)
-			_context_menu.add_item("Disconnect" if connected else "Connect", Action.CONNECT_TOGGLE)
-			_context_menu.add_item("Edit Connection…", Action.EDIT_CONNECTION)
-			_context_menu.add_separator()
-			_context_menu.add_item("Refresh", Action.REFRESH)
-			_context_menu.add_separator()
-			_context_menu.add_item("Remove Connection", Action.REMOVE_CONNECTION)
-		"database":
-			_context_menu.add_item("Open in New Tab", Action.OPEN_TAB)
-			_context_menu.add_item("Open Shell", Action.OPEN_SHELL)
-			_context_menu.add_separator()
-			_context_menu.add_item("Drop Database", Action.DROP_DATABASE)
+	var connected: bool = _connections[_menu_target["conn_index"]].get("connected", false)
+	_context_menu.add_item("Disconnect" if connected else "Connect", Action.CONNECT_TOGGLE)
+	_context_menu.add_item("Edit Connection…", Action.EDIT_CONNECTION)
+	_context_menu.add_separator()
+	_context_menu.add_item("Refresh", Action.REFRESH)
+	_context_menu.add_separator()
+	_context_menu.add_item("Remove Connection", Action.REMOVE_CONNECTION)
 
 
 func _on_context_action(id: int) -> void:
@@ -187,12 +199,6 @@ func _on_context_action(id: int) -> void:
 		Action.REMOVE_CONNECTION:
 			_connections.remove_at(ci)
 			_populate()
-		Action.OPEN_TAB:
-			database_activated.emit(_connections[ci], _menu_target["database"])
-		Action.OPEN_SHELL:
-			shell_requested.emit(_connections[ci], _menu_target["database"])
-		Action.DROP_DATABASE:
-			_drop_database(ci, _menu_target["database"])
 		Action.REFRESH:
 			if _connections[ci].get("connected", false):
 				_connect(ci)
@@ -223,12 +229,3 @@ func _connect(ci: int) -> void:
 	status_changed.emit("Connected to %s — %d databases" % [
 		conn.get("name", ""), databases.size(),
 	])
-
-
-func _drop_database(ci: int, db_name: String) -> void:
-	var dbs: Array = _connections[ci]["databases"]
-	for i in dbs.size():
-		if dbs[i]["name"] == db_name:
-			dbs.remove_at(i)
-			break
-	_populate()

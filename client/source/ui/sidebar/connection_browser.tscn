@@ -48,5 +48,7 @@ theme = ExtResource("2_theme")
 
 [connection signal="pressed" from="Box/Header/Row/AddBtn" to="." method="_on_add_pressed"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
+[connection signal="item_selected" from="Box/Tree" to="." method="_on_item_selected"]
+[connection signal="nothing_selected" from="Box/Tree" to="." method="_on_nothing_selected"]
 [connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
 [connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]
