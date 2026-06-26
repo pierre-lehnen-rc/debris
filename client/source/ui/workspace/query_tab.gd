@@ -2,8 +2,8 @@ class_name QueryTab
 extends VBoxContainer
 
 ## A single query workspace: a code editor on top, results below, split
-## vertically. "Run" currently loads mock documents for the target collection;
-## later it will execute the editor's query against a live connection.
+## vertically. Document loading from a live connection is not wired up yet, so
+## "Run" currently clears the results view.
 ## Layout lives in query_tab.tscn; configure() must be called before the node
 ## enters the tree so _ready() can seed the editor and target label.
 
@@ -59,7 +59,5 @@ func _apply_style() -> void:
 
 
 func _run() -> void:
-	if collection_name.is_empty():
-		_results.set_documents([])
-		return
-	_results.set_documents(MockData.documents_for(collection_name))
+	# Backend document loading is not wired up yet; clear the results for now.
+	_results.set_documents([])

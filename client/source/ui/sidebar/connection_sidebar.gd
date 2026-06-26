@@ -1,8 +1,9 @@
 class_name ConnectionSidebar
 extends PanelContainer
 
-## Left-hand panel: a tree of connections > databases > collections, fed from
-## a runtime list seeded from MockData. Double-clicking a collection opens a
+## Left-hand panel: a tree of connections > databases > collections. Databases
+## and collections are loaded lazily from the backend when a connection is
+## connected / a database is expanded. Double-clicking a collection opens a
 ## query tab; right-clicking any node shows a context menu of actions.
 
 signal collection_activated(connection: String, database: String, collection: String)
@@ -35,14 +36,21 @@ enum Action {
 @onready var _context_menu: PopupMenu = %ContextMenu
 
 var _menu_target: Dictionary = {}
-# Runtime, mutable copy seeded from MockData so connections can be edited.
+# Runtime list of connection configs (added/edited via the connection dialog).
 var _connections: Array = []
 # Set of "ci/database" keys with an in-flight collection load, to de-dupe.
 var _loading_dbs: Dictionary = {}
 
 
 func _ready() -> void:
-	_connections = MockData.CONNECTIONS.duplicate(true)
+	# Seed a single localhost connection so there's something to connect to out
+	# of the box; databases/collections are then loaded from the backend.
+	_connections = [{
+		"name": "Local",
+		"host": "127.0.0.1:27017",
+		"connected": false,
+		"databases": [],
+	}]
 
 	_apply_style()
 
