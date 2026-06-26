@@ -9,12 +9,10 @@ extends VBoxContainer
 
 signal status_changed(text: String)
 
-## Maximum documents fetched per run. Server-side pagination (wiring the results
-## pager to find's skip/limit) is a later step; for now we fetch one batch and
-## paginate it client-side.
-const FETCH_LIMIT := 200
-
 var connection_config: Dictionary = {}
+## Filter from the last "Run". Page navigation reuses it so paging through
+## results doesn't re-parse (and possibly choke on) in-progress editor edits.
+var _active_filter: Dictionary = {}
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -53,6 +51,7 @@ func _ready() -> void:
 		_query_edit.text = "{}"
 
 	_run_btn.pressed.connect(_run)
+	_results.page_requested.connect(_fetch_page)
 	_run()
 
 
@@ -67,14 +66,27 @@ func _apply_style() -> void:
 	_target_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
+## Parse the editor's filter and (re)load from the first page. The results view
+## then drives subsequent pages back through _fetch_page via page_requested.
 func _run() -> void:
 	if collection_name.is_empty():
-		_results.set_documents([])
+		_results.show_page([])
 		return
 
 	var filter_variant: Variant = _parse_filter()
 	if filter_variant == null:
 		status_changed.emit("Invalid filter: expected a JSON object")
+		return
+
+	_active_filter = filter_variant
+	_results.request_first_page()
+
+
+## Fetch a single page from the backend using the pager's offset/limit and the
+## last-run filter. Wired to ResultsView.page_requested.
+func _fetch_page(offset: int, limit: int) -> void:
+	if collection_name.is_empty():
+		_results.show_page([])
 		return
 
 	_run_btn.disabled = true
@@ -83,21 +95,22 @@ func _run() -> void:
 		Backend.to_spec(connection_config),
 		database_name,
 		collection_name,
-		filter_variant,
-		FETCH_LIMIT,
+		_active_filter,
+		limit,
+		offset,
 	)
 	_run_btn.disabled = false
 
 	if not result.get("ok", false):
-		_results.set_documents([])
+		_results.show_page([])
 		status_changed.emit("Find failed: %s" % result.get("error", "unknown error"))
 		return
 
 	var docs: Array = result.get("data") if result.get("data") is Array else []
-	_results.set_documents(docs)
-	status_changed.emit("%s.%s — %d document%s" % [
-		database_name, collection_name, docs.size(), "" if docs.size() == 1 else "s",
-	])
+	_results.show_page(docs)
+	var first := (offset + 1) if docs.size() > 0 else 0
+	var last := offset + docs.size()
+	status_changed.emit("%s.%s — showing %d–%d" % [database_name, collection_name, first, last])
 
 
 ## Parse the query editor as a JSON filter object. Returns {} for an empty

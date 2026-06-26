@@ -5,15 +5,22 @@ extends VBoxContainer
 ##   - Tree: expandable key/value/type per document   (TreeResultsView)
 ##   - Table: one row per document, union of fields    (TableResultsView)
 ##   - Text: pretty-printed JSON                        (TextResultsView)
-## This node owns the document array, pagination and the edit dialog; the active
-## sub-view (instanced in results_view.tscn under ViewHost) only renders the
-## current page and reports edit/view/insert/delete back through signals.
+## This node owns the current page of documents, the pager and the edit dialog.
+## Pagination is server-side: the pager controls (offset/limit, prev/next) emit
+## `page_requested`, and the owner (QueryTab) re-runs the find with skip/limit
+## and hands back the page via `show_page`. The total document count is unknown,
+## so the UI only ever shows how many rows are currently displayed.
+
+## Emitted whenever the user changes the page (offset or limit). The owner is
+## expected to fetch that slice from the backend and call show_page().
+signal page_requested(offset: int, limit: int)
 
 enum ViewMode { TREE, TABLE, TEXT }
 
 const DEFAULT_LIMIT := 50
 const DOCUMENT_DIALOG_SCENE := preload("res://source/ui/dialogs/document_dialog.tscn")
 
+## The current page of documents (not the whole result set).
 var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
 var _offset := 0
@@ -82,10 +89,20 @@ func request_insert() -> void:
 	_doc_dialog.open_insert()
 
 
-func set_documents(documents: Array) -> void:
-	_documents = documents
+## Reset to the first page and ask the owner to fetch it. Used when a fresh
+## query is run.
+func request_first_page() -> void:
 	_offset = 0
-	_refresh_page()
+	page_requested.emit(_offset, _limit)
+
+
+## Display a page fetched from the backend at the current offset/limit. The
+## array is exactly the rows to show; the total result size stays unknown.
+func show_page(documents: Array) -> void:
+	_documents = documents
+	_update_count()
+	_update_pager()
+	_rebuild()
 
 
 func _update_count() -> void:
@@ -104,46 +121,27 @@ func _set_mode(mode: ViewMode) -> void:
 
 
 func _rebuild() -> void:
-	var page := _page_documents()
-	var start := _page_bounds().x
+	# The sub-views number rows by absolute index, so the page's first document
+	# sits at _offset.
 	match _mode:
 		ViewMode.TREE:
-			_tree_view.display(page, start)
+			_tree_view.display(_documents, _offset)
 		ViewMode.TABLE:
-			_table_view.display(page, start)
+			_table_view.display(_documents, _offset)
 		ViewMode.TEXT:
-			_text_view.display(page)
+			_text_view.display(_documents)
 
 
-# Pagination ------------------------------------------------------------------
-## Largest valid offset: the first document is always reachable, so this is the
-## index of the last document (or 0 when empty).
-func _max_offset() -> int:
-	return maxi(0, _documents.size() - 1)
-
-
-func _page_bounds() -> Vector2i:
-	var start := clampi(_offset, 0, _documents.size())
-	var end := mini(start + _limit, _documents.size())
-	return Vector2i(start, end)
-
-
-func _page_documents() -> Array:
-	var b := _page_bounds()
-	return _documents.slice(b.x, b.y)
-
-
-## Clamp the offset (the document set may have shrunk), then refresh counts,
-## the pager controls and the active view together.
-func _refresh_page() -> void:
-	_update_count()
-	_set_offset(_offset)
-
-
+# Pagination (server-side) ----------------------------------------------------
+## Move to a new offset and request that page. No-op (beyond syncing the field)
+## when the offset is unchanged, so a stray focus-out doesn't trigger a refetch.
 func _set_offset(offset: int) -> void:
-	_offset = clampi(offset, 0, _max_offset())
-	_update_pager()
-	_rebuild()
+	var clamped := maxi(0, offset)
+	if clamped == _offset:
+		_offset_field.text = str(_offset)
+		return
+	_offset = clamped
+	page_requested.emit(_offset, _limit)
 
 
 func _apply_offset_field(_text: String = "") -> void:
@@ -151,37 +149,51 @@ func _apply_offset_field(_text: String = "") -> void:
 
 
 func _apply_limit_field(_text: String = "") -> void:
-	_limit = maxi(1, int(_limit_field.text))
-	_set_offset(_offset)
+	var new_limit := maxi(1, int(_limit_field.text))
+	if new_limit == _limit:
+		_limit_field.text = str(_limit)
+		return
+	_limit = new_limit
+	# Changing the page size restarts from the first page.
+	_offset = 0
+	page_requested.emit(_offset, _limit)
 
 
 func _update_pager() -> void:
-	var b := _page_bounds()
-	_page_label.text = "0-0" if _documents.is_empty() else "%d-%d" % [b.x + 1, b.y]
+	var n := _documents.size()
+	_page_label.text = "0-0" if n == 0 else "%d-%d" % [_offset + 1, _offset + n]
 	_offset_field.text = str(_offset)
 	_limit_field.text = str(_limit)
 	_prev_btn.disabled = _offset <= 0
-	_next_btn.disabled = b.y >= _documents.size()
+	# A short page means there's nothing more to fetch.
+	_next_btn.disabled = n < _limit
 
 
 # Document actions (relayed from the active view) -----------------------------
+# Sub-views report absolute indices (offset + row); convert to page-relative
+# before touching the current page array.
 func _on_edit_requested(doc_index: int) -> void:
-	if doc_index < 0 or doc_index >= _documents.size():
+	var local := doc_index - _offset
+	if local < 0 or local >= _documents.size():
 		return
-	_doc_dialog.open_edit(doc_index, JSON.stringify(_documents[doc_index], "  "))
+	_doc_dialog.open_edit(local, JSON.stringify(_documents[local], "  "))
 
 
 func _on_view_requested(doc_index: int) -> void:
-	if doc_index < 0 or doc_index >= _documents.size():
+	var local := doc_index - _offset
+	if local < 0 or local >= _documents.size():
 		return
-	_doc_dialog.open_view(JSON.stringify(_documents[doc_index], "  "))
+	_doc_dialog.open_view(JSON.stringify(_documents[local], "  "))
 
 
 func _on_delete_requested(doc_index: int) -> void:
-	if doc_index < 0 or doc_index >= _documents.size():
+	var local := doc_index - _offset
+	if local < 0 or local >= _documents.size():
 		return
-	_documents.remove_at(doc_index)
-	_refresh_page()
+	_documents.remove_at(local)
+	_update_count()
+	_update_pager()
+	_rebuild()
 
 
 func _on_document_inserted(text: String) -> void:
@@ -189,10 +201,11 @@ func _on_document_inserted(text: String) -> void:
 	if parsed is Dictionary:
 		_documents.append(parsed)
 		_update_count()
-		# Jump to the last page so the newly inserted document is visible.
-		_set_offset(((_documents.size() - 1) / _limit) * _limit)
+		_update_pager()
+		_rebuild()
 
 
+# _on_document_updated receives the page-relative index passed to open_edit().
 func _on_document_updated(index: int, text: String) -> void:
 	var parsed: Variant = JSON.parse_string(text)
 	if parsed is Dictionary and index >= 0 and index < _documents.size():
