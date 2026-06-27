@@ -5,8 +5,8 @@ extends RefCounted
 ## for collection lists: given a flat list of collection names it determines a
 ## folder tree by shared leading words (splitting on "_", "." and camelCase) and
 ## then maps each name to the tree path it should live at. It never touches the
-## Tree and never sorts — order is the caller's concern; a schema only decides
-## structure.
+## Tree; ordering defaults to the caller's input order, but a schema may opt to
+## reorder via order_names (see RocketChatSchema).
 ##
 ## Subclasses (GenericSchema, RocketChatSchema) can override the grouping rules
 ## for schema-specific layouts. The base implementation is the generic default.
@@ -51,6 +51,14 @@ func path_for(structure: Array, name: String) -> Array:
 	if _find_path(structure, name, path):
 		return path
 	return [name]
+
+
+## Decide the order in which collections are added to the tree. The base schema
+## preserves the caller's order, so the tree mirrors the input list. Subclasses
+## may reorder — e.g. to sort folders and their leaves by grouped path.
+## `structure` is the result of build_structure(names).
+func order_names(_structure: Array, names: Array) -> Array:
+	return names
 
 
 # Display-tree construction ---------------------------------------------------

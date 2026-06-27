@@ -150,7 +150,8 @@ func _render() -> void:
 		_add_placeholder(root, "(no collections)")
 		return
 	var structure := _schema.build_structure(_names)
-	for coll in _names:
+	var ordered := _schema.order_names(structure, _names)
+	for coll in ordered:
 		var path := _schema.path_for(structure, coll)
 		var parent := root
 		for i in path.size() - 1:
