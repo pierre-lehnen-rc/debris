@@ -9,7 +9,7 @@ extends DatabaseSchema
 # Collections grouped under a feature folder by an exact name match.
 const MEDIA_COLLECTIONS := ["call_history", "video_conference"]
 const OMNICHANNEL_COLLECTIONS := ["canned_response"]
-
+const SKIPPED_LABEL_PREFIXES := ["rocketchat_", "omnichannel_", "livechat_", "meteor_"]
 
 ## Rocket.Chat databases have many small feature folders, so subdivide groups
 ## more eagerly than the generic default.
@@ -85,14 +85,24 @@ func mutate_collection_name(collection_name: String) -> String:
 	return name
 
 
-## Label a collection by a cleaned version of its full name: drop the
-## "rocketchat_", then "omnichannel_", then "livechat_" prefixes in turn.
-func mutate_collection_label(_label: String, collection_name: String) -> String:
+## Label a collection by its name relative to its parent's parent: take the
+## (grouping-)mutated name and strip the prefix contributed by every folder above
+## the parent. So "rocketchat_cron_history" nested under rocketchat > cron shows
+## as "cron_history", while a collection only one folder deep keeps its full name.
+func mutate_collection_label(_label: String, collection_name: String, ancestors: Array) -> String:
 	var name := collection_name
-	if name.begins_with("rocketchat_"):
-		name = name.substr("rocketchat_".length())
-	if name.begins_with("omnichannel_"):
-		name = name.substr("omnichannel_".length())
-	if name.begins_with("livechat_"):
-		name = name.substr("livechat_".length())
-	return name
+	# Grandparent folders = every ancestor except the immediate parent (the last).
+	var grandparents: Array = ancestors.slice(0, ancestors.size() - 1) if ancestors.size() > 1 else []
+	var pos := 0
+	for folder in grandparents:
+		var label: String = folder
+		if name.substr(pos, label.length()) != label:
+			break  # Defensive: name/structure mismatch — stop stripping.
+		pos += label.length()
+		if pos < name.length() and (name[pos] == "_" or name[pos] == "."):
+			pos += 1
+	var auto_name = name.substr(pos)
+	for prefix in SKIPPED_LABEL_PREFIXES:
+		if auto_name.begins_with(prefix):
+			auto_name = auto_name.substr(prefix.length())
+	return auto_name

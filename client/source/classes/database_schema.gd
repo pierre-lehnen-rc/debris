@@ -42,7 +42,9 @@ var bucket_loose_collections := false
 ## Order here is incidental — the result is only used for path lookup.
 func build_structure(names: Array) -> Array:
 	var trie := _build_trie(names)
-	return _build_display(trie, 1, [])
+	var display := _build_display(trie, 1, [])
+	_apply_labels(display, [])
+	return display
 
 
 ## Map a collection name to its intended tree path within `structure`. Returns
@@ -112,7 +114,18 @@ func _build_group(node: Dictionary, depth: int) -> Dictionary:
 
 
 func _leaf(label: String, full: String) -> Dictionary:
-	return {"label": mutate_collection_label(label, full), "full": full, "children": []}
+	return {"label": label, "full": full, "children": []}
+
+
+## Rewrite every collection leaf's label via mutate_collection_label, giving the
+## hook the leaf's ancestor folder labels (root down to and including its parent
+## folder). Folder labels are left untouched.
+func _apply_labels(nodes: Array, ancestors: Array) -> void:
+	for node in nodes:
+		if node["children"].is_empty():
+			node["label"] = mutate_collection_label(node["label"], node["full"], ancestors)
+		else:
+			_apply_labels(node["children"], ancestors + [node["label"]])
 
 
 ## Depth-first search for the leaf matching `name`, recording labels into `path`.
@@ -203,11 +216,12 @@ func mutate_collection_name(collection_name: String) -> String:
 
 
 ## Hook for schema-specific rewriting of a collection leaf's display LABEL. The
-## grouping algorithm passes the label it chose plus the real collection name;
-## the base returns the label unchanged. Subclasses can derive a different label
-## (e.g. from the full name). Only affects display — the real collection name
-## (used to open queries) is preserved separately.
-func mutate_collection_label(label: String, _collection_name: String) -> String:
+## grouping algorithm passes the label it chose, the real collection name, and
+## the leaf's ancestor folder labels (root down to and including its parent
+## folder). The base returns the label unchanged. Subclasses can derive a
+## different label (e.g. from the full name and its place in the tree). Only
+## affects display — the real collection name (used to open queries) is preserved.
+func mutate_collection_label(label: String, _collection_name: String, _ancestors: Array) -> String:
 	return label
 
 
