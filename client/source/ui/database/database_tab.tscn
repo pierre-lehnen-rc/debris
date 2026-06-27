@@ -1,10 +1,10 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://source/ui/workspace/workspace_tab.gd" id="1_wstab"]
+[ext_resource type="Script" path="res://source/ui/database/database_tab.gd" id="1_wstab"]
 [ext_resource type="PackedScene" path="res://source/ui/sidebar/collection_sidebar.tscn" id="2_coll"]
-[ext_resource type="PackedScene" path="res://source/ui/workspace/workspace.tscn" id="3_ws"]
+[ext_resource type="PackedScene" path="res://source/ui/database/database_workspace.tscn" id="3_ws"]
 
-[node name="WorkspaceTab" type="Control"]
+[node name="DatabaseTab" type="Control"]
 layout_mode = 3
 anchors_preset = 0
 anchor_right = 1.0
@@ -23,7 +23,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 
-[node name="Workspace" parent="Split" instance=ExtResource("3_ws")]
+[node name="DatabaseWorkspace" parent="Split" instance=ExtResource("3_ws")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -31,4 +31,4 @@ size_flags_horizontal = 3
 [connection signal="collection_activated" from="Split/CollectionSidebar" to="." method="_on_collection_activated"]
 [connection signal="insert_document_requested" from="Split/CollectionSidebar" to="." method="_on_insert_document_requested"]
 [connection signal="status_changed" from="Split/CollectionSidebar" to="." method="_on_status_changed"]
-[connection signal="status_changed" from="Split/Workspace" to="." method="_on_status_changed"]
+[connection signal="status_changed" from="Split/DatabaseWorkspace" to="." method="_on_status_changed"]

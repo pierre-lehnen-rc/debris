@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://source/ui/workspace/results/text_results_view.gd" id="1_yxk1n"]
+[ext_resource type="Script" path="res://source/ui/database/results/text_results_view.gd" id="1_yxk1n"]
 
 [node name="TextView" type="CodeEdit" unique_id=409958440]
 anchor_right = 1.0

@@ -1,8 +1,8 @@
-[gd_scene format=3 uid="uid://c1y7t24gxgd38"]
+[gd_scene format=3 uid="uid://cgwh62xl4hvec"]
 
-[ext_resource type="Script" uid="uid://cvlv2o5ms1ody" path="res://source/ui/workspace/results/tree_results_view.gd" id="1_hxdd5"]
+[ext_resource type="Script" uid="uid://btdtkvlqxj02i" path="res://source/ui/database/results/table_results_view.gd" id="1_s34to"]
 
-[node name="TreeView" type="Tree" unique_id=1353931198]
+[node name="TableView" type="Tree" unique_id=1065542661]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -10,9 +10,8 @@ focus_neighbor_left = NodePath(".")
 focus_neighbor_top = NodePath(".")
 focus_neighbor_right = NodePath(".")
 focus_neighbor_bottom = NodePath(".")
-columns = 3
 column_titles_visible = true
 allow_rmb_select = true
 hide_root = true
 select_mode = 1
-script = ExtResource("1_hxdd5")
+script = ExtResource("1_s34to")

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cmfolvd02papp"]
 
-[ext_resource type="Script" uid="uid://bdq8jwx2m5n0t" path="res://source/ui/workspace/query_tab.gd" id="1_i88w5"]
-[ext_resource type="PackedScene" path="res://source/ui/workspace/results_view.tscn" id="2_m7gy8"]
+[ext_resource type="Script" uid="uid://bdq8jwx2m5n0t" path="res://source/ui/database/query_tab.gd" id="1_i88w5"]
+[ext_resource type="PackedScene" path="res://source/ui/database/results_view.tscn" id="2_m7gy8"]
 
 [node name="QueryTab" type="VBoxContainer" unique_id=1223911229]
 theme_override_constants/separation = 0

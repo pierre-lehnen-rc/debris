@@ -1,13 +1,13 @@
 class_name Main
 extends Control
 
-## Application shell: menu bar, toolbar, a bottom-tabbed stack of workspace tabs,
-## and a status bar. Each workspace tab is bound to one database (its own
+## Application shell: menu bar, toolbar, a bottom-tabbed stack of database tabs,
+## and a status bar. Each database tab is bound to one database (its own
 ## collection sidebar + query workspace). Databases are chosen from the
 ## connection picker popup, opened from the toolbar or automatically when no
 ## tabs are open. Layout lives in main.tscn (which also carries the theme).
 
-const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.tscn")
+const DATABASE_TAB_SCENE := preload("res://source/ui/database/database_tab.tscn")
 
 @onready var _background: ColorRect = %Background
 @onready var _file_menu: PopupMenu = %File
@@ -17,7 +17,7 @@ const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.ts
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _status_bar: PanelContainer = %StatusBar
 @onready var _status_label: Label = %StatusLabel
-@onready var _tabs: TabContainer = %WorkspaceTabs
+@onready var _tabs: TabContainer = %DatabaseTabs
 @onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
 @onready var _picker: ConnectionPicker = $ConnectionPicker
 
@@ -45,13 +45,13 @@ func _open_picker() -> void:
 	_picker.open()
 
 
-# Workspace tabs --------------------------------------------------------------
+# Database tabs ---------------------------------------------------------------
 func _on_database_selected(connection: Dictionary, database: String) -> void:
-	_open_workspace_tab(connection, database)
+	_open_database_tab(connection, database)
 
 
-func _open_workspace_tab(connection: Dictionary, database: String) -> WorkspaceTab:
-	var tab: WorkspaceTab = WORKSPACE_TAB_SCENE.instantiate()
+func _open_database_tab(connection: Dictionary, database: String) -> DatabaseTab:
+	var tab: DatabaseTab = DATABASE_TAB_SCENE.instantiate()
 	tab.configure(connection, database)
 	tab.status_changed.connect(_on_status_changed)
 	tab.name = "ws_%d" % _tab_counter

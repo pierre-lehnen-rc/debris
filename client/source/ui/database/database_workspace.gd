@@ -1,4 +1,4 @@
-class_name Workspace
+class_name DatabaseWorkspace
 extends Control
 
 ## Central area: a TabContainer holding one QueryTab per opened collection.
@@ -7,7 +7,7 @@ extends Control
 
 signal status_changed(text: String)
 
-const QUERY_TAB_SCENE := preload("res://source/ui/workspace/query_tab.tscn")
+const QUERY_TAB_SCENE := preload("res://source/ui/database/query_tab.tscn")
 
 @onready var _tabs: TabContainer = %Tabs
 @onready var _welcome: Control = %Welcome
@@ -81,7 +81,7 @@ func _on_tab_title_changed(title: String, tab: QueryTab) -> void:
 		_tabs.set_tab_title(index, title)
 
 
-## Wired in workspace.tscn from the "+" button in the tab strip. Opens a fresh
+## Wired in database_workspace.tscn from the "+" button in the tab strip. Opens a fresh
 ## empty tab on the database this workspace is bound to.
 func _on_new_tab_pressed() -> void:
 	if _bound_database.is_empty():

@@ -68,7 +68,7 @@ func _apply_style() -> void:
 
 
 ## Opens the document editor in insert mode (used by the sidebar's
-## "Insert Document…" action via the workspace, and the views' context menus).
+## "Insert Document…" action via the database workspace, and the views' context menus).
 func request_insert() -> void:
 	_doc_dialog.open_insert()
 

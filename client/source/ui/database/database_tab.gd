@@ -1,14 +1,14 @@
-class_name WorkspaceTab
+class_name DatabaseTab
 extends Control
 
-## One workspace tab, scoped to a single pre-selected database. Lays out the
+## One database tab, scoped to a single pre-selected database. Lays out the
 ## database's collection sidebar next to the query/results workspace, the same
 ## as the old single-window layout but bound to one database.
 
 signal status_changed(text: String)
 
 @onready var _sidebar: CollectionSidebar = %CollectionSidebar
-@onready var _workspace: Workspace = %Workspace
+@onready var _workspace: DatabaseWorkspace = %DatabaseWorkspace
 
 var _connection: Dictionary = {}
 var _database := ""
@@ -54,7 +54,7 @@ func open_collection(connection: Dictionary, database: String, collection: Strin
 	return _workspace.open_collection(connection, database, collection)
 
 
-# Wired in workspace_tab.tscn -------------------------------------------------
+# Wired in database_tab.tscn --------------------------------------------------
 func _on_collection_activated(connection: Dictionary, database: String, collection: String) -> void:
 	_workspace.open_collection(connection, database, collection)
 	status_changed.emit("Opened %s.%s" % [database, collection])

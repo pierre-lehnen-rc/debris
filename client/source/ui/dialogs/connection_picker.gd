@@ -2,8 +2,8 @@ class_name ConnectionPicker
 extends Window
 
 ## Popup that lists connections and their databases. Opened from the toolbar (or
-## automatically when no workspace tabs are open). Picking a database emits
-## `database_selected` so Main can open a workspace tab for it. Connection
+## automatically when no database tabs are open). Picking a database emits
+## `database_selected` so Main can open a database tab for it. Connection
 ## management (add/edit/remove, connect/disconnect) is delegated to the embedded
 ## ConnectionBrowser.
 

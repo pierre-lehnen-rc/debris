@@ -4,8 +4,8 @@ extends PanelContainer
 ## Browser of connections and their databases, shown inside the connection
 ## picker popup. Owns the runtime connection list (add/edit/remove, connect/
 ## disconnect, lazy database load) and lets the user pick a database to open as
-## a workspace tab. Collections are NOT shown here — those live in each
-## workspace tab's own CollectionSidebar.
+## a database tab. Collections are NOT shown here — those live in each
+## database tab's own CollectionSidebar.
 
 signal database_activated(connection: Dictionary, database: String)
 signal add_connection_requested()

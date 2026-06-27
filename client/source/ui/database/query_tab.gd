@@ -11,7 +11,7 @@ extends VBoxContainer
 
 signal status_changed(text: String)
 ## Emitted when the tab's title should change (collection retargeted), so the
-## workspace can relabel the tab.
+## database workspace can relabel the tab.
 signal title_changed(title: String)
 
 var connection_config: Dictionary = {}

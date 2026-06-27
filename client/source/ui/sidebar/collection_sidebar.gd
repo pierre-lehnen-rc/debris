@@ -1,7 +1,7 @@
 class_name CollectionSidebar
 extends PanelContainer
 
-## Per-workspace sidebar: shows the grouped collection tree for a single,
+## Per-database sidebar: shows the grouped collection tree for a single,
 ## pre-selected database. Collection names are loaded from the backend and the
 ## folder tree is built by the selected DatabaseSchema (Generic/Rocket.Chat).
 ## Double-clicking a collection opens a query tab; right-clicking one shows

@@ -1,8 +1,8 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://source/ui/workspace/workspace.gd" id="1_60do1"]
+[ext_resource type="Script" path="res://source/ui/database/database_workspace.gd" id="1_60do1"]
 
-[node name="Workspace" type="Control" unique_id=428728534]
+[node name="DatabaseWorkspace" type="Control" unique_id=428728534]
 layout_mode = 3
 anchors_preset = 0
 anchor_right = 1.0
