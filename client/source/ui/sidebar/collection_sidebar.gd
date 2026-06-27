@@ -239,6 +239,7 @@ func _add_collection_leaf(parent: TreeItem, label: String, full: String) -> void
 	leaf.set_icon(0, ICON_COLLECTION)
 	leaf.set_icon_max_width(0, ICON_SIZE)
 	leaf.set_icon_modulate(0, color)
+	leaf.set_tooltip_text(0, full)  # The real collection name (labels may be rewritten).
 	leaf.set_metadata(0, {META_TYPE: "collection", "collection": full})
 	# Reveal highlighted collections by expanding the folders that contain them.
 	if highlighted:
