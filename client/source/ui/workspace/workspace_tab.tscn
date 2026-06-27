@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/workspace_tab.gd" id="1_ws"]
+
+[node name="WorkspaceTab" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_ws")
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Box" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="Title" type="Label" parent="Center/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Workspace"
+horizontal_alignment = 1
+
+[node name="Url" type="Label" parent="Center/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="Center/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Rocket.Chat workspace — API client tools coming soon."
+horizontal_alignment = 1

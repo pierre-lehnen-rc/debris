@@ -1,0 +1,86 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://source/ui/dialogs/workspace_picker.gd" id="2_wspick"]
+
+[node name="WorkspacePicker" type="Window"]
+title = "Open Workspace"
+size = Vector2i(420, 420)
+visible = false
+transient = true
+min_size = Vector2i(360, 320)
+theme = ExtResource("1_theme")
+script = ExtResource("2_wspick")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Box" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Panel" type="PanelContainer" parent="Margin/Box"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Inner" type="VBoxContainer" parent="Margin/Box/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Header" type="PanelContainer" parent="Margin/Box/Panel/Inner"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Margin/Box/Panel/Inner/Header"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Margin/Box/Panel/Inner/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "WORKSPACES"
+
+[node name="AddBtn" type="Button" parent="Margin/Box/Panel/Inner/Header/Row"]
+layout_mode = 2
+tooltip_text = "New workspace"
+focus_mode = 0
+text = "+"
+
+[node name="Tree" type="Tree" parent="Margin/Box/Panel/Inner"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+allow_rmb_select = true
+hide_root = true
+select_mode = 1
+
+[node name="Footer" type="HBoxContainer" parent="Margin/Box"]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Margin/Box/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OpenBtn" type="Button" parent="Margin/Box/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Open Workspace"
+
+[node name="ContextMenu" type="PopupMenu" parent="."]
+unique_name_in_owner = true
+theme = ExtResource("1_theme")
+
+[connection signal="close_requested" from="." to="." method="hide"]
+[connection signal="pressed" from="Margin/Box/Panel/Inner/Header/Row/AddBtn" to="." method="_on_add_pressed"]
+[connection signal="item_activated" from="Margin/Box/Panel/Inner/Tree" to="." method="_on_item_activated"]
+[connection signal="item_selected" from="Margin/Box/Panel/Inner/Tree" to="." method="_on_item_selected"]
+[connection signal="nothing_selected" from="Margin/Box/Panel/Inner/Tree" to="." method="_on_nothing_selected"]
+[connection signal="item_mouse_selected" from="Margin/Box/Panel/Inner/Tree" to="." method="_on_item_mouse_selected"]
+[connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]
