@@ -112,7 +112,7 @@ func _build_group(node: Dictionary, depth: int) -> Dictionary:
 
 
 func _leaf(label: String, full: String) -> Dictionary:
-	return {"label": label, "full": full, "children": []}
+	return {"label": mutate_collection_label(label, full), "full": full, "children": []}
 
 
 ## Depth-first search for the leaf matching `name`, recording labels into `path`.
@@ -200,6 +200,15 @@ func _compress_nodes(nodes: Array) -> void:
 ## real collection name (used to open queries) is preserved separately.
 func mutate_collection_name(collection_name: String) -> String:
 	return collection_name
+
+
+## Hook for schema-specific rewriting of a collection leaf's display LABEL. The
+## grouping algorithm passes the label it chose plus the real collection name;
+## the base returns the label unchanged. Subclasses can derive a different label
+## (e.g. from the full name). Only affects display — the real collection name
+## (used to open queries) is preserved separately.
+func mutate_collection_label(label: String, _collection_name: String) -> String:
+	return label
 
 
 ## Split a name into {sep, token} segments on "_", "." and camelCase boundaries.

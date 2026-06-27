@@ -73,3 +73,16 @@ func mutate_collection_name(collection_name: String) -> String:
 
 
 	return name
+
+
+## Label a collection by a cleaned version of its full name: drop the
+## "rocketchat_", then "omnichannel_", then "livechat_" prefixes in turn.
+func mutate_collection_label(_label: String, collection_name: String) -> String:
+	var name := collection_name
+	if name.begins_with("rocketchat_"):
+		name = name.substr("rocketchat_".length())
+	if name.begins_with("omnichannel_"):
+		name = name.substr("omnichannel_".length())
+	if name.begins_with("livechat_"):
+		name = name.substr("livechat_".length())
+	return name
