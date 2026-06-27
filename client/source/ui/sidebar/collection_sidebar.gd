@@ -21,8 +21,15 @@ const COLLAPSE_GROUPS := true
 
 enum Action { VIEW_DOCUMENTS, INSERT_DOCUMENT, COPY_NAME }
 
+const SCHEMA_GENERIC := 0
+const SCHEMA_ROCKETCHAT := 1
+# A database with at least this many "rocketchat_"-prefixed collections is
+# auto-detected as a Rocket.Chat database.
+const ROCKETCHAT_DETECT_THRESHOLD := 2
+
 @onready var _header: PanelContainer = %Header
 @onready var _title: Label = %Title
+@onready var _schema_option: OptionButton = %SchemaOption
 @onready var _tree: Tree = %Tree
 @onready var _context_menu: PopupMenu = %ContextMenu
 
@@ -34,6 +41,9 @@ var _loading := false
 # Schema driving the grouping; swapped by the header's schema selector. Index
 # order matches the SchemaOption items (0 = Generic, 1 = Rocket.Chat).
 var _schema: DatabaseSchema = GenericSchema.new()
+# Set once the user picks a schema by hand, so auto-detection on (re)load stops
+# overriding their choice.
+var _schema_user_selected := false
 
 
 func _ready() -> void:
@@ -69,11 +79,31 @@ func _on_refresh_pressed() -> void:
 	_load()
 
 
-## Schema selector in the header. Swaps the grouping schema and re-renders the
-## current collection list (no reload needed — only the layout changes).
+## Schema selector in the header. A manual pick wins over auto-detection from
+## then on, and re-renders the current list (no reload — only the layout changes).
 func _on_schema_selected(index: int) -> void:
-	_schema = RocketChatSchema.new() if index == 1 else GenericSchema.new()
+	_schema_user_selected = true
+	_schema = _make_schema(index)
 	_render()
+
+
+func _make_schema(index: int) -> DatabaseSchema:
+	return RocketChatSchema.new() if index == SCHEMA_ROCKETCHAT else GenericSchema.new()
+
+
+## Pick a schema from the loaded collection names unless the user already chose
+## one. A Rocket.Chat database is recognised by several "rocketchat_" collections.
+func _auto_detect_schema() -> void:
+	if _schema_user_selected:
+		return
+	var rocketchat_count := 0
+	for name in _names:
+		if (name as String).begins_with("rocketchat_"):
+			rocketchat_count += 1
+	var index := SCHEMA_ROCKETCHAT if rocketchat_count >= ROCKETCHAT_DETECT_THRESHOLD else SCHEMA_GENERIC
+	_schema = _make_schema(index)
+	if _schema_option.selected != index:
+		_schema_option.select(index)  # Programmatic; doesn't emit item_selected.
 
 
 # Loading / rendering ---------------------------------------------------------
@@ -99,6 +129,7 @@ func _load() -> void:
 			if entry is Dictionary:
 				_names.append(entry.get("name", "(unknown)"))
 	_names.sort()
+	_auto_detect_schema()
 	_render()
 	status_changed.emit("Loaded %d collections in %s" % [_names.size(), _database])
 
