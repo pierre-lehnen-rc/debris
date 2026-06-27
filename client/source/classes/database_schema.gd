@@ -183,12 +183,21 @@ func _compress_nodes(nodes: Array) -> void:
 		_compress_nodes(node["children"])
 
 
+## Hook for schema-specific rewriting of a collection name before it is tokenized
+## for grouping. The base schema returns the name unchanged; subclasses can remap
+## names to drive a different folder layout. Only affects grouping/display — the
+## real collection name (used to open queries) is preserved separately.
+func mutate_collection_name(collection_name: String) -> String:
+	return collection_name
+
+
 ## Split a name into {sep, token} segments on "_", "." and camelCase boundaries.
 ## `sep` is the separator preceding the token ("" for the first / camelCase).
 ## A separator only splits when a word precedes it; a leading or doubled
 ## separator has no preceding word, so it stays as literal text on the next
 ## token ("_queue" stays "_queue", "x__trash" becomes "x" + "_trash").
 func _tokenize(name: String) -> Array:
+	name = mutate_collection_name(name)
 	var segs: Array = []
 	var cur := ""
 	var pending_sep := ""
