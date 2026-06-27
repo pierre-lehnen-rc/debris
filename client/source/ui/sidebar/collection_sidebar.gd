@@ -23,6 +23,7 @@ enum Action { VIEW_DOCUMENTS, INSERT_DOCUMENT, COPY_NAME }
 
 const SCHEMA_GENERIC := 0
 const SCHEMA_ROCKETCHAT := 1
+const SCHEMA_FLAT := 2
 # A database with at least this many "rocketchat_"-prefixed collections is
 # auto-detected as a Rocket.Chat database.
 const ROCKETCHAT_DETECT_THRESHOLD := 2
@@ -88,7 +89,13 @@ func _on_schema_selected(index: int) -> void:
 
 
 func _make_schema(index: int) -> DatabaseSchema:
-	return RocketChatSchema.new() if index == SCHEMA_ROCKETCHAT else GenericSchema.new()
+	match index:
+		SCHEMA_ROCKETCHAT:
+			return RocketChatSchema.new()
+		SCHEMA_FLAT:
+			return FlatSchema.new()
+		_:
+			return GenericSchema.new()
 
 
 ## Pick a schema from the loaded collection names unless the user already chose
