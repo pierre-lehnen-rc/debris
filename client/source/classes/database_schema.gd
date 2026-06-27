@@ -216,8 +216,14 @@ func mutate_collection_label(label: String, _collection_name: String) -> String:
 ## A separator only splits when a word precedes it; a leading or doubled
 ## separator has no preceding word, so it stays as literal text on the next
 ## token ("_queue" stays "_queue", "x__trash" becomes "x" + "_trash").
+## camelCase splitting is only applied when the name has no "_" or "." separator,
+## so explicitly-separated names ("read_receipt") aren't further split inside
+## their words.
 func _tokenize(name: String) -> Array:
 	name = mutate_collection_name(name)
+	# Names that already use "_" or "." express their own word boundaries, so
+	# don't also split them on camelCase.
+	var split_camel := not ("_" in name or "." in name)
 	var segs: Array = []
 	var cur := ""
 	var pending_sep := ""
@@ -233,7 +239,7 @@ func _tokenize(name: String) -> Array:
 		else:
 			# camelCase: a capital following a lowercase letter or digit starts a
 			# new word (but not after a literal "_"/"." prefix).
-			if not cur.is_empty() and _is_upper(ch) and _is_lower_or_digit(cur[cur.length() - 1]):
+			if split_camel and not cur.is_empty() and _is_upper(ch) and _is_lower_or_digit(cur[cur.length() - 1]):
 				segs.append({"sep": pending_sep, "token": cur})
 				cur = ""
 				pending_sep = ""
