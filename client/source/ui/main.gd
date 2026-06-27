@@ -36,9 +36,6 @@ func _ready() -> void:
 	bar.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ALWAYS
 	bar.tab_close_pressed.connect(_on_tab_close_pressed)
 
-	# Nothing is open yet — prompt the user to pick a database to start.
-	_open_picker.call_deferred()
-
 
 ## Relays a child's status message to the status bar. Wired in main.tscn.
 func _on_status_changed(text: String) -> void:

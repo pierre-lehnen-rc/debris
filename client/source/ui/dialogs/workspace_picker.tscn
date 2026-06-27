@@ -8,6 +8,7 @@ title = "Open Workspace"
 size = Vector2i(420, 420)
 visible = false
 transient = true
+exclusive = true
 min_size = Vector2i(360, 320)
 theme = ExtResource("1_theme")
 script = ExtResource("2_wspick")
