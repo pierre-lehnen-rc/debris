@@ -3,8 +3,10 @@ extends VBoxContainer
 
 ## A single endpoint workspace: a parameter form on top (built dynamically from
 ## the endpoint's params) and a results view below, split vertically. "Send"
-## issues the request through the (mock) WorkspaceApi using the form values and
-## displays the response. Paginated endpoints drive the results pager; single or
+## issues the request against the workspace's live REST API (via the RocketChat
+## client) using the form values and displays the response. Query params go in the
+## URL, body params in a JSON body, and ":id"/"{id}" path placeholders are filled
+## from matching fields. Paginated endpoints drive the results pager; single or
 ## bounded endpoints hide it. Layout lives in endpoint_tab.tscn; configure() must
 ## be called before the node enters the tree so _ready() can build the form.
 
@@ -21,7 +23,6 @@ signal status_changed(text: String)
 
 var _workspace: Dictionary = {}
 var _endpoint: ApiEndpoint = null
-var _api := WorkspaceApi.new()
 ## Form values captured at the last "Send"; page navigation reuses them so paging
 ## doesn't pick up half-typed edits.
 var _active_args: Dictionary = {}
@@ -148,33 +149,101 @@ func _send() -> void:
 	_results.request_first_page()
 
 
-## Fetch one page (or the single/bounded result) through the mock API. Wired to
+## Fetch one page (or the single/bounded result) from the live API. Wired to
 ## ResultsView.page_requested.
 func _fetch_page(offset: int, limit: int) -> void:
 	if _endpoint == null:
 		_results.show_page([])
 		return
 
+	# Distribute the captured args across the path, query string and JSON body.
+	var path := _endpoint.path
+	var query: Dictionary = {}
+	var body: Dictionary = {}
+	var locations := _param_locations()
+	for name in _active_args:
+		var value: Variant = _active_args[name]
+		if path.contains(":" + name):
+			path = path.replace(":" + name, str(value).uri_encode())
+		elif path.contains("{" + name + "}"):
+			path = path.replace("{" + name + "}", str(value).uri_encode())
+		elif locations.get(name, "query") == "body":
+			body[name] = value
+		else:
+			query[name] = value
+	if _endpoint.paginated:
+		query[_endpoint.offset_param] = offset
+		query[_endpoint.count_param] = limit
+
 	_send_btn.disabled = true
-	status_changed.emit("%s %s…" % [_endpoint.method, _endpoint.path])
-	var result: Dictionary = await _api.request(
-		_workspace, _endpoint, _active_args, offset, limit
+	status_changed.emit("%s %s…" % [_endpoint.method, path])
+	var result: Dictionary = await RocketChat.request(
+		_workspace, _http_method(_endpoint.method), path, query, body
 	)
 	_send_btn.disabled = false
 
-	if not result.get("ok", false):
-		_results.show_page([])
-		status_changed.emit("Request failed: %s" % result.get("error", "unknown error"))
+	var raw: Variant = result.get("data")
+	# Transport failure, or a 200 with { success: false }.
+	if not result.get("ok", false) or (raw is Dictionary and raw.get("success") == false):
+		var message: String = result.get("error", "request failed")
+		if raw is Dictionary and raw.get("error") is String:
+			message = raw["error"]
+		_results.show_page([raw] if raw is Dictionary else [])
+		status_changed.emit("%s failed: %s" % [_endpoint.id, message])
 		return
 
-	var data: Array = result.get("data") if result.get("data") is Array else []
+	var data := _extract(raw)
 	_results.show_page(data)
-	var total: int = result.get("total", data.size())
+	var total := int(raw["total"]) if (raw is Dictionary and raw.has("total")) else data.size()
 	if _endpoint.paginated:
 		var first := (offset + 1) if data.size() > 0 else 0
 		var last := offset + data.size()
 		status_changed.emit("%s — %d–%d of %d" % [_endpoint.id, first, last, total])
 	else:
 		status_changed.emit("%s — %d %s%s" % [
-			_endpoint.id, total, _endpoint.noun(), "" if total == 1 else "s",
+			_endpoint.id, data.size(), _endpoint.noun(), "" if data.size() == 1 else "s",
 		])
+
+
+## Map each declared param name to where it belongs in the request ("query" or
+## "body"), so _fetch_page can route the captured values.
+func _param_locations() -> Dictionary:
+	var out: Dictionary = {}
+	for p in _endpoint.params:
+		out[p.get("name", "")] = p.get("in", "query")
+	return out
+
+
+func _http_method(method: String) -> int:
+	match method.to_upper():
+		"POST":
+			return HTTPClient.METHOD_POST
+		"PUT":
+			return HTTPClient.METHOD_PUT
+		"DELETE":
+			return HTTPClient.METHOD_DELETE
+		"PATCH":
+			return HTTPClient.METHOD_PATCH
+		_:
+			return HTTPClient.METHOD_GET
+
+
+## Pull the rows to display out of a response body. Uses the endpoint's inferred
+## result_key: an array becomes the rows, a single object becomes one row. With no
+## usable key, the whole response object is shown as a single row.
+func _extract(raw: Variant) -> Array:
+	if raw is Array:
+		return raw
+	if not (raw is Dictionary):
+		return [] if raw == null else [{"value": raw}]
+
+	var dict: Dictionary = raw
+	var key := _endpoint.result_key
+	if key != "" and dict.has(key):
+		var payload: Variant = dict[key]
+		if payload is Array:
+			return payload
+		if payload is Dictionary:
+			return [payload]
+		return [{key: payload}]
+	return [dict]
