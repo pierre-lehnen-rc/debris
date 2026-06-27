@@ -1,6 +1,8 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://source/ui/workspace/workspace_tab.gd" id="1_ws"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/endpoint_sidebar.tscn" id="2_side"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/endpoint_workspace.tscn" id="3_explorer"]
 
 [node name="WorkspaceTab" type="Control"]
 layout_mode = 3
@@ -9,31 +11,23 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1_ws")
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Split" type="HSplitContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+split_offset = 240
 
-[node name="Box" type="VBoxContainer" parent="Center"]
+[node name="EndpointSidebar" parent="Split" instance=ExtResource("2_side")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
-theme_override_constants/separation = 10
-alignment = 1
 
-[node name="Title" type="Label" parent="Center/Box"]
+[node name="EndpointWorkspace" parent="Split" instance=ExtResource("3_explorer")]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "Workspace"
-horizontal_alignment = 1
+size_flags_horizontal = 3
 
-[node name="Url" type="Label" parent="Center/Box"]
-unique_name_in_owner = true
-layout_mode = 2
-horizontal_alignment = 1
-
-[node name="Hint" type="Label" parent="Center/Box"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Rocket.Chat workspace — API client tools coming soon."
-horizontal_alignment = 1
+[connection signal="endpoint_activated" from="Split/EndpointSidebar" to="." method="_on_endpoint_activated"]
+[connection signal="status_changed" from="Split/EndpointSidebar" to="." method="_on_status_changed"]
+[connection signal="status_changed" from="Split/EndpointWorkspace" to="." method="_on_status_changed"]

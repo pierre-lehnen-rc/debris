@@ -1,34 +1,36 @@
 class_name WorkspaceTab
 extends Control
 
-## One Rocket.Chat workspace tab, scoped to a single configured workspace. For
-## now it's a placeholder landing page showing the workspace's identity; the
-## tailored API-client tools (REST explorer, admin helpers, …) will be added
-## here later. Layout lives in workspace_tab.tscn.
+## One Rocket.Chat workspace tab, scoped to a single configured workspace. Lays
+## out the endpoint sidebar next to the endpoint explorer, mirroring the Mongo
+## DatabaseTab. The sidebar lists known REST endpoints; activating one opens it in
+## a tab in the explorer, where a param form drives a (currently mock) request and
+## the results show in the shared tree/table/text view. Layout in workspace_tab.tscn.
 
 signal status_changed(text: String)
 
-@onready var _title: Label = %Title
-@onready var _url: Label = %Url
-@onready var _hint: Label = %Hint
+@onready var _sidebar: EndpointSidebar = %EndpointSidebar
+@onready var _explorer: EndpointWorkspace = %EndpointWorkspace
 
 var _workspace: Dictionary = {}
 
 
 func _ready() -> void:
-	_title.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
-	_url.add_theme_color_override("font_color", AppTheme.TEXT)
-	_hint.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	if not _workspace.is_empty():
-		_refresh()
+		_setup()
 
 
 ## Bind this tab to a workspace config. Safe to call before the node is in the
-## tree; the labels are filled in once the node is ready.
+## tree; the children are configured once the tab is ready.
 func configure(workspace: Dictionary) -> void:
 	_workspace = workspace
 	if is_node_ready():
-		_refresh()
+		_setup()
+
+
+func _setup() -> void:
+	_sidebar.configure(_workspace)
+	_explorer.configure(_workspace)
 
 
 func workspace() -> Dictionary:
@@ -40,6 +42,11 @@ func tab_title() -> String:
 	return ws_name if not ws_name.is_empty() else "(workspace)"
 
 
-func _refresh() -> void:
-	_title.text = String(_workspace.get("name", "(workspace)"))
-	_url.text = String(_workspace.get("url", ""))
+# Wired in workspace_tab.tscn -------------------------------------------------
+func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
+	_explorer.open_endpoint(endpoint)
+	status_changed.emit("Opened %s" % endpoint.label())
+
+
+func _on_status_changed(text: String) -> void:
+	status_changed.emit(text)

@@ -24,8 +24,11 @@ var _documents: Array = []
 var _mode: ViewMode = ViewMode.TREE
 var _offset := 0
 var _limit := DEFAULT_LIMIT
+## Singular noun used in the count label ("3 documents", "3 channels", …).
+var _item_noun := "document"
 
 @onready var _header: PanelContainer = %Header
+@onready var _pager: HBoxContainer = %Pager
 @onready var _count_label: Label = %CountLabel
 @onready var _offset_label: Label = %OffsetLabel
 @onready var _limit_label: Label = %LimitLabel
@@ -67,6 +70,19 @@ func _apply_style() -> void:
 		label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
+## Show or hide the offset/limit/prev/next pager. Endpoints that don't paginate
+## (single-object or bounded lists) hide it; the count label still updates.
+func set_pagination_enabled(enabled: bool) -> void:
+	_pager.visible = enabled
+
+
+## Set the singular noun shown in the count label (e.g. "channel"). Pluralised
+## automatically. Used by the endpoint explorer to label non-document results.
+func set_item_noun(noun: String) -> void:
+	_item_noun = noun if not noun.is_empty() else "document"
+	_update_count()
+
+
 ## Opens the document editor in insert mode (used by the sidebar's
 ## "Insert Document…" action via the database workspace, and the views' context menus).
 func request_insert() -> void:
@@ -91,7 +107,7 @@ func show_page(documents: Array) -> void:
 
 func _update_count() -> void:
 	var n := _documents.size()
-	_count_label.text = "%d document%s" % [n, "" if n == 1 else "s"]
+	_count_label.text = "%d %s%s" % [n, _item_noun, "" if n == 1 else "s"]
 
 
 func _set_mode(mode: ViewMode) -> void:
