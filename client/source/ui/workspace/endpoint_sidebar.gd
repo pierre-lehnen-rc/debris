@@ -1,10 +1,11 @@
 class_name EndpointSidebar
 extends PanelContainer
 
-## Per-workspace sidebar: lists the known Rocket.Chat REST endpoints grouped by
-## tag (Channels, Users, …). Endpoints come from the curated ApiCatalog now and,
-## later, from imported OpenAPI documents. Double-clicking an endpoint opens it in
-## a tab; right-clicking offers quick actions. Mirrors the Mongo CollectionSidebar.
+## Per-workspace sidebar: lists the workspace's REST endpoints grouped by tag
+## (Channels, Users, …). Endpoints are read live from the server's OpenAPI
+## document (/api/docs/json); if that can't be fetched, it falls back to the
+## curated ApiCatalog. Double-clicking an endpoint opens it in a tab;
+## right-clicking offers quick actions. Mirrors the Mongo CollectionSidebar.
 
 signal endpoint_activated(endpoint: ApiEndpoint)
 signal status_changed(text: String)
@@ -14,7 +15,8 @@ const META_ENDPOINT := "endpoint"
 const ICON_GROUP := preload("res://source/ui/icons/group.svg")
 const ICON_ENDPOINT := preload("res://source/ui/icons/collection.svg")
 const ICON_SIZE := 16
-const COLLAPSE_GROUPS := false
+# Many servers expose hundreds of endpoints, so start groups folded.
+const COLLAPSE_GROUPS := true
 
 enum Action { OPEN, COPY_PATH }
 
@@ -26,18 +28,62 @@ enum Action { OPEN, COPY_PATH }
 var _workspace: Dictionary = {}
 var _endpoints: Array = []
 var _menu_target: ApiEndpoint = null
+var _loading := false
 
 
 func _ready() -> void:
 	_apply_style()
-	_endpoints = ApiCatalog.builtin()
-	_render()
+	_render_message("(no workspace)")
 
 
-## Point this sidebar at a workspace. The endpoint list is the same catalog for
-## every workspace today; the workspace is kept for future per-server filtering.
+## Point this sidebar at a workspace and load its endpoint catalog from the
+## server's OpenAPI document.
 func configure(workspace: Dictionary) -> void:
 	_workspace = workspace
+	if is_node_ready():
+		_load()
+
+
+# Loading ---------------------------------------------------------------------
+## Fetch and parse the workspace's OpenAPI spec, falling back to the curated
+## catalog if the server can't be reached or returns something unusable.
+func _load() -> void:
+	if _loading or _workspace.is_empty():
+		return
+	_loading = true
+	status_changed.emit("Loading endpoints from %s…" % _workspace.get("url", ""))
+	_render_message("(loading…)")
+
+	var result: Dictionary = await RocketChat.fetch_openapi(_workspace)
+	_loading = false
+
+	if result.get("ok", false) and result.get("data") is Dictionary:
+		_endpoints = OpenApiParser.parse(result["data"])
+		_endpoints.sort_custom(_compare_endpoints)
+		if _endpoints.is_empty():
+			_render_message("(no endpoints in spec)")
+			status_changed.emit("OpenAPI spec contained no endpoints")
+			return
+		_render()
+		status_changed.emit("Loaded %d endpoints from %s" % [
+			_endpoints.size(), _workspace.get("url", ""),
+		])
+		return
+
+	# Couldn't load the live spec — fall back to the shipped catalog.
+	_endpoints = ApiCatalog.builtin()
+	_endpoints.sort_custom(_compare_endpoints)
+	_render()
+	status_changed.emit("Couldn't load endpoints (%s) — showing built-in catalog" % result.get(
+		"error", "unknown error",
+	))
+
+
+## Sort by tag, then by label, so groups and their entries read alphabetically.
+static func _compare_endpoints(a: ApiEndpoint, b: ApiEndpoint) -> bool:
+	if a.tag == b.tag:
+		return a.label().naturalnocasecmp_to(b.label()) < 0
+	return a.tag.naturalnocasecmp_to(b.tag) < 0
 
 
 func _apply_style() -> void:
@@ -92,6 +138,12 @@ func _make_leaf(parent: TreeItem, endpoint: ApiEndpoint) -> void:
 	leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
 	leaf.set_tooltip_text(0, "%s %s\n%s" % [endpoint.method, endpoint.path, endpoint.summary])
 	leaf.set_metadata(0, {META_TYPE: "endpoint", META_ENDPOINT: endpoint})
+
+
+func _render_message(text: String) -> void:
+	_tree.clear()
+	var root := _tree.create_item()
+	_add_placeholder(root, text)
 
 
 func _add_placeholder(parent: TreeItem, text: String) -> void:

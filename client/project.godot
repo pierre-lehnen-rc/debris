@@ -18,6 +18,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Backend="*res://source/data/backend.gd"
+RocketChat="*res://source/data/rocket_chat.gd"
 
 [display]
 
