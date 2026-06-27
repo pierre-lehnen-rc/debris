@@ -18,17 +18,20 @@ extends RefCounted
 ##         var path := schema.path_for(structure, name)
 ##         # path[0..-2] are folder labels, path[-1] is the leaf's display label.
 
+# Tunable grouping knobs. Declared as members (not consts) so subclasses can
+# override them by reassigning in their own _init().
+
 # Grouping stops at this many levels deep; anything deeper is listed flat by the
 # part of the name below the flatten point.
-const MAX_GROUP_DEPTH := 3
+var max_group_depth := 3
 
 # A group holding fewer than this many collections is shown as a flat list
 # rather than being split into sub-groups.
-const MIN_GROUP_SIZE := 8
+var min_group_size := 8
 
 # When a group holds both sub-groups and loose collections, bucket the loose
 # collections into a "." sub-group so the two kinds aren't shown side by side.
-const BUCKET_LOOSE_COLLECTIONS := false
+var bucket_loose_collections := false
 
 
 # Public API ------------------------------------------------------------------
@@ -76,7 +79,7 @@ func _build_display(nodes: Array, depth: int, extra_colls: Array) -> Array:
 
 	# When both kinds are present, loose collections go into a "." sub-group so
 	# folders and collections are never shown side by side.
-	var bucket := BUCKET_LOOSE_COLLECTIONS and not groups.is_empty() and not colls.is_empty()
+	var bucket := bucket_loose_collections and not groups.is_empty() and not colls.is_empty()
 
 	var result: Array = []
 	if bucket:
@@ -100,7 +103,7 @@ func _build_group(node: Dictionary, depth: int) -> Dictionary:
 	var children: Array
 	# Flatten when nesting too deep or when too few collections to sub-group.
 	# Flattened contents are all leaves, labelled by the name below this folder.
-	if depth >= MAX_GROUP_DEPTH or _count_collections(node) < MIN_GROUP_SIZE:
+	if depth >= max_group_depth or _count_collections(node) < min_group_size:
 		children = self_colls.duplicate()
 		_collect_flat(node["children"], "", children)
 	else:

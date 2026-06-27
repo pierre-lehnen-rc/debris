@@ -13,6 +13,13 @@ const MEDIA_COLLECTIONS := ["call_history", "video_conference"]
 const NOTIFICATION_COLLECTIONS := ["_raix_push_app_tokens", "notification_queue"]
 const OMNICHANNEL_COLLECTIONS := ["canned_response"]
 
+
+## Rocket.Chat databases have many small feature folders, so subdivide groups
+## more eagerly than the generic default.
+func _init() -> void:
+	min_group_size = 3
+
+
 ## Sort the tree by each collection's grouped path, so it appears ordered by its
 ## (mutated) display layout. At every level a folder's own same-named collection
 ## comes first, then sub-folders, then loose collections — each band sorted by
