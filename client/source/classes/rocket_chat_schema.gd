@@ -52,10 +52,16 @@ func _sort_key(path: Array) -> Array:
 
 func mutate_collection_name(collection_name: String) -> String:
 	var name := collection_name
+	var has_prefix := false
 
 	# 1. Drop the common "rocketchat_" prefix.
 	if name.begins_with("rocketchat_"):
+		has_prefix = true
 		name = name.substr("rocketchat_".length())
+	elif name.begins_with("omnichannel_"):
+		has_prefix = true
+	elif name.begins_with("custom_emoji"):
+		has_prefix = true
 
 	# 2-4. Re-home feature prefixes under a parent feature folder.
 	if name.begins_with("livechat_"):
@@ -64,6 +70,8 @@ func mutate_collection_name(collection_name: String) -> String:
 		name = "federation_" + name
 	elif name.begins_with("freeswitch_"):
 		name = "media_" + name
+	elif name.begins_with("read_receipt"):
+		name = "message_" + name
 
 	# 5-7. Group well-known standalone collections under a feature folder.
 	if name in MEDIA_COLLECTIONS:
@@ -71,6 +79,8 @@ func mutate_collection_name(collection_name: String) -> String:
 	elif name in OMNICHANNEL_COLLECTIONS:
 		name = "omnichannel_" + name
 
+	if has_prefix:
+		return "rocketchat_" + name
 
 	return name
 
