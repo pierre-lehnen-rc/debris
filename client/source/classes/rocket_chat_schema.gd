@@ -11,10 +11,21 @@ const MEDIA_COLLECTIONS := ["call_history", "video_conference"]
 const OMNICHANNEL_COLLECTIONS := ["canned_response"]
 const SKIPPED_LABEL_PREFIXES := ["rocketchat_", "omnichannel_", "livechat_", "meteor_"]
 
+# The core collections worth spotting at a glance, by real collection name.
+const HIGHLIGHTED_COLLECTIONS := [
+	"users",
+	"rocketchat_room",
+	"rocketchat_message",
+	"rocketchat_subscription",
+	"rocketchat_settings",
+]
+
 ## Rocket.Chat databases have many small feature folders, so subdivide groups
-## more eagerly than the generic default.
+## more eagerly than the generic default. Also flag the core collections so they
+## stand out in the list.
 func _init() -> void:
 	min_group_size = 3
+	highlighted_collections = HIGHLIGHTED_COLLECTIONS
 
 
 ## Sort the tree by each collection's grouped path, so it appears ordered by its

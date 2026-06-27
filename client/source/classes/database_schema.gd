@@ -33,6 +33,10 @@ var min_group_size := 8
 # collections into a "." sub-group so the two kinds aren't shown side by side.
 var bucket_loose_collections := false
 
+# Real collection names to visually highlight in the list so they're easy to
+# spot at a glance. Subclasses populate this in their _init().
+var highlighted_collections: Array = []
+
 
 # Public API ------------------------------------------------------------------
 ## Determine the display tree for a list of collection names. Returns an ordered
@@ -64,6 +68,12 @@ func path_for(structure: Array, name: String) -> Array:
 ## `structure` is the result of build_structure(names).
 func order_names(_structure: Array, names: Array) -> Array:
 	return names
+
+
+## Whether a collection should be visually highlighted in the list. Matches the
+## real collection name against highlighted_collections.
+func is_highlighted(collection_name: String) -> bool:
+	return collection_name in highlighted_collections
 
 
 # Display-tree construction ---------------------------------------------------

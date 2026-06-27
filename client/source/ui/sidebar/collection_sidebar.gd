@@ -233,11 +233,26 @@ func _get_or_create_group(parent: TreeItem, label: String) -> TreeItem:
 func _add_collection_leaf(parent: TreeItem, label: String, full: String) -> void:
 	var leaf := _tree.create_item(parent)
 	leaf.set_text(0, label)
-	leaf.set_custom_color(0, AppTheme.TEXT_DIM)
+	var highlighted := _schema.is_highlighted(full)
+	var color := AppTheme.ACCENT if highlighted else AppTheme.TEXT_DIM
+	leaf.set_custom_color(0, color)
 	leaf.set_icon(0, ICON_COLLECTION)
 	leaf.set_icon_max_width(0, ICON_SIZE)
-	leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
+	leaf.set_icon_modulate(0, color)
 	leaf.set_metadata(0, {META_TYPE: "collection", "collection": full})
+	# Reveal highlighted collections by expanding the folders that contain them.
+	if highlighted:
+		_expand_ancestors(leaf)
+
+
+## Expand every folder above `item` so a highlighted collection is visible
+## without unfolding the tree by hand.
+func _expand_ancestors(item: TreeItem) -> void:
+	var ancestor := item.get_parent()
+	var root := _tree.get_root()
+	while ancestor != null and ancestor != root:
+		ancestor.set_collapsed(false)
+		ancestor = ancestor.get_parent()
 
 
 func _add_placeholder(parent: TreeItem, text: String) -> void:
