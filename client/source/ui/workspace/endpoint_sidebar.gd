@@ -79,11 +79,14 @@ func _load() -> void:
 	))
 
 
-## Sort by tag, then by label, so groups and their entries read alphabetically.
+## Sort by full path segments, then method, so the nested folders and their
+## leaves read alphabetically.
 static func _compare_endpoints(a: ApiEndpoint, b: ApiEndpoint) -> bool:
-	if a.tag == b.tag:
-		return a.label().naturalnocasecmp_to(b.label()) < 0
-	return a.tag.naturalnocasecmp_to(b.tag) < 0
+	var ka := "/".join(a.segments())
+	var kb := "/".join(b.segments())
+	if ka == kb:
+		return a.method.naturalnocasecmp_to(b.method) < 0
+	return ka.naturalnocasecmp_to(kb) < 0
 
 
 func _apply_style() -> void:
@@ -99,22 +102,33 @@ func _apply_style() -> void:
 
 
 # Rendering -------------------------------------------------------------------
-## Build the endpoint tree grouped by tag. Tags appear in first-seen order; the
-## endpoints keep the catalog's order within each tag.
+## Build a nested endpoint tree from each endpoint's path segments, so siblings
+## sharing a prefix (all "livechat/…", all "channels.*", …) fold under shared
+## folders. The endpoints are pre-sorted, so folders and leaves read in order.
 func _render() -> void:
 	_tree.clear()
 	var root := _tree.create_item()
 	if _endpoints.is_empty():
 		_add_placeholder(root, "(no endpoints)")
 		return
-	var groups: Dictionary = {}  # tag -> group TreeItem
 	for endpoint in _endpoints:
 		var ep := endpoint as ApiEndpoint
-		var group: TreeItem = groups.get(ep.tag)
-		if group == null:
-			group = _make_group(root, ep.tag)
-			groups[ep.tag] = group
-		_make_leaf(group, ep)
+		var segs := ep.segments()
+		var parent := root
+		for i in segs.size() - 1:
+			parent = _get_or_create_group(parent, segs[i])
+		var leaf_label: String = segs[segs.size() - 1] if segs.size() > 0 else ep.label()
+		_make_leaf(parent, ep, leaf_label)
+
+
+## Return the child folder of `parent` with the given label, creating it if it
+## doesn't exist yet, so endpoints sharing a path prefix reuse the same folders.
+func _get_or_create_group(parent: TreeItem, label: String) -> TreeItem:
+	for child in parent.get_children():
+		var meta: Dictionary = child.get_metadata(0)
+		if meta.get(META_TYPE) == "group" and child.get_text(0) == label:
+			return child
+	return _make_group(parent, label)
 
 
 func _make_group(parent: TreeItem, label: String) -> TreeItem:
@@ -129,15 +143,32 @@ func _make_group(parent: TreeItem, label: String) -> TreeItem:
 	return group
 
 
-func _make_leaf(parent: TreeItem, endpoint: ApiEndpoint) -> void:
+func _make_leaf(parent: TreeItem, endpoint: ApiEndpoint, label: String) -> void:
 	var leaf := _tree.create_item(parent)
-	leaf.set_text(0, endpoint.label())
-	leaf.set_custom_color(0, AppTheme.TEXT_DIM)
+	# The HTTP method leads the label so GET/POST on the same path stay distinct.
+	leaf.set_text(0, "%s  %s" % [endpoint.method, label])
+	leaf.set_custom_color(0, _method_color(endpoint.method))
 	leaf.set_icon(0, ICON_ENDPOINT)
 	leaf.set_icon_max_width(0, ICON_SIZE)
 	leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
-	leaf.set_tooltip_text(0, "%s %s\n%s" % [endpoint.method, endpoint.path, endpoint.summary])
+	var tip := "%s %s" % [endpoint.method, endpoint.path]
+	if not endpoint.summary.is_empty():
+		tip += "\n" + endpoint.summary
+	leaf.set_tooltip_text(0, tip)
 	leaf.set_metadata(0, {META_TYPE: "endpoint", META_ENDPOINT: endpoint})
+
+
+## Colour endpoints by verb so reads and writes are distinguishable at a glance.
+func _method_color(method: String) -> Color:
+	match method:
+		"GET":
+			return AppTheme.ACCENT_GREEN
+		"POST", "PUT", "PATCH":
+			return AppTheme.ACCENT
+		"DELETE":
+			return AppTheme.TEXT_BRIGHT
+		_:
+			return AppTheme.TEXT_DIM
 
 
 func _render_message(text: String) -> void:

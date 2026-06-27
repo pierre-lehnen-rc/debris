@@ -71,3 +71,23 @@ func noun() -> String:
 ## A short label for the sidebar/tab. The operationId reads well on its own.
 func label() -> String:
 	return id if not id.is_empty() else path
+
+
+## Hierarchical path for the explorer tree, derived from the id. Splits on "/"
+## path segments, and treats a dotted last segment ("monitors.create") as a
+## namespace folder plus action. The final element is the leaf; everything before
+## it is the folder chain. Examples:
+##   "channels.list"                  -> ["channels", "list"]
+##   "livechat/rooms.delete"          -> ["livechat", "rooms", "delete"]
+##   "livechat/config/routing"        -> ["livechat", "config", "routing"]
+##   "apps/:id/logs"                  -> ["apps", ":id", "logs"]
+func segments() -> PackedStringArray:
+	var out := PackedStringArray()
+	var parts := (id if not id.is_empty() else path).split("/", false)
+	for i in parts.size():
+		var seg: String = parts[i]
+		if i == parts.size() - 1 and seg.contains("."):
+			out.append_array(seg.split(".", false))
+		else:
+			out.append(seg)
+	return out
