@@ -90,6 +90,23 @@ export const registerRoutes: FastifyPluginAsync<RoutesOptions> = async (
     },
   );
 
+  // Find a single document.
+  app.post<{ Body: WithConnection & ops.FindParams }>(
+    "/findOne",
+    {
+      schema: {
+        body: bodySchema(
+          { database: stringField, collection: stringField },
+          ["database", "collection"],
+        ),
+      },
+    },
+    async (req) => {
+      const client = await cache.acquire(req.body.connection);
+      return ops.findOne(client, req.body);
+    },
+  );
+
   // Count documents matching a filter.
   app.post<{ Body: WithConnection & ops.CountParams }>(
     "/count",
@@ -104,6 +121,40 @@ export const registerRoutes: FastifyPluginAsync<RoutesOptions> = async (
     async (req) => {
       const client = await cache.acquire(req.body.connection);
       return ops.count(client, req.body);
+    },
+  );
+
+  // Explain a query's execution plan.
+  app.post<{ Body: WithConnection & ops.FindParams }>(
+    "/explain",
+    {
+      schema: {
+        body: bodySchema(
+          { database: stringField, collection: stringField },
+          ["database", "collection"],
+        ),
+      },
+    },
+    async (req) => {
+      const client = await cache.acquire(req.body.connection);
+      return ops.explain(client, req.body);
+    },
+  );
+
+  // List a collection's indexes.
+  app.post<{ Body: WithConnection & ops.CollectionTarget }>(
+    "/listIndexes",
+    {
+      schema: {
+        body: bodySchema(
+          { database: stringField, collection: stringField },
+          ["database", "collection"],
+        ),
+      },
+    },
+    async (req) => {
+      const client = await cache.acquire(req.body.connection);
+      return ops.listIndexes(client, req.body);
     },
   );
 

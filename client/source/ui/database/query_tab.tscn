@@ -33,6 +33,12 @@ size_flags_horizontal = 3
 tooltip_text = "Collection to query — edit and press Run (or Enter) to load another"
 placeholder_text = "collection name"
 
+[node name="FuncOption" type="OptionButton" parent="Toolbar/Row" unique_id=1949800040]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Which operation to run against the collection"
+focus_mode = 0
+
 [node name="OptionsBtn" type="Button" parent="Toolbar/Row" unique_id=1949800039]
 unique_name_in_owner = true
 layout_mode = 2
@@ -76,5 +82,6 @@ layout_mode = 2
 
 [connection signal="pressed" from="Toolbar/Row/RunBtn" to="." method="_run"]
 [connection signal="text_submitted" from="Toolbar/Row/CollectionEdit" to="." method="_run"]
+[connection signal="item_selected" from="Toolbar/Row/FuncOption" to="." method="_on_function_selected"]
 [connection signal="toggled" from="Toolbar/Row/OptionsBtn" to="." method="_on_options_toggled"]
 [connection signal="page_requested" from="Split/Results" to="." method="_fetch_page"]

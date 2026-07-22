@@ -1,8 +1,8 @@
-import type { Document, MongoClient, Sort } from "mongodb";
+import type { Document, FindOptions, MongoClient, Sort } from "mongodb";
 import { fromExtendedJson, toExtendedJson } from "./ejson.js";
 
 /** Parameters shared by collection-scoped operations. */
-interface CollectionTarget {
+export interface CollectionTarget {
   database: string;
   collection: string;
 }
@@ -74,10 +74,34 @@ export async function find(client: MongoClient, params: FindParams): Promise<unk
   return toExtendedJson(documents);
 }
 
+export async function findOne(client: MongoClient, params: FindParams): Promise<unknown> {
+  const coll = client.db(params.database).collection(params.collection);
+  const options: FindOptions = {};
+  if (params.projection !== undefined) options.projection = fromExtendedJson<Document>(params.projection);
+  if (params.sort !== undefined) options.sort = fromExtendedJson<Sort>(params.sort);
+  const document = await coll.findOne(fromExtendedJson<Document>(params.filter ?? {}), options);
+  return toExtendedJson(document);
+}
+
 export async function count(client: MongoClient, params: CountParams): Promise<unknown> {
   const coll = client.db(params.database).collection(params.collection);
   const total = await coll.countDocuments(fromExtendedJson<Document>(params.filter ?? {}));
   return { count: total };
+}
+
+export async function explain(client: MongoClient, params: FindParams): Promise<unknown> {
+  const coll = client.db(params.database).collection(params.collection);
+  const cursor = coll.find(fromExtendedJson<Document>(params.filter ?? {}));
+  if (params.projection !== undefined) cursor.project(fromExtendedJson<Document>(params.projection));
+  if (params.sort !== undefined) cursor.sort(fromExtendedJson<Sort>(params.sort));
+  const result = await cursor.explain();
+  return toExtendedJson(result);
+}
+
+export async function listIndexes(client: MongoClient, params: CollectionTarget): Promise<unknown> {
+  const coll = client.db(params.database).collection(params.collection);
+  const indexes = await coll.listIndexes().toArray();
+  return toExtendedJson(indexes);
 }
 
 export async function aggregate(client: MongoClient, params: AggregateParams): Promise<unknown> {

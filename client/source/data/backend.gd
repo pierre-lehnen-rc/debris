@@ -54,6 +54,66 @@ func find(
 	return await _post("/api/find", body)
 
 
+func find_one(
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	filter: Dictionary = {},
+	options: Dictionary = {},
+) -> Dictionary:
+	var body := {
+		"connection": connection,
+		"database": database,
+		"collection": collection,
+		"filter": filter,
+	}
+	for key in ["projection", "sort"]:
+		if options.has(key):
+			body[key] = options[key]
+	return await _post("/api/findOne", body)
+
+
+func count(
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	filter: Dictionary = {},
+) -> Dictionary:
+	return await _post("/api/count", {
+		"connection": connection,
+		"database": database,
+		"collection": collection,
+		"filter": filter,
+	})
+
+
+func explain(
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	filter: Dictionary = {},
+	options: Dictionary = {},
+) -> Dictionary:
+	var body := {
+		"connection": connection,
+		"database": database,
+		"collection": collection,
+		"filter": filter,
+	}
+	for key in ["projection", "sort"]:
+		if options.has(key):
+			body[key] = options[key]
+	return await _post("/api/explain", body)
+
+
+func list_indexes(connection: Dictionary, database: String, collection: String) -> Dictionary:
+	return await _post("/api/listIndexes", {
+		"connection": connection,
+		"database": database,
+		"collection": collection,
+	})
+
+
 func ping(connection: Dictionary) -> Dictionary:
 	return await _post("/api/ping", {"connection": connection})
 

@@ -14,6 +14,10 @@ signal status_changed(text: String)
 ## database workspace can relabel the tab.
 signal title_changed(title: String)
 
+## Collection operations offered by the function dropdown. Only "find" paginates
+## and yields a stream of documents; the rest return a single/bounded result.
+const FUNCTIONS := ["find", "countDocuments", "explain", "listIndexes", "findOne"]
+
 var connection_config: Dictionary = {}
 ## Filter from the last "Run". Page navigation reuses it so paging through
 ## results doesn't re-parse (and possibly choke on) in-progress editor edits.
@@ -21,6 +25,8 @@ var _active_filter: Dictionary = {}
 ## Extra find options (projection, sort) from the last "Run", captured alongside
 ## the filter so paging reuses them too.
 var _active_options: Dictionary = {}
+## Operation from the last "Run" (one of FUNCTIONS), so paging reuses it.
+var _active_function := "find"
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -32,6 +38,7 @@ var _has_run := false
 @onready var _run_btn: Button = %RunBtn
 @onready var _target_label: Label = %TargetLabel
 @onready var _collection_edit: LineEdit = %CollectionEdit
+@onready var _func_option: OptionButton = %FuncOption
 @onready var _options_btn: Button = %OptionsBtn
 @onready var _query_edit: CodeEdit = %QueryEdit
 @onready var _options_edit: CodeEdit = %OptionsEdit
@@ -72,6 +79,10 @@ func is_empty() -> bool:
 func _ready() -> void:
 	_apply_style()
 
+	for fn in FUNCTIONS:
+		_func_option.add_item(fn)
+	_func_option.select(0)
+
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name
 	if not collection_name.is_empty():
@@ -93,6 +104,13 @@ func _apply_style() -> void:
 ## Show/hide the secondary options editor when the "Options" button is toggled.
 func _on_options_toggled(on: bool) -> void:
 	_options_edit.visible = on
+
+
+## Update the pager visibility when the operation changes: only find streams
+## pages; the others return a single/bounded result.
+func _on_function_selected(index: int) -> void:
+	var fn: String = FUNCTIONS[index] if index >= 0 and index < FUNCTIONS.size() else "find"
+	_results.set_pagination_enabled(fn == "find")
 
 
 ## Parse the editor's filter and (re)load from the first page. The collection is
@@ -119,6 +137,7 @@ func _run() -> void:
 
 	_active_filter = parsed["value"]
 	_active_options = options
+	_active_function = FUNCTIONS[_func_option.selected] if _func_option.selected >= 0 else "find"
 	_has_run = true
 	_results.request_first_page()
 
@@ -152,33 +171,56 @@ func _retarget_collection() -> void:
 	title_changed.emit(tab_title())
 
 
-## Fetch a single page from the backend using the pager's offset/limit and the
-## last-run filter. Wired to ResultsView.page_requested.
+## Fetch a single page (or bounded result) from the backend, dispatching to the
+## operation captured at the last Run. Only find uses the pager's offset/limit;
+## the others ignore them. Wired to ResultsView.page_requested.
 func _fetch_page(offset: int, limit: int) -> void:
 	if collection_name.is_empty():
 		_results.show_page([])
 		return
 
+	var spec := Backend.to_spec(connection_config)
 	_run_btn.disabled = true
-	status_changed.emit("Running find on %s.%s…" % [database_name, collection_name])
-	var result: Dictionary = await Backend.find(
-		Backend.to_spec(connection_config),
-		database_name,
-		collection_name,
-		_active_filter,
-		limit,
-		offset,
-		_active_options,
-	)
+	status_changed.emit("Running %s on %s.%s…" % [_active_function, database_name, collection_name])
+
+	var result: Dictionary
+	match _active_function:
+		"findOne":
+			result = await Backend.find_one(spec, database_name, collection_name, _active_filter, _active_options)
+		"countDocuments":
+			result = await Backend.count(spec, database_name, collection_name, _active_filter)
+		"explain":
+			result = await Backend.explain(spec, database_name, collection_name, _active_filter, _active_options)
+		"listIndexes":
+			result = await Backend.list_indexes(spec, database_name, collection_name)
+		_:
+			result = await Backend.find(spec, database_name, collection_name, _active_filter, limit, offset, _active_options)
 	_run_btn.disabled = false
 
 	if not result.get("ok", false):
 		_results.show_page([])
-		status_changed.emit("Find failed: %s" % result.get("error", "unknown error"))
+		status_changed.emit("%s failed: %s" % [_active_function, result.get("error", "unknown error")])
 		return
 
-	var docs: Array = result.get("data") if result.get("data") is Array else []
-	_results.show_page(docs)
-	var first := (offset + 1) if docs.size() > 0 else 0
-	var last := offset + docs.size()
-	status_changed.emit("%s.%s — showing %d–%d" % [database_name, collection_name, first, last])
+	var rows := _rows_from(result.get("data"))
+	_results.show_page(rows)
+	if _active_function == "find":
+		var first := (offset + 1) if rows.size() > 0 else 0
+		var last := offset + rows.size()
+		status_changed.emit("%s.%s — showing %d–%d" % [database_name, collection_name, first, last])
+	else:
+		status_changed.emit("%s.%s — %s returned %d row%s" % [
+			database_name, collection_name, _active_function,
+			rows.size(), "" if rows.size() == 1 else "s",
+		])
+
+
+## Normalise a response payload into the rows the results view shows: arrays pass
+## through (find, listIndexes), a single object becomes one row (findOne, count,
+## explain), and null/other becomes no rows (e.g. findOne with no match).
+func _rows_from(data: Variant) -> Array:
+	if data is Array:
+		return data
+	if data is Dictionary:
+		return [data]
+	return []
