@@ -154,13 +154,18 @@ func _populate() -> void:
 		# live listing); a bare, unconnected connection stays folded.
 		conn_item.set_collapsed(conn["databases"].is_empty())
 
+		var default_db: String = conn.get("default_database", "")
 		for db in conn["databases"]:
+			var is_default: bool = not default_db.is_empty() and db["name"] == default_db
+			var db_color := AppTheme.ACCENT if is_default else AppTheme.TEXT
 			var db_item := _tree.create_item(conn_item)
-			db_item.set_text(0, db["name"])
-			db_item.set_custom_color(0, AppTheme.TEXT)
+			db_item.set_text(0, "%s ★" % db["name"] if is_default else db["name"])
+			db_item.set_custom_color(0, db_color)
+			if is_default:
+				db_item.set_tooltip_text(0, "Default database")
 			db_item.set_icon(0, ICON_DATABASE)
 			db_item.set_icon_max_width(0, ICON_SIZE)
-			db_item.set_icon_modulate(0, AppTheme.TEXT)
+			db_item.set_icon_modulate(0, db_color)
 			db_item.set_metadata(0, {
 				META_TYPE: "database",
 				"conn_index": ci,
