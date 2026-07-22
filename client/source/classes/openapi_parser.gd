@@ -112,13 +112,28 @@ static func _flatten_object(schema: Dictionary, location: String) -> Array:
 
 static func _param(name: String, location: String, schema: Dictionary,
 		required: bool, description: String) -> Dictionary:
-	return {
+	var p := {
 		"name": name,
 		"in": location,
 		"type": _type(schema),
 		"required": required,
 		"description": description,
 	}
+	# Carry through the extra schema hints the form uses to pick a richer input:
+	# `format` (date/date-time → date picker), `enum` (→ dropdown), numeric
+	# bounds and a default value.
+	var format := str(schema.get("format", ""))
+	if not format.is_empty():
+		p["format"] = format
+	if schema.get("enum") is Array and not (schema["enum"] as Array).is_empty():
+		p["enum"] = schema["enum"]
+	if schema.has("default"):
+		p["default"] = schema["default"]
+	if schema.has("minimum"):
+		p["minimum"] = schema["minimum"]
+	if schema.has("maximum"):
+		p["maximum"] = schema["maximum"]
+	return p
 
 
 ## Map a JSON-schema type to the form's input kinds. Nested objects/arrays fall

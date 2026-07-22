@@ -104,12 +104,31 @@ func _build_form() -> void:
 		_params_grid.add_child(input)
 
 
+## Pick an input widget matched to the param's schema: a checkbox for bools, a
+## dropdown for enums, a calendar picker for date/date-time fields, a spin box
+## for integers, and a plain text field otherwise.
 func _make_input(param: Dictionary) -> Control:
 	var type: String = param.get("type", "string")
+	var format: String = str(param.get("format", ""))
+	var choices: Array = param["enum"] if param.get("enum") is Array else []
+
 	if type == "bool":
 		var check := CheckBox.new()
 		check.button_pressed = bool(param.get("default", false))
 		return check
+
+	if not choices.is_empty():
+		return _make_enum(param, choices)
+
+	if format == "date" or format == "date-time":
+		var picker := DatePicker.create(format == "date-time", param.get("description", ""))
+		if param.has("default"):
+			picker.set_value(str(param["default"]))
+		picker.submitted.connect(_send)
+		return picker
+
+	if type == "int":
+		return _make_int(param)
 
 	var edit := LineEdit.new()
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -121,24 +140,74 @@ func _make_input(param: Dictionary) -> Control:
 	return edit
 
 
-## Read the current form values into a request args Dictionary. Empty text fields
-## are omitted so optional params don't get sent blank; booleans are always sent.
+## A dropdown for an enum param. Optional enums get a leading blank entry (null
+## metadata) so they can be left unset; the chosen value is stored as item
+## metadata to preserve its original type.
+func _make_enum(param: Dictionary, choices: Array) -> OptionButton:
+	var opt := OptionButton.new()
+	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if not bool(param.get("required", false)):
+		opt.add_item("")
+		opt.set_item_metadata(opt.item_count - 1, null)
+	var default_val: Variant = param.get("default")
+	for choice in choices:
+		opt.add_item(str(choice))
+		opt.set_item_metadata(opt.item_count - 1, choice)
+		if default_val != null and choice == default_val:
+			opt.select(opt.item_count - 1)
+	return opt
+
+
+func _make_int(param: Dictionary) -> SpinBox:
+	var spin := SpinBox.new()
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spin.step = 1
+	# Don't clamp to the schema bounds — they're hints, not hard limits.
+	spin.allow_greater = true
+	spin.allow_lesser = true
+	spin.min_value = float(param.get("minimum", 0))
+	spin.max_value = float(param.get("maximum", 1_000_000))
+	if param.has("default"):
+		spin.value = float(param["default"])
+	# Pressing Enter in the inner field sends the request.
+	spin.get_line_edit().text_submitted.connect(func(_t: String) -> void: _send())
+	return spin
+
+
+## Read the current form values into a request args Dictionary. Blank text/date
+## fields and unset dropdowns are omitted so optional params don't get sent
+## empty; checkboxes, dropdowns with a value and spin boxes are always sent.
 func _gather() -> Dictionary:
 	var args: Dictionary = {}
 	for p in _endpoint.form_params():
 		var name: String = p.get("name", "")
-		var type: String = p.get("type", "string")
 		var input: Control = _inputs.get(name)
 		if input == null:
 			continue
-		if input is CheckBox:
-			args[name] = (input as CheckBox).button_pressed
-		else:
-			var text: String = (input as LineEdit).text.strip_edges()
-			if text.is_empty():
-				continue
-			args[name] = int(text) if type == "int" else text
+		var value: Variant = _value_of(input)
+		if value == null:
+			continue
+		args[name] = value
 	return args
+
+
+## Pull the current value from one input widget. Returns null when the field is
+## blank/unset so _gather can omit it.
+func _value_of(input: Control) -> Variant:
+	if input is CheckBox:
+		return (input as CheckBox).button_pressed
+	if input is OptionButton:
+		var opt := input as OptionButton
+		return opt.get_item_metadata(opt.selected) if opt.selected >= 0 else null
+	if input is SpinBox:
+		return int((input as SpinBox).value)
+	if input is DatePicker:
+		var iso := (input as DatePicker).get_value()
+		return null if iso.is_empty() else iso
+	if input is LineEdit:
+		var text := (input as LineEdit).text.strip_edges()
+		return null if text.is_empty() else text
+	return null
 
 
 # Requests --------------------------------------------------------------------
