@@ -12,6 +12,11 @@ min_size = Vector2i(480, 420)
 theme = ExtResource("1_p78re")
 script = ExtResource("2_2tupt")
 
+[node name="Bg" type="Panel" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
 [node name="Margin" type="MarginContainer" parent="." unique_id=790974713]
 anchors_preset = 15
 anchor_right = 1.0

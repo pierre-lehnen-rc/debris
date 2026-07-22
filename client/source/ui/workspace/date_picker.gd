@@ -153,8 +153,8 @@ func _open_popup() -> void:
 		_view_month = date["month"]
 	_render_calendar()
 	_popup.reset_size()
-	# Embedded sub-windows position popups in the parent viewport's space.
-	_popup.position = Vector2i(global_position + Vector2(0, size.y))
+	# Native pop-ups position in absolute screen coordinates; drop below the field.
+	_popup.position = Vector2i(get_screen_position() + Vector2(0, size.y))
 	_popup.popup()
 
 

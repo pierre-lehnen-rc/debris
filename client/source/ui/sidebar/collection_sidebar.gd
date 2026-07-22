@@ -194,8 +194,8 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	_context_menu.add_separator()
 	_context_menu.add_item("Copy collection name", Action.COPY_NAME)
 	_context_menu.reset_size()
-	# Embedded sub-windows position popups in the parent viewport's space.
-	_context_menu.position = Vector2i(_tree.get_global_mouse_position())
+	# Native pop-ups position in absolute screen coordinates.
+	_context_menu.position = DisplayServer.mouse_get_position()
 	_context_menu.popup()
 
 

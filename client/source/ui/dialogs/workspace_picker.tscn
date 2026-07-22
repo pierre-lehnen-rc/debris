@@ -13,6 +13,11 @@ min_size = Vector2i(360, 320)
 theme = ExtResource("1_theme")
 script = ExtResource("2_wspick")
 
+[node name="Bg" type="Panel" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
 [node name="Margin" type="MarginContainer" parent="."]
 anchors_preset = 15
 anchor_right = 1.0

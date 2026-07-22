@@ -104,7 +104,8 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	_doc_menu.add_separator()
 	_doc_menu.add_item("Delete Document", DocAction.DELETE)
 	_doc_menu.reset_size()
-	_doc_menu.position = Vector2i(get_global_mouse_position())
+	# Native pop-ups position in absolute screen coordinates.
+	_doc_menu.position = DisplayServer.mouse_get_position()
 	_doc_menu.popup()
 
 
