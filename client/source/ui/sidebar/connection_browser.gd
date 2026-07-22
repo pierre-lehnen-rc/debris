@@ -50,26 +50,41 @@ func _load_connections() -> void:
 			"name": "Local",
 			"host": "127.0.0.1:27017",
 			"connected": false,
+			"default_database": "",
 			"databases": [],
 		}]
 		_persist()
 		return
 	_connections = []
 	for saved in Store.connections():
+		var default_db: String = saved.get("default_database", "")
 		_connections.append({
 			"name": saved.get("name", ""),
 			"host": saved.get("host", ""),
 			"connected": false,
-			"databases": [],
+			"default_database": default_db,
+			# Pre-load the default database so it can be opened without first
+			# listing every database on the server.
+			"databases": _seed_databases(default_db),
 		})
 
 
-## Write the persistable part of each connection (name + host) back to disk;
-## the live database list and connected flag are runtime-only.
+## The initial visible database list for a not-yet-connected connection: just its
+## configured default database (if any), so it shows in the tree straight away.
+static func _seed_databases(default_db: String) -> Array:
+	return [{"name": default_db}] if not default_db.is_empty() else []
+
+
+## Write the persistable part of each connection (name, host, default database)
+## back to disk; the live database list and connected flag are runtime-only.
 func _persist() -> void:
 	var out: Array = []
 	for conn in _connections:
-		out.append({"name": conn.get("name", ""), "host": conn.get("host", "")})
+		out.append({
+			"name": conn.get("name", ""),
+			"host": conn.get("host", ""),
+			"default_database": conn.get("default_database", ""),
+		})
 	Store.save_connections(out)
 
 
@@ -80,11 +95,13 @@ func _on_add_pressed() -> void:
 
 # Public mutations (called by Main after the connection dialog) ----------------
 func add_connection(config: Dictionary) -> void:
+	var default_db: String = config.get("default_database", "")
 	_connections.append({
 		"name": config.get("name", "New Connection"),
 		"host": config.get("host", ""),
 		"connected": false,
-		"databases": config.get("databases", []),
+		"default_database": default_db,
+		"databases": _seed_databases(default_db),
 	})
 	_persist()
 	_populate()
@@ -93,8 +110,14 @@ func add_connection(config: Dictionary) -> void:
 func update_connection(index: int, config: Dictionary) -> void:
 	if index < 0 or index >= _connections.size():
 		return
-	_connections[index]["name"] = config.get("name", _connections[index]["name"])
-	_connections[index]["host"] = config.get("host", _connections[index]["host"])
+	var conn: Dictionary = _connections[index]
+	conn["name"] = config.get("name", conn["name"])
+	conn["host"] = config.get("host", conn["host"])
+	conn["default_database"] = config.get("default_database", conn.get("default_database", ""))
+	# Refresh the pre-loaded default in the tree, unless we're already showing the
+	# live list from an active connection (which we don't want to clobber).
+	if not conn.get("connected", false):
+		conn["databases"] = _seed_databases(conn["default_database"])
 	_persist()
 	_populate()
 
@@ -127,7 +150,9 @@ func _populate() -> void:
 			"conn_index": ci,
 			"connection": conn["name"],
 		})
-		conn_item.set_collapsed(not conn.get("connected", false))
+		# Expand whenever there are databases to show (a pre-loaded default or a
+		# live listing); a bare, unconnected connection stays folded.
+		conn_item.set_collapsed(conn["databases"].is_empty())
 
 		for db in conn["databases"]:
 			var db_item := _tree.create_item(conn_item)

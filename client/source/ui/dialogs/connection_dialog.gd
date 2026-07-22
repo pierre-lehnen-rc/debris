@@ -89,6 +89,7 @@ func open_edit(index: int, config: Dictionary) -> void:
 		_port_edit.text = parts[1]
 	else:
 		_host_edit.text = hostport
+	_default_db_edit.text = config.get("default_database", "")
 	popup_centered(Vector2i(540, 460))
 
 
@@ -116,6 +117,7 @@ func _reset() -> void:
 	_ssh_user_edit.text = ""
 	_ssl_check.button_pressed = false
 	_ssl_ca_edit.text = ""
+	_default_db_edit.text = ""
 	_status.text = ""
 	_set_enabled(_auth_controls, false)
 	_set_enabled(_ssh_controls, false)
@@ -134,6 +136,7 @@ func _gather() -> Dictionary:
 		"host": "%s:%s" % [host, port],
 		"connected": false,
 		"databases": [],
+		"default_database": _default_db_edit.text.strip_edges(),
 		"auth": {
 			"enabled": _auth_check.button_pressed,
 			"database": _auth_db_edit.text,
