@@ -30,15 +30,31 @@ var _workspaces: Array = []
 
 
 func _ready() -> void:
-	# Seed a localhost workspace so there's something to start from.
-	_workspaces = [{
-		"name": "Local",
-		"url": "http://localhost:3000",
-		"user_id": "",
-		"token": "",
-	}]
+	_load_workspaces()
 	_apply_style()
 	_populate()
+
+
+## Load the saved workspaces. On the very first run (nothing ever saved) seed a
+## localhost workspace so there's something to start from, and persist it.
+func _load_workspaces() -> void:
+	if not Store.has("workspaces"):
+		_workspaces = [{
+			"name": "Local",
+			"url": "http://localhost:3000",
+			"user_id": "",
+			"token": "",
+		}]
+		Store.save_workspaces(_workspaces)
+		return
+	_workspaces = []
+	for saved in Store.workspaces():
+		_workspaces.append({
+			"name": saved.get("name", ""),
+			"url": saved.get("url", ""),
+			"user_id": saved.get("user_id", ""),
+			"token": saved.get("token", ""),
+		})
 
 
 func open() -> void:
@@ -54,6 +70,7 @@ func add_workspace(config: Dictionary) -> void:
 		"user_id": config.get("user_id", ""),
 		"token": config.get("token", ""),
 	})
+	Store.save_workspaces(_workspaces)
 	_populate()
 
 
@@ -66,6 +83,7 @@ func update_workspace(index: int, config: Dictionary) -> void:
 		"user_id": config.get("user_id", _workspaces[index].get("user_id", "")),
 		"token": config.get("token", _workspaces[index].get("token", "")),
 	}
+	Store.save_workspaces(_workspaces)
 	_populate()
 
 
@@ -165,6 +183,7 @@ func _on_context_action(id: int) -> void:
 		Action.REMOVE:
 			var removed: String = _workspaces[_menu_target].get("name", "")
 			_workspaces.remove_at(_menu_target)
+			Store.save_workspaces(_workspaces)
 			_populate()
 			_open_btn.disabled = true
 			status_changed.emit("Removed workspace '%s'" % removed)

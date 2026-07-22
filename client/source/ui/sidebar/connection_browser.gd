@@ -36,16 +36,41 @@ var _connections: Array = []
 
 
 func _ready() -> void:
-	# Seed a single localhost connection so there's something to connect to out
-	# of the box; databases are then loaded from the backend.
-	_connections = [{
-		"name": "Local",
-		"host": "127.0.0.1:27017",
-		"connected": false,
-		"databases": [],
-	}]
+	_load_connections()
 	_apply_style()
 	_populate()
+
+
+## Load the saved connections, rehydrating the transient runtime fields. On the
+## very first run (nothing ever saved) seed a single localhost connection so
+## there's something to connect to out of the box, and persist it.
+func _load_connections() -> void:
+	if not Store.has("connections"):
+		_connections = [{
+			"name": "Local",
+			"host": "127.0.0.1:27017",
+			"connected": false,
+			"databases": [],
+		}]
+		_persist()
+		return
+	_connections = []
+	for saved in Store.connections():
+		_connections.append({
+			"name": saved.get("name", ""),
+			"host": saved.get("host", ""),
+			"connected": false,
+			"databases": [],
+		})
+
+
+## Write the persistable part of each connection (name + host) back to disk;
+## the live database list and connected flag are runtime-only.
+func _persist() -> void:
+	var out: Array = []
+	for conn in _connections:
+		out.append({"name": conn.get("name", ""), "host": conn.get("host", "")})
+	Store.save_connections(out)
 
 
 ## Wired in connection_browser.tscn from the header "+" button.
@@ -61,6 +86,7 @@ func add_connection(config: Dictionary) -> void:
 		"connected": false,
 		"databases": config.get("databases", []),
 	})
+	_persist()
 	_populate()
 
 
@@ -69,6 +95,7 @@ func update_connection(index: int, config: Dictionary) -> void:
 		return
 	_connections[index]["name"] = config.get("name", _connections[index]["name"])
 	_connections[index]["host"] = config.get("host", _connections[index]["host"])
+	_persist()
 	_populate()
 
 
@@ -198,6 +225,7 @@ func _on_context_action(id: int) -> void:
 			edit_connection_requested.emit(ci, _connections[ci].duplicate(true))
 		Action.REMOVE_CONNECTION:
 			_connections.remove_at(ci)
+			_persist()
 			_populate()
 		Action.REFRESH:
 			if _connections[ci].get("connected", false):
