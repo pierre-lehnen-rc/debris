@@ -37,6 +37,10 @@ func _ready() -> void:
 	bar.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ALWAYS
 	bar.tab_close_pressed.connect(_on_tab_close_pressed)
 
+	# Surface failures immediately: any failed action pops the activity log open
+	# (or focuses it if already open) so the user sees what went wrong.
+	ActivityLog.entry_added.connect(_on_activity_log_entry)
+
 
 ## Relays a child's status message to the status bar. Wired in main.tscn.
 func _on_status_changed(text: String) -> void:
@@ -92,6 +96,12 @@ func _open_workspace_tab(workspace: Dictionary) -> WorkspaceTab:
 
 
 # Activity log tab ------------------------------------------------------------
+## A logged action failed — reveal the activity log so the error is visible.
+func _on_activity_log_entry(entry: Dictionary) -> void:
+	if not entry.get("ok", false):
+		_open_activity_log_tab()
+
+
 ## Open the activity log, or focus it if it's already open (only one is useful).
 func _open_activity_log_tab() -> void:
 	for i in _tabs.get_tab_count():
