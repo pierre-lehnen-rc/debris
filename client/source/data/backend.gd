@@ -35,6 +35,7 @@ func find(
 	filter: Dictionary = {},
 	limit: int = 0,
 	skip: int = 0,
+	options: Dictionary = {},
 ) -> Dictionary:
 	var body := {
 		"connection": connection,
@@ -46,6 +47,10 @@ func find(
 		body["limit"] = limit
 	if skip > 0:
 		body["skip"] = skip
+	# Extra find options (projection, sort) the user typed in the query tab.
+	for key in ["projection", "sort"]:
+		if options.has(key):
+			body[key] = options[key]
 	return await _post("/api/find", body)
 
 

@@ -33,6 +33,14 @@ size_flags_horizontal = 3
 tooltip_text = "Collection to query — edit and press Run (or Enter) to load another"
 placeholder_text = "collection name"
 
+[node name="OptionsBtn" type="Button" parent="Toolbar/Row" unique_id=1949800039]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+tooltip_text = "Show a second JSON input for query options (projection, sort)"
+focus_mode = 0
+text = "Options"
+
 [node name="Split" type="VSplitContainer" parent="." unique_id=664523523]
 unique_name_in_owner = true
 layout_mode = 2
@@ -40,11 +48,25 @@ size_flags_vertical = 3
 split_offsets = PackedInt32Array(140)
 split_offset = 140
 
-[node name="QueryEdit" type="CodeEdit" parent="Split" unique_id=1514647853]
-unique_name_in_owner = true
+[node name="Editors" type="HBoxContainer" parent="Split" unique_id=664523524]
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="QueryEdit" type="CodeEdit" parent="Split/Editors" unique_id=1514647853]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 placeholder_text = "{ } — JSON filter, e.g. { \"status\": \"active\" }"
+tab_input_mode = false
+gutters_draw_line_numbers = true
+
+[node name="OptionsEdit" type="CodeEdit" parent="Split/Editors" unique_id=1514647854]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "{ } — options, e.g. { \"projection\": { \"name\": 1 }, \"sort\": { \"_id\": -1 } }"
 tab_input_mode = false
 gutters_draw_line_numbers = true
 
@@ -54,4 +76,5 @@ layout_mode = 2
 
 [connection signal="pressed" from="Toolbar/Row/RunBtn" to="." method="_run"]
 [connection signal="text_submitted" from="Toolbar/Row/CollectionEdit" to="." method="_run"]
+[connection signal="toggled" from="Toolbar/Row/OptionsBtn" to="." method="_on_options_toggled"]
 [connection signal="page_requested" from="Split/Results" to="." method="_fetch_page"]

@@ -18,6 +18,9 @@ var connection_config: Dictionary = {}
 ## Filter from the last "Run". Page navigation reuses it so paging through
 ## results doesn't re-parse (and possibly choke on) in-progress editor edits.
 var _active_filter: Dictionary = {}
+## Extra find options (projection, sort) from the last "Run", captured alongside
+## the filter so paging reuses them too.
+var _active_options: Dictionary = {}
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -29,7 +32,9 @@ var _has_run := false
 @onready var _run_btn: Button = %RunBtn
 @onready var _target_label: Label = %TargetLabel
 @onready var _collection_edit: LineEdit = %CollectionEdit
+@onready var _options_btn: Button = %OptionsBtn
 @onready var _query_edit: CodeEdit = %QueryEdit
+@onready var _options_edit: CodeEdit = %OptionsEdit
 @onready var _results: ResultsView = %Results
 
 
@@ -85,6 +90,11 @@ func _apply_style() -> void:
 	_target_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 
+## Show/hide the secondary options editor when the "Options" button is toggled.
+func _on_options_toggled(on: bool) -> void:
+	_options_edit.visible = on
+
+
 ## Parse the editor's filter and (re)load from the first page. The collection is
 ## read from the editable field each run, so it can be retargeted freely. The
 ## results view then drives subsequent pages back through _fetch_page.
@@ -103,9 +113,33 @@ func _run() -> void:
 		status_changed.emit("Invalid filter: expected an object")
 		return
 
+	var options: Variant = _parse_options()
+	if options == null:
+		return  # _parse_options already reported the error
+
 	_active_filter = parsed["value"]
+	_active_options = options
 	_has_run = true
 	_results.request_first_page()
+
+
+## Parse the options editor (projection/sort) into a Dictionary. Returns an empty
+## Dictionary when the editor is hidden or blank, or null when the JSON is invalid
+## (after emitting a status message).
+func _parse_options() -> Variant:
+	if not _options_edit.visible:
+		return {}
+	var text := _options_edit.text.strip_edges()
+	if text.is_empty():
+		return {}
+	var parsed: Dictionary = LaxJson.parse_string(text)
+	if not parsed.get("ok", false):
+		status_changed.emit("Invalid options: %s" % parsed.get("error", "parse error"))
+		return null
+	if not (parsed.get("value") is Dictionary):
+		status_changed.emit("Invalid options: expected an object")
+		return null
+	return parsed["value"]
 
 
 ## Sync collection_name from the editable field, updating the tab title when it
@@ -134,6 +168,7 @@ func _fetch_page(offset: int, limit: int) -> void:
 		_active_filter,
 		limit,
 		offset,
+		_active_options,
 	)
 	_run_btn.disabled = false
 
