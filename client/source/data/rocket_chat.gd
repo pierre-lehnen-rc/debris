@@ -38,10 +38,16 @@ func _request(
 ) -> Dictionary:
 	var started := Time.get_ticks_msec()
 	var outcome := await _do_request(workspace, method, path, query, body)
+	var params := {}
+	if not query.is_empty():
+		params["query"] = query
+	if not body.is_empty():
+		params["body"] = body
 	ActivityLog.record({
 		"source": "rocketchat",
 		"action": _method_name(method),
 		"target": path,
+		"params": params,
 		"ok": outcome.get("ok", false),
 		"result": "HTTP %d" % outcome.get("status", 0) if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),

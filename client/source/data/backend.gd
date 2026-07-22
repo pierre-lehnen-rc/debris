@@ -194,11 +194,24 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 		"source": "mongo",
 		"action": path.trim_prefix("/api/"),
 		"target": target,
+		"params": _params_from(body),
 		"ok": outcome.get("ok", false),
 		"result": _summarize(outcome.get("data")) if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
 	})
+
+
+## The query inputs sent with a request — the filter, options and pagination —
+## as a standalone object so the log tree can collapse them under "params". The
+## connection (with any credentials) and the database/collection (already shown
+## as the target) are left out.
+func _params_from(body: Dictionary) -> Dictionary:
+	var params := body.duplicate(true)
+	params.erase("connection")
+	params.erase("database")
+	params.erase("collection")
+	return params
 
 
 ## Human-readable summary of a response payload for the log: arrays report their

@@ -12,6 +12,7 @@ extends Node
 ##     source: String,   # "mongo" | "rocketchat"
 ##     action: String,   # operation name, e.g. "find" or "GET /api/…"
 ##     target: String,   # what it acted on, e.g. "mydb.users" or a URL path
+##     params: Dictionary, # inputs sent (filter, options, pagination, query, body)
 ##     ok: bool,         # whether the call succeeded
 ##     result: String,   # human summary of the payload ("28 results", …)
 ##     error: String,    # error message when ok is false, else ""
@@ -36,6 +37,7 @@ func record(entry: Dictionary) -> void:
 		"source": entry.get("source", ""),
 		"action": entry.get("action", ""),
 		"target": entry.get("target", ""),
+		"params": entry.get("params", {}),
 		"ok": entry.get("ok", false),
 		"result": entry.get("result", ""),
 		"error": entry.get("error", ""),
