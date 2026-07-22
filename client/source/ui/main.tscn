@@ -64,6 +64,12 @@ layout_mode = 2
 focus_mode = 0
 text = "Open Workspace…"
 
+[node name="ActivityLogBtn" type="Button" parent="Box/Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "Activity Log"
+
 [node name="MainTabs" type="TabContainer" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -90,6 +96,7 @@ text = "Ready"
 
 [connection signal="pressed" from="Box/Toolbar/Row/OpenDbBtn" to="." method="_open_picker"]
 [connection signal="pressed" from="Box/Toolbar/Row/OpenWsBtn" to="." method="_open_workspace_picker"]
+[connection signal="pressed" from="Box/Toolbar/Row/ActivityLogBtn" to="." method="_open_activity_log_tab"]
 [connection signal="id_pressed" from="Box/MenuBar/File" to="." method="_on_file_menu"]
 [connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
 [connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]

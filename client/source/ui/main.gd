@@ -10,6 +10,7 @@ extends Control
 
 const DATABASE_TAB_SCENE := preload("res://source/ui/database/database_tab.tscn")
 const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.tscn")
+const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.tscn")
 
 @onready var _background: ColorRect = %Background
 @onready var _file_menu: PopupMenu = %File
@@ -90,6 +91,24 @@ func _open_workspace_tab(workspace: Dictionary) -> WorkspaceTab:
 	return tab
 
 
+# Activity log tab ------------------------------------------------------------
+## Open the activity log, or focus it if it's already open (only one is useful).
+func _open_activity_log_tab() -> void:
+	for i in _tabs.get_tab_count():
+		if _tabs.get_tab_control(i) is ActivityLogTab:
+			_tabs.current_tab = i
+			return
+	var tab: ActivityLogTab = ACTIVITY_LOG_TAB_SCENE.instantiate()
+	tab.status_changed.connect(_on_status_changed)
+	tab.name = "log_%d" % _tab_counter
+	_tab_counter += 1
+	_tabs.add_child(tab)
+	var index := _tabs.get_tab_count() - 1
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.current_tab = index
+	_status_label.text = "Opened activity log"
+
+
 func _on_tab_close_pressed(tab_index: int) -> void:
 	var control := _tabs.get_tab_control(tab_index)
 	if control == null:
@@ -148,6 +167,8 @@ func _on_file_menu(id: int) -> void:
 			_open_picker()
 		2:  # Open Workspace…
 			_open_workspace_picker()
+		4:  # Activity Log
+			_open_activity_log_tab()
 		3:  # Quit
 			get_tree().quit()
 
@@ -181,6 +202,8 @@ func _populate_menus() -> void:
 	_file_menu.add_item("New Connection…", 0)
 	_file_menu.add_item("Open Database…", 1)
 	_file_menu.add_item("Open Workspace…", 2)
+	_file_menu.add_separator()
+	_file_menu.add_item("Activity Log", 4)
 	_file_menu.add_separator()
 	_file_menu.add_item("Quit", 3)
 

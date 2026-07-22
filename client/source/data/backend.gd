@@ -145,6 +145,13 @@ static func to_spec(conn: Dictionary) -> Dictionary:
 
 # Internals -------------------------------------------------------------------
 func _post(path: String, body: Dictionary) -> Dictionary:
+	var started := Time.get_ticks_msec()
+	var outcome := await _do_post(path, body)
+	_log(path, body, outcome, Time.get_ticks_msec() - started)
+	return outcome
+
+
+func _do_post(path: String, body: Dictionary) -> Dictionary:
 	var http := HTTPRequest.new()
 	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)
@@ -174,3 +181,38 @@ func _post(path: String, body: Dictionary) -> Dictionary:
 	if parsed is Dictionary and parsed.get("error") is Dictionary:
 		message = parsed["error"].get("message", message)
 	return {"ok": false, "data": parsed, "error": message}
+
+
+## Record a completed MongoDB action in the shared ActivityLog. The action is the
+## endpoint name (path minus the "/api/" prefix); the target is the collection
+## (or database) the body addressed.
+func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	var target: String = body.get("database", "")
+	if body.has("collection"):
+		target = "%s.%s" % [target, body["collection"]]
+	ActivityLog.record({
+		"source": "mongo",
+		"action": path.trim_prefix("/api/"),
+		"target": target,
+		"ok": outcome.get("ok", false),
+		"result": _summarize(outcome.get("data")) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": ms,
+	})
+
+
+## Human-readable summary of a response payload for the log: arrays report their
+## length, count-style objects report the number they carry, other objects count
+## as one result, and null/empty as none.
+func _summarize(data: Variant) -> String:
+	if data is Array:
+		var n: int = data.size()
+		return "%d result%s" % [n, "" if n == 1 else "s"]
+	if data is Dictionary:
+		for key in ["count", "deletedCount", "modifiedCount", "insertedCount", "matchedCount"]:
+			if data.has(key):
+				return "%s: %s" % [key, data[key]]
+		return "1 result"
+	if data == null:
+		return "no result"
+	return "1 result"

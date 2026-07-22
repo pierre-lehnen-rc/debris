@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/log/activity_log_tab.gd" id="1_altab"]
+[ext_resource type="PackedScene" path="res://source/ui/database/results_view.tscn" id="2_res"]
+
+[node name="ActivityLogTab" type="VBoxContainer"]
+theme_override_constants/separation = 0
+script = ExtResource("1_altab")
+
+[node name="Toolbar" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Toolbar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ACTIVITY LOG"
+
+[node name="RefreshBtn" type="Button" parent="Toolbar/Row"]
+layout_mode = 2
+focus_mode = 0
+text = "Refresh"
+
+[node name="ClearBtn" type="Button" parent="Toolbar/Row"]
+layout_mode = 2
+focus_mode = 0
+text = "Clear"
+
+[node name="Results" parent="." instance=ExtResource("2_res")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[connection signal="pressed" from="Toolbar/Row/RefreshBtn" to="." method="_on_refresh_pressed"]
+[connection signal="pressed" from="Toolbar/Row/ClearBtn" to="." method="_on_clear_pressed"]

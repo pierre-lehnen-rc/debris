@@ -36,6 +36,34 @@ func request(
 func _request(
 	workspace: Dictionary, method: int, path: String, query: Dictionary, body: Dictionary
 ) -> Dictionary:
+	var started := Time.get_ticks_msec()
+	var outcome := await _do_request(workspace, method, path, query, body)
+	ActivityLog.record({
+		"source": "rocketchat",
+		"action": _method_name(method),
+		"target": path,
+		"ok": outcome.get("ok", false),
+		"result": "HTTP %d" % outcome.get("status", 0) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": Time.get_ticks_msec() - started,
+	})
+	return outcome
+
+
+## Turn an HTTPClient.METHOD_* constant into its HTTP verb for the log.
+func _method_name(method: int) -> String:
+	match method:
+		HTTPClient.METHOD_GET: return "GET"
+		HTTPClient.METHOD_POST: return "POST"
+		HTTPClient.METHOD_PUT: return "PUT"
+		HTTPClient.METHOD_DELETE: return "DELETE"
+		HTTPClient.METHOD_PATCH: return "PATCH"
+		_: return "HTTP"
+
+
+func _do_request(
+	workspace: Dictionary, method: int, path: String, query: Dictionary, body: Dictionary
+) -> Dictionary:
 	var base := _base_url(workspace)
 	if base.is_empty():
 		return _err("Workspace has no URL", 0)
