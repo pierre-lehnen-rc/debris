@@ -59,8 +59,9 @@ func _ready() -> void:
 	_results.set_pagination_enabled(_endpoint.paginated)
 	_results.set_item_noun(_endpoint.noun())
 	_build_form()
-	# Run once on open so the tab shows data immediately, like a query tab.
-	_send()
+	# Don't auto-run: wait for the user to press Send so opening a tab (which may
+	# be a mutating POST/PUT/DELETE) never fires a request on its own.
+	status_changed.emit("%s %s — press Send to run" % [_endpoint.method, _endpoint.path])
 
 
 func _apply_style() -> void:
