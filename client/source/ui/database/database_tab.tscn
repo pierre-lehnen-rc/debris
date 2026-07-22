@@ -30,5 +30,6 @@ size_flags_horizontal = 3
 
 [connection signal="collection_activated" from="Split/CollectionSidebar" to="." method="_on_collection_activated"]
 [connection signal="insert_document_requested" from="Split/CollectionSidebar" to="." method="_on_insert_document_requested"]
+[connection signal="list_indexes_requested" from="Split/CollectionSidebar" to="." method="_on_list_indexes_requested"]
 [connection signal="status_changed" from="Split/CollectionSidebar" to="." method="_on_status_changed"]
 [connection signal="status_changed" from="Split/DatabaseWorkspace" to="." method="_on_status_changed"]

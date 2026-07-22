@@ -68,5 +68,12 @@ func _on_insert_document_requested(
 	status_changed.emit("Insert document into %s.%s" % [database, collection])
 
 
+func _on_list_indexes_requested(
+	connection: Dictionary, database: String, collection: String
+) -> void:
+	_workspace.open_collection(connection, database, collection, "listIndexes")
+	status_changed.emit("List indexes of %s.%s" % [database, collection])
+
+
 func _on_status_changed(text: String) -> void:
 	status_changed.emit(text)

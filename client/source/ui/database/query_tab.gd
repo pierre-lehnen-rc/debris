@@ -27,6 +27,8 @@ var _active_filter: Dictionary = {}
 var _active_options: Dictionary = {}
 ## Operation from the last "Run" (one of FUNCTIONS), so paging reuses it.
 var _active_function := "find"
+## Operation to pre-select when the tab first opens (set via configure()).
+var _initial_function := "find"
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -45,11 +47,14 @@ var _has_run := false
 @onready var _results: ResultsView = %Results
 
 
-func configure(connection: Dictionary, database: String, collection: String) -> void:
+func configure(
+	connection: Dictionary, database: String, collection: String, function: String = "find"
+) -> void:
 	connection_config = connection
 	connection_name = connection.get("name", "")
 	database_name = database
 	collection_name = collection
+	_initial_function = function
 
 
 ## Exposes the results view so callers (e.g. the sidebar's "Insert Document…"
@@ -81,7 +86,9 @@ func _ready() -> void:
 
 	for fn in FUNCTIONS:
 		_func_option.add_item(fn)
-	_func_option.select(0)
+	var initial_index: int = maxi(FUNCTIONS.find(_initial_function), 0)
+	_func_option.select(initial_index)
+	_on_function_selected(initial_index)  # Sync pager visibility to the operation.
 
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name

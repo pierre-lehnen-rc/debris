@@ -9,6 +9,7 @@ extends PanelContainer
 
 signal collection_activated(connection: Dictionary, database: String, collection: String)
 signal insert_document_requested(connection: Dictionary, database: String, collection: String)
+signal list_indexes_requested(connection: Dictionary, database: String, collection: String)
 signal status_changed(text: String)
 
 const META_TYPE := "type"  # "collection" | "collection_group" | "placeholder"
@@ -19,7 +20,7 @@ const ICON_SIZE := 16
 # Create grouping folders collapsed by default. (Will become a user pref later.)
 const COLLAPSE_GROUPS := true
 
-enum Action { VIEW_DOCUMENTS, INSERT_DOCUMENT, COPY_NAME }
+enum Action { VIEW_DOCUMENTS, LIST_INDEXES, INSERT_DOCUMENT, COPY_NAME }
 
 const SCHEMA_GENERIC := 0
 const SCHEMA_ROCKETCHAT := 1
@@ -190,6 +191,7 @@ func _on_item_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 		return
 	_context_menu.clear()
 	_context_menu.add_item("View Documents", Action.VIEW_DOCUMENTS)
+	_context_menu.add_item("List Indexes", Action.LIST_INDEXES)
 	_context_menu.add_item("Insert Document…", Action.INSERT_DOCUMENT)
 	_context_menu.add_separator()
 	_context_menu.add_item("Copy collection name", Action.COPY_NAME)
@@ -204,6 +206,8 @@ func _on_context_action(id: int) -> void:
 	match id:
 		Action.VIEW_DOCUMENTS:
 			collection_activated.emit(_connection, _database, coll)
+		Action.LIST_INDEXES:
+			list_indexes_requested.emit(_connection, _database, coll)
 		Action.INSERT_DOCUMENT:
 			insert_document_requested.emit(_connection, _database, coll)
 		Action.COPY_NAME:

@@ -34,9 +34,11 @@ func _ready() -> void:
 	_update_welcome()
 
 
-func open_collection(connection: Dictionary, database: String, collection: String) -> QueryTab:
+func open_collection(
+	connection: Dictionary, database: String, collection: String, function: String = "find"
+) -> QueryTab:
 	var tab: QueryTab = QUERY_TAB_SCENE.instantiate()
-	tab.configure(connection, database, collection)
+	tab.configure(connection, database, collection, function)
 	# Connect before add_child so the tab's initial _run() status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
