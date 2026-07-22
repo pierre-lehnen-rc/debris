@@ -43,7 +43,7 @@ focus_mode = 0
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
-tooltip_text = "Show a second JSON input for query options (projection, sort)"
+tooltip_text = "Show a second JSON input for driver find options (projection, sort, collation, hint, …)"
 focus_mode = 0
 text = "Options"
 
@@ -72,7 +72,7 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "{ } — options, e.g. { \"projection\": { \"name\": 1 }, \"sort\": { \"_id\": -1 } }"
+placeholder_text = "{ } — any driver find options, e.g. { \"projection\": { \"name\": 1 }, \"sort\": { \"_id\": -1 }, \"collation\": { \"locale\": \"en\" } }"
 tab_input_mode = false
 gutters_draw_line_numbers = true
 

@@ -1,4 +1,4 @@
-import type { Document, FindOptions, MongoClient, Sort } from "mongodb";
+import type { Document, FindOptions, MongoClient } from "mongodb";
 import { fromExtendedJson, toExtendedJson } from "./ejson.js";
 
 /** Parameters shared by collection-scoped operations. */
@@ -9,8 +9,12 @@ export interface CollectionTarget {
 
 export interface FindParams extends CollectionTarget {
   filter?: unknown;
-  projection?: unknown;
-  sort?: unknown;
+  /**
+   * Any find options the driver accepts (projection, sort, collation, hint,
+   * comment, max/min, …), passed straight through as the driver's options
+   * argument. skip/limit are handled separately so the pager stays in control.
+   */
+  options?: unknown;
   skip?: number;
   limit?: number;
 }
@@ -63,10 +67,10 @@ export async function listCollections(client: MongoClient, database: string): Pr
 
 export async function find(client: MongoClient, params: FindParams): Promise<unknown> {
   const coll = client.db(params.database).collection(params.collection);
-  const cursor = coll.find(fromExtendedJson<Document>(params.filter ?? {}));
+  const options = fromExtendedJson<FindOptions>(params.options ?? {});
+  const cursor = coll.find(fromExtendedJson<Document>(params.filter ?? {}), options);
 
-  if (params.projection !== undefined) cursor.project(fromExtendedJson<Document>(params.projection));
-  if (params.sort !== undefined) cursor.sort(fromExtendedJson<Sort>(params.sort));
+  // The pager owns skip/limit, so apply them last (overriding any in options).
   if (params.skip !== undefined) cursor.skip(params.skip);
   cursor.limit(params.limit ?? DEFAULT_FIND_LIMIT);
 
@@ -76,9 +80,7 @@ export async function find(client: MongoClient, params: FindParams): Promise<unk
 
 export async function findOne(client: MongoClient, params: FindParams): Promise<unknown> {
   const coll = client.db(params.database).collection(params.collection);
-  const options: FindOptions = {};
-  if (params.projection !== undefined) options.projection = fromExtendedJson<Document>(params.projection);
-  if (params.sort !== undefined) options.sort = fromExtendedJson<Sort>(params.sort);
+  const options = fromExtendedJson<FindOptions>(params.options ?? {});
   const document = await coll.findOne(fromExtendedJson<Document>(params.filter ?? {}), options);
   return toExtendedJson(document);
 }
@@ -91,9 +93,8 @@ export async function count(client: MongoClient, params: CountParams): Promise<u
 
 export async function explain(client: MongoClient, params: FindParams): Promise<unknown> {
   const coll = client.db(params.database).collection(params.collection);
-  const cursor = coll.find(fromExtendedJson<Document>(params.filter ?? {}));
-  if (params.projection !== undefined) cursor.project(fromExtendedJson<Document>(params.projection));
-  if (params.sort !== undefined) cursor.sort(fromExtendedJson<Sort>(params.sort));
+  const options = fromExtendedJson<FindOptions>(params.options ?? {});
+  const cursor = coll.find(fromExtendedJson<Document>(params.filter ?? {}), options);
   const result = await cursor.explain();
   return toExtendedJson(result);
 }

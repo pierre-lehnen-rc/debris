@@ -47,10 +47,9 @@ func find(
 		body["limit"] = limit
 	if skip > 0:
 		body["skip"] = skip
-	# Extra find options (projection, sort) the user typed in the query tab.
-	for key in ["projection", "sort"]:
-		if options.has(key):
-			body[key] = options[key]
+	# Any driver find options the user typed in the query tab, passed through.
+	if not options.is_empty():
+		body["options"] = options
 	return await _post("/api/find", body)
 
 
@@ -67,9 +66,8 @@ func find_one(
 		"collection": collection,
 		"filter": filter,
 	}
-	for key in ["projection", "sort"]:
-		if options.has(key):
-			body[key] = options[key]
+	if not options.is_empty():
+		body["options"] = options
 	return await _post("/api/findOne", body)
 
 
@@ -100,9 +98,8 @@ func explain(
 		"collection": collection,
 		"filter": filter,
 	}
-	for key in ["projection", "sort"]:
-		if options.has(key):
-			body[key] = options[key]
+	if not options.is_empty():
+		body["options"] = options
 	return await _post("/api/explain", body)
 
 
