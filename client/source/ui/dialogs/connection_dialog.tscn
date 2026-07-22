@@ -7,6 +7,7 @@
 size = Vector2i(480, 420)
 visible = false
 transient = true
+transient_to_focused = true
 exclusive = true
 min_size = Vector2i(480, 420)
 theme = ExtResource("1_p78re")
