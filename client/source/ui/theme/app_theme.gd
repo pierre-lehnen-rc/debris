@@ -18,6 +18,8 @@ const ACCENT_GREEN := Color("#7fb86b") # run button / strings
 const TEXT := Color("#c7ccd6")
 const TEXT_DIM := Color("#8b919e")
 const TEXT_BRIGHT := Color("#e8ebf0")
+const ERROR := Color("#e06c6c")        # failed-action text
+const BG_ERROR := Color("#3a2529")     # failed-action row background
 
 const THEME_PATH := "res://source/ui/theme/app_theme.tres"
 

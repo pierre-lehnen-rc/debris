@@ -20,6 +20,8 @@ func _ready() -> void:
 	# The log isn't paginated Mongo data; it's a flat, bounded list.
 	_results.set_pagination_enabled(false)
 	_results.set_item_noun("entry")
+	# Show each entry's source/action/target and result/error at the top level.
+	_results.set_log_mode(true)
 	ActivityLog.entry_added.connect(_on_entry_added)
 	_refresh()
 

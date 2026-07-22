@@ -83,6 +83,13 @@ func set_item_noun(noun: String) -> void:
 	_update_count()
 
 
+## Render the tree view's top-level rows as activity-log entries (Key =
+## source/action/target, Value = result/error, failures highlighted). Only the
+## tree view changes; the table and text views are unaffected.
+func set_log_mode(enabled: bool) -> void:
+	_tree_view.set_log_mode(enabled)
+
+
 ## Opens the document editor in insert mode (used by the sidebar's
 ## "Insert Document…" action via the database workspace, and the views' context menus).
 func request_insert() -> void:
