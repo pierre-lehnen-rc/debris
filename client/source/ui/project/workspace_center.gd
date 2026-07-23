@@ -111,10 +111,14 @@ func open_endpoint(endpoint: ApiEndpoint) -> EndpointTab:
 	var tab: EndpointTab = ENDPOINT_TAB_SCENE.instantiate()
 	tab.configure(_session, endpoint)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	# A "Find in Database…" on a result opens a sibling query tab on the bound DB.
+	tab.open_query_requested.connect(_on_open_query_requested)
 	tab.name = "e_%d" % _tab_counter
 	_tab_counter += 1
 
 	_tabs.add_child(tab)
+	# Offer the cross-query action only when this project also has a database.
+	tab.set_cross_query_enabled(not _bound_database.is_empty())
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_ENDPOINT)

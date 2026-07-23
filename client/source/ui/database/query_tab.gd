@@ -122,8 +122,14 @@ func _ready() -> void:
 
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name
+	# Seed the filter editor whenever a filter was supplied — including a cross-tab
+	# handoff that opens a blank-collection tab (e.g. "Find in Database…" from an
+	# endpoint result), so the filter survives until the user names the collection.
+	if not _initial_filter.is_empty():
+		_query_edit.text = JSON.stringify(_initial_filter)
 	if not collection_name.is_empty():
-		_query_edit.text = JSON.stringify(_initial_filter) if not _initial_filter.is_empty() else "{}"
+		if _initial_filter.is_empty():
+			_query_edit.text = "{}"
 		_run()
 
 

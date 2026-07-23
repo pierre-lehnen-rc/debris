@@ -11,6 +11,9 @@ extends VBoxContainer
 ## be called before the node enters the tree so _ready() can build the form.
 
 signal status_changed(text: String)
+## Bubbled up from the results view when "Find in Database…" is used on a result
+## value, asking the workspace center to open a query tab on the attached DB.
+signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _send_btn: Button = %SendBtn
@@ -47,12 +50,23 @@ func results() -> ResultsView:
 	return _results
 
 
+## Enable/disable the "Find in Database…" action on this tab's result rows. The
+## workspace center enables it when the project also has a database attached.
+func set_cross_query_enabled(enabled: bool) -> void:
+	_results.set_cross_query_enabled(enabled)
+
+
 func tab_title() -> String:
 	return _endpoint.label() if _endpoint != null else "(endpoint)"
 
 
 func _ready() -> void:
 	_apply_style()
+	# Relay a results-view "Find in Database…" up to the workspace center.
+	_results.open_query_requested.connect(
+		func(collection: String, filter: Dictionary, function: String) -> void:
+			open_query_requested.emit(collection, filter, function)
+	)
 	if _endpoint == null:
 		return
 
