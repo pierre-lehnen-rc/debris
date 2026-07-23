@@ -15,6 +15,7 @@ var _database := ""
 
 
 func _ready() -> void:
+	_sidebar.schema_changed.connect(_on_schema_changed)
 	if not _database.is_empty():
 		_setup()
 
@@ -77,3 +78,9 @@ func _on_list_indexes_requested(
 
 func _on_status_changed(text: String) -> void:
 	status_changed.emit(text)
+
+
+## Propagate a schema change from the sidebar to the workspace so open (and
+## future) query tabs resolve custom types/actions with the new schema.
+func _on_schema_changed(schema: DatabaseSchema) -> void:
+	_workspace.set_schema(schema)

@@ -11,6 +11,7 @@ signal collection_activated(connection: Dictionary, database: String, collection
 signal insert_document_requested(connection: Dictionary, database: String, collection: String)
 signal list_indexes_requested(connection: Dictionary, database: String, collection: String)
 signal status_changed(text: String)
+signal schema_changed(schema: DatabaseSchema)
 
 const META_TYPE := "type"  # "collection" | "collection_group" | "placeholder"
 const ICON_GROUP := preload("res://source/ui/icons/group.svg")
@@ -86,6 +87,7 @@ func _on_refresh_pressed() -> void:
 func _on_schema_selected(index: int) -> void:
 	_schema_user_selected = true
 	_schema = _make_schema(index)
+	schema_changed.emit(_schema)
 	_render()
 
 
@@ -110,6 +112,7 @@ func _auto_detect_schema() -> void:
 			rocketchat_count += 1
 	var index := SCHEMA_ROCKETCHAT if rocketchat_count >= ROCKETCHAT_DETECT_THRESHOLD else SCHEMA_GENERIC
 	_schema = _make_schema(index)
+	schema_changed.emit(_schema)
 	if _schema_option.selected != index:
 		_schema_option.select(index)  # Programmatic; doesn't emit item_selected.
 

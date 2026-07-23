@@ -42,10 +42,15 @@ func display(documents: Array, start_index: int) -> void:
 			item.set_custom_color(0, AppTheme.ACCENT)
 			item.set_text(1, "{%d fields}" % doc.size())
 			item.set_custom_color(1, AppTheme.TEXT_DIM)
-			item.set_text(2, "Object")
+			var doc_type := _resolve_type("", doc)
+			if doc_type.is_empty():
+				item.set_text(2, "Object")
+			else:
+				item.set_text(2, doc_type)
+				item.set_custom_color(2, AppTheme.ACCENT)
 		# Top-level item carries the document index plus name/value for copy actions.
 		item.set_metadata(0, {"doc_index": doc_index, "key": "", "name": label, "value": doc})
-		_add_dict_children(item, doc)
+		_add_dict_children(item, doc, "")
 		item.set_collapsed(i != 0)  # expand the first document on the page
 
 
@@ -77,29 +82,38 @@ func _style_log_row(item: TreeItem, doc_index: int, entry: Dictionary) -> void:
 			item.set_custom_bg_color(c, AppTheme.BG_ERROR)
 
 
-func _add_dict_children(parent: TreeItem, dict: Dictionary) -> void:
+## Add a dict's fields as child rows. `prefix` is the dotted path of `parent`
+## within the document ("" at the document root), so each field can compute its
+## own path for custom-type resolution.
+func _add_dict_children(parent: TreeItem, dict: Dictionary, prefix: String) -> void:
 	for key in dict:
-		_add_value_item(parent, str(key), dict[key])
+		var child_path: String = str(key) if prefix.is_empty() else prefix + "." + str(key)
+		_add_value_item(parent, str(key), dict[key], child_path)
 
 
-func _add_value_item(parent: TreeItem, key: String, value: Variant) -> void:
+func _add_value_item(parent: TreeItem, key: String, value: Variant, path: String) -> void:
 	var item := create_item(parent)
 	item.set_text(0, key)
 	item.set_custom_color(0, AppTheme.TEXT)
-	item.set_text(2, _type_name(value))
-	item.set_custom_color(2, AppTheme.TEXT_DIM)
+	var field_type := _resolve_type(path, value)
+	if field_type.is_empty():
+		item.set_text(2, _type_name(value))
+		item.set_custom_color(2, AppTheme.TEXT_DIM)
+	else:
+		item.set_text(2, field_type)
+		item.set_custom_color(2, AppTheme.ACCENT)
 	item.set_metadata(0, {"key": key, "name": key, "value": value})
 
 	if value is Dictionary and _ejson_scalar(value).is_empty():
 		item.set_text(1, "{%d fields}" % value.size())
 		item.set_custom_color(1, AppTheme.TEXT_DIM)
-		_add_dict_children(item, value)
+		_add_dict_children(item, value, path)
 		item.set_collapsed(true)
 	elif value is Array:
 		item.set_text(1, "[%d elements]" % value.size())
 		item.set_custom_color(1, AppTheme.TEXT_DIM)
 		for i in value.size():
-			_add_value_item(item, "[%d]" % i, value[i])
+			_add_value_item(item, "[%d]" % i, value[i], path)
 		item.set_collapsed(true)
 	else:
 		item.set_text(1, _preview(value))

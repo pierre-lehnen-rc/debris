@@ -26,6 +26,20 @@ const HIGHLIGHTED_COLLECTIONS := [
 func _init() -> void:
 	min_group_size = 3
 	highlighted_collections = HIGHLIGHTED_COLLECTIONS
+	type_rules = [
+		{"collection": "users", "field": "", "type": "User"},
+	]
+	type_actions = {
+		"User": [
+			{
+				"id": "list_user_messages",
+				"label": "List User's Messages",
+				"target_collection": "rocketchat_message",
+				"filter": {"u._id": "$_id"},
+				"function": "find",
+			},
+		],
+	}
 
 
 ## Sort the tree by each collection's grouped path, so it appears ordered by its

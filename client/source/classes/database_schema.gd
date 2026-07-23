@@ -37,6 +37,20 @@ var bucket_loose_collections := false
 # spot at a glance. Subclasses populate this in their _init().
 var highlighted_collections: Array = []
 
+# Custom document/field "types" keyed to collections, plus the context-menu
+# actions each type offers. Both are plain data (JSON-serialisable) so they can
+# later be loaded from a user-editable file; subclasses populate them in _init().
+#
+# type_rules: Array of { "collection": String, "field": String, "type": String }.
+#   field == "" (or absent) matches the whole document; otherwise it's a dotted
+#   field path within the document ("u._id").
+# type_actions: Dictionary of type name -> Array of action Dictionaries, each
+#   { "id", "label", "target_collection", "filter": Dictionary, "function" }.
+#   In `filter`, a String value shaped like "$dotted.path" is replaced at trigger
+#   time with the value at that path in the selected document (or field value).
+var type_rules: Array = []
+var type_actions: Dictionary = {}
+
 
 # Public API ------------------------------------------------------------------
 ## Determine the display tree for a list of collection names. Returns an ordered
@@ -74,6 +88,61 @@ func order_names(_structure: Array, names: Array) -> Array:
 ## real collection name against highlighted_collections.
 func is_highlighted(collection_name: String) -> bool:
 	return collection_name in highlighted_collections
+
+
+# Custom types & actions ------------------------------------------------------
+## Resolve the custom "type" name for a value at `field_path` within a document
+## of `collection`. field_path == "" means the whole document. Returns "" when no
+## rule matches. `_value` is available for future value-dependent rules.
+func type_for(collection: String, field_path: String, _value: Variant = null) -> String:
+	for rule in type_rules:
+		if str(rule.get("collection", "")) != collection:
+			continue
+		if str(rule.get("field", "")) == field_path:
+			return str(rule.get("type", ""))
+	return ""
+
+
+## The context-menu actions offered by a custom type. Returns [] for unknown types.
+func actions_for_type(type_name: String) -> Array:
+	var actions: Variant = type_actions.get(type_name, [])
+	return actions if actions is Array else []
+
+
+## Produce a concrete query filter from an action's `filter` template by replacing
+## every "$dotted.path" String with the value at that path in `source` (the
+## selected document or field value).
+static func resolve_filter(filter: Dictionary, source: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	for key in filter:
+		out[key] = _substitute(filter[key], source)
+	return out
+
+
+static func _substitute(value: Variant, source: Variant) -> Variant:
+	if value is Dictionary:
+		var d: Dictionary = {}
+		for k in value:
+			d[k] = _substitute(value[k], source)
+		return d
+	if value is Array:
+		var a: Array = []
+		for e in value:
+			a.append(_substitute(e, source))
+		return a
+	if value is String and (value as String).begins_with("$"):
+		return _value_at_path(source, (value as String).substr(1))
+	return value
+
+
+static func _value_at_path(source: Variant, path: String) -> Variant:
+	var cur: Variant = source
+	for seg in path.split("."):
+		if cur is Dictionary and (cur as Dictionary).has(seg):
+			cur = (cur as Dictionary)[seg]
+		else:
+			return null
+	return cur
 
 
 # Display-tree construction ---------------------------------------------------

@@ -20,6 +20,9 @@ var _tab_counter := 0
 # lives in the tab strip, outside any single query tab) can open new tabs.
 var _bound_connection: Dictionary = {}
 var _bound_database := ""
+# Active schema, threaded into each query tab so its results view can resolve
+# custom types and context-menu actions.
+var _schema: DatabaseSchema = null
 
 
 func _ready() -> void:
@@ -35,13 +38,19 @@ func _ready() -> void:
 
 
 func open_collection(
-	connection: Dictionary, database: String, collection: String, function: String = "find"
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	function: String = "find",
+	initial_filter: Dictionary = {},
 ) -> QueryTab:
 	var tab: QueryTab = QUERY_TAB_SCENE.instantiate()
-	tab.configure(connection, database, collection, function)
+	tab.configure(connection, database, collection, function, initial_filter)
+	tab.set_schema(_schema)
 	# Connect before add_child so the tab's initial _run() status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
+	tab.open_query_requested.connect(_on_open_query_requested)
 	tab.name = "tab_%d" % _tab_counter
 	_tab_counter += 1
 
@@ -65,6 +74,19 @@ func open_collection(
 	_tabs.current_tab = index
 	_update_welcome()
 	return tab
+
+
+## Set the active schema and push it to every open query tab.
+func set_schema(schema: DatabaseSchema) -> void:
+	_schema = schema
+	for child in _tabs.get_children():
+		if child is QueryTab:
+			(child as QueryTab).set_schema(schema)
+
+
+## A results view asked to open a new query tab (e.g. a custom type action).
+func _on_open_query_requested(collection: String, filter: Dictionary, function: String) -> void:
+	open_collection(_bound_connection, _bound_database, collection, function, filter)
 
 
 ## The currently selected tab if it's a blank scratch tab, else null.

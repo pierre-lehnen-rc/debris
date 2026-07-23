@@ -14,6 +14,9 @@ extends VBoxContainer
 ## Emitted whenever the user changes the page (offset or limit). The owner is
 ## expected to fetch that slice from the backend and call show_page().
 signal page_requested(offset: int, limit: int)
+## Bubbled up from a sub-view when a custom type action wants to open a new query
+## tab on another collection with a pre-defined filter.
+signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 enum ViewMode { TREE, TABLE, TEXT }
 
@@ -26,6 +29,9 @@ var _offset := 0
 var _limit := DEFAULT_LIMIT
 ## Singular noun used in the count label ("3 documents", "3 channels", …).
 var _item_noun := "document"
+## Schema + collection driving custom types/actions in the tree/table views.
+var _schema: DatabaseSchema = null
+var _collection := ""
 
 @onready var _header: PanelContainer = %Header
 @onready var _pager: HBoxContainer = %Pager
@@ -87,6 +93,22 @@ func set_pagination_enabled(enabled: bool) -> void:
 func set_item_noun(noun: String) -> void:
 	_item_noun = noun if not noun.is_empty() else "document"
 	_update_count()
+
+
+## Set the schema + collection used to resolve custom types/actions, forwarding
+## them to the tree and table views, then re-render so Type columns update.
+func set_type_context(schema: DatabaseSchema, collection: String) -> void:
+	_schema = schema
+	_collection = collection
+	_tree_view.set_type_context(schema, collection)
+	_table_view.set_type_context(schema, collection)
+	_rebuild()
+
+
+## Relay a sub-view's request to open a new query tab (custom type action). Wired
+## from the tree/table views in results_view.tscn.
+func _on_open_query_requested(collection: String, filter: Dictionary, function: String) -> void:
+	open_query_requested.emit(collection, filter, function)
 
 
 ## Render the tree view's top-level rows as activity-log entries (Key =

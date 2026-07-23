@@ -12,6 +12,9 @@ signal edit_requested(doc_index: int)
 signal view_requested(doc_index: int)
 signal insert_requested()
 signal delete_requested(doc_index: int)
+## Emitted when a schema-defined custom type action is triggered, asking the owner
+## to open a new query tab on `collection` filtered by `filter`.
+signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 enum DocAction {
 	EXPAND_RECURSIVE,
@@ -25,9 +28,23 @@ enum DocAction {
 	DELETE,
 }
 
+## Custom type actions are added to the context menu with ids offset by this base
+## so they never collide with the fixed DocAction ids.
+const CUSTOM_ACTION_BASE := 1000
+
 var _doc_menu: PopupMenu
 var _menu_doc_index := -1
 var _menu_item: TreeItem
+
+# Schema-driven custom types/actions ------------------------------------------
+## Schema resolving custom types for the collection currently displayed, and the
+## collection name itself. Set via set_type_context(); null/"" disables the feature.
+var _schema: DatabaseSchema = null
+var _collection := ""
+## Custom actions currently offered by the open context menu, and the value they
+## act on (the selected document or field value) for filter substitution.
+var _menu_actions: Array = []
+var _menu_source: Variant = null
 
 # Column resizing -------------------------------------------------------------
 ## Godot's Tree has no built-in interactive column resize, so we implement it by
@@ -58,6 +75,21 @@ func _ready() -> void:
 ## (e.g. column titles). Called at the end of _ready().
 func _ready_view() -> void:
 	pass
+
+
+## Set the schema + collection used to resolve custom types/actions. Subclasses
+## may read _schema/_collection (e.g. the tree's Type column) after this is set.
+func set_type_context(schema: DatabaseSchema, collection: String) -> void:
+	_schema = schema
+	_collection = collection
+
+
+## The custom type name for a value at `field_path` in the current collection, or
+## "" when no schema/collection/rule applies. field_path == "" is the document.
+func _resolve_type(field_path: String, value: Variant) -> String:
+	if _schema == null or _collection.is_empty():
+		return ""
+	return _schema.type_for(_collection, field_path, value)
 
 
 ## Override: render a page of documents. `start_index` is the absolute index of
@@ -103,14 +135,47 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
 	_doc_menu.add_separator()
 	_doc_menu.add_item("Delete Document", DocAction.DELETE)
+	_add_custom_actions(item, is_document)
 	_doc_menu.reset_size()
 	# Native pop-ups position in absolute screen coordinates.
 	_doc_menu.position = DisplayServer.mouse_get_position()
 	_doc_menu.popup()
 
 
+## Append schema-defined custom actions for the type of the selected row. The
+## type is resolved from the selected field's path (or the whole document); each
+## matching action becomes a menu item whose id is CUSTOM_ACTION_BASE + index.
+## `_menu_actions`/`_menu_source` are recorded so _on_doc_action can resolve the
+## action's filter against the selected value when triggered.
+func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
+	_menu_actions = []
+	_menu_source = null
+	if _schema == null or _collection.is_empty():
+		return
+	var meta: Variant = item.get_metadata(0)
+	if not (meta is Dictionary):
+		return
+	var value: Variant = (meta as Dictionary).get("value")
+	var field_path := "" if is_document else _meta_path(item)
+	var type_name := _resolve_type(field_path, value)
+	if type_name.is_empty():
+		return
+	var actions := _schema.actions_for_type(type_name)
+	if actions.is_empty():
+		return
+	_menu_actions = actions
+	_menu_source = value
+	_doc_menu.add_separator()
+	for i in actions.size():
+		var action: Dictionary = actions[i]
+		_doc_menu.add_item(str(action.get("label", action.get("id", "Action"))), CUSTOM_ACTION_BASE + i)
+
+
 func _on_doc_action(id: int) -> void:
 	if _menu_doc_index < 0:
+		return
+	if id >= CUSTOM_ACTION_BASE:
+		_trigger_custom_action(id - CUSTOM_ACTION_BASE)
 		return
 	match id:
 		DocAction.EXPAND_RECURSIVE:
@@ -131,6 +196,22 @@ func _on_doc_action(id: int) -> void:
 			DisplayServer.clipboard_set(_meta_json(_menu_item))
 		DocAction.DELETE:
 			delete_requested.emit(_menu_doc_index)
+
+
+## Resolve a custom action's filter template against the selected value and ask
+## the owner to open a new query tab on the action's target collection.
+func _trigger_custom_action(index: int) -> void:
+	if index < 0 or index >= _menu_actions.size():
+		return
+	var action: Dictionary = _menu_actions[index]
+	var template: Variant = action.get("filter", {})
+	var filter: Dictionary = template if template is Dictionary else {}
+	var resolved := DatabaseSchema.resolve_filter(filter, _menu_source)
+	open_query_requested.emit(
+		str(action.get("target_collection", _collection)),
+		resolved,
+		str(action.get("function", "find")),
+	)
 
 
 # Input handling --------------------------------------------------------------

@@ -13,6 +13,9 @@ signal status_changed(text: String)
 ## Emitted when the tab's title should change (collection retargeted), so the
 ## database workspace can relabel the tab.
 signal title_changed(title: String)
+## Bubbled up from the results view when a custom type action wants to open a new
+## query tab on another collection with a pre-defined filter.
+signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 ## Collection operations offered by the function dropdown. Only "find" paginates
 ## and yields a stream of documents; the rest return a single/bounded result.
@@ -29,6 +32,11 @@ var _active_options: Dictionary = {}
 var _active_function := "find"
 ## Operation to pre-select when the tab first opens (set via configure()).
 var _initial_function := "find"
+## Filter to seed the editor with when the tab first opens (set via configure()),
+## e.g. from a custom type action. Empty means a blank "{}" filter.
+var _initial_filter: Dictionary = {}
+## Schema driving custom types/actions in the results view.
+var _schema: DatabaseSchema = null
 var connection_name := ""
 var database_name := ""
 var collection_name := ""
@@ -48,19 +56,39 @@ var _has_run := false
 
 
 func configure(
-	connection: Dictionary, database: String, collection: String, function: String = "find"
+	connection: Dictionary,
+	database: String,
+	collection: String,
+	function: String = "find",
+	initial_filter: Dictionary = {},
 ) -> void:
 	connection_config = connection
 	connection_name = connection.get("name", "")
 	database_name = database
 	collection_name = collection
 	_initial_function = function
+	_initial_filter = initial_filter
+
+
+## Set the schema used to resolve custom types/actions and push it to the results
+## view (once this node is ready).
+func set_schema(schema: DatabaseSchema) -> void:
+	_schema = schema
+	if is_node_ready():
+		_results.set_type_context(_schema, collection_name)
 
 
 ## Exposes the results view so callers (e.g. the sidebar's "Insert Document…"
 ## action) can drive document actions on this tab.
 func results() -> ResultsView:
 	return _results
+
+
+## Relay a results-view request to open a new query tab (custom type action).
+func _on_results_open_query_requested(
+	collection: String, filter: Dictionary, function: String
+) -> void:
+	open_query_requested.emit(collection, filter, function)
 
 
 func tab_title() -> String:
@@ -90,10 +118,12 @@ func _ready() -> void:
 	_func_option.select(initial_index)
 	_on_function_selected(initial_index)  # Sync pager visibility to the operation.
 
+	_results.open_query_requested.connect(_on_results_open_query_requested)
+
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name
 	if not collection_name.is_empty():
-		_query_edit.text = "{}"
+		_query_edit.text = JSON.stringify(_initial_filter) if not _initial_filter.is_empty() else "{}"
 		_run()
 
 
@@ -146,6 +176,9 @@ func _run() -> void:
 	_active_options = options
 	_active_function = FUNCTIONS[_func_option.selected] if _func_option.selected >= 0 else "find"
 	_has_run = true
+	# The collection may have been retargeted; refresh the type context so custom
+	# types/actions match the collection now being queried.
+	_results.set_type_context(_schema, collection_name)
 	_results.request_first_page()
 
 
