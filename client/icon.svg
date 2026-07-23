@@ -1,1 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="124" height="124" x="2" y="2" fill="#363d52" stroke="#212532" stroke-width="4" rx="14"/><g fill="#fff" transform="translate(12.322 12.322)scale(.101)"><path d="M105 673v33q407 354 814 0v-33z"/><path fill="#478cbf" d="m105 673 152 14q12 1 15 14l4 67 132 10 8-61q2-11 15-15h162q13 4 15 15l8 61 132-10 4-67q3-13 15-14l152-14V427q30-39 56-81-35-59-83-108-43 20-82 47-40-37-88-64 7-51 8-102-59-28-123-42-26 43-46 89-49-7-98 0-20-46-46-89-64 14-123 42 1 51 8 102-48 27-88 64-39-27-82-47-48 49-83 108 26 42 56 81zm0 33v39c0 276 813 276 814 0v-39l-134 12-5 69q-2 10-14 13l-162 11q-12 0-16-11l-10-65H446l-10 65q-4 11-16 11l-162-11q-12-3-14-13l-5-69z"/><path d="M483 600c0 34 58 34 58 0v-86c0-34-58-34-58 0z"/><circle cx="725" cy="526" r="90"/><circle cx="299" cy="526" r="90"/></g><g fill="#414042" transform="translate(12.322 12.322)scale(.101)"><circle cx="307" cy="532" r="60"/><circle cx="717" cy="532" r="60"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#282c34"/>
+      <stop offset="1" stop-color="#1b1d23"/>
+    </linearGradient>
+    <linearGradient id="cyl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5aa4f4"/>
+      <stop offset="1" stop-color="#3d7fce"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded badge background -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)" stroke="#11131a" stroke-width="4"/>
+
+  <!-- Database cylinder (lower third): stacked disks -->
+  <g stroke="#243a5c" stroke-width="2">
+    <path d="M40 76 V104 a24 8 0 0 0 48 0 V76 z" fill="url(#cyl)"/>
+    <ellipse cx="64" cy="90" rx="24" ry="8" fill="none" stroke="#243a5c" stroke-width="2" opacity="0.6"/>
+    <ellipse cx="64" cy="76" rx="24" ry="8" fill="#6aaef6"/>
+  </g>
+
+  <!-- Debris shards breaking off the top, scattering up/out -->
+  <g stroke="#11131a" stroke-width="1.5" stroke-linejoin="round">
+    <polygon points="60,58 72,52 70,42 58,48" fill="#7fb86b"/>
+    <polygon points="80,50 92,48 90,38 79,41" fill="#5aa4f4"/>
+    <polygon points="44,50 55,44 52,35 41,40" fill="#5aa4f4"/>
+    <polygon points="66,38 76,32 71,24 62,29" fill="#7fb86b"/>
+    <polygon points="50,34 58,29 55,22 47,26" fill="#8fbef8"/>
+  </g>
+</svg>
