@@ -1,9 +1,9 @@
 class_name ConnectionDialog
 extends Window
 
-## Add/Edit connection dialog, modeled on Robo3T's tabbed connection settings:
-## Connection / Authentication / SSH / SSL / Advanced. It only gathers a config
-## Dictionary and emits `saved`; actually connecting to Mongo comes later.
+## Add/Edit connection dialog with tabbed settings: Connection / Authentication.
+## It gathers a config Dictionary and emits `saved`/`updated`; the backend
+## consumes the Authentication fields when it opens the connection.
 
 signal saved(config: Dictionary)
 signal updated(index: int, config: Dictionary)
@@ -18,21 +18,13 @@ const MECHANISMS := ["SCRAM-SHA-256", "SCRAM-SHA-1", "MONGODB-CR"]
 @onready var _user_edit: LineEdit = %UserEdit
 @onready var _pass_edit: LineEdit = %PassEdit
 @onready var _mech_option: OptionButton = %MechOption
-@onready var _ssh_check: CheckBox = %SshCheck
-@onready var _ssh_host_edit: LineEdit = %SshHostEdit
-@onready var _ssh_user_edit: LineEdit = %SshUserEdit
-@onready var _ssl_check: CheckBox = %SslCheck
-@onready var _ssl_ca_edit: LineEdit = %SslCaEdit
 @onready var _default_db_edit: LineEdit = %DefaultDbEdit
-@onready var _timeout_edit: LineEdit = %TimeoutEdit
 @onready var _status: Label = %Status
 @onready var _test_btn: Button = %TestBtn
 @onready var _save_btn: Button = %SaveBtn
 @onready var _cancel_btn: Button = %CancelBtn
 
 var _auth_controls: Array[Control] = []
-var _ssh_controls: Array[Control] = []
-var _ssl_controls: Array[Control] = []
 var _edit_index := -1  # >= 0 when editing an existing connection
 
 
@@ -41,27 +33,15 @@ func _ready() -> void:
 		_mech_option.add_item(mech)
 
 	_auth_controls = [_auth_db_edit, _user_edit, _pass_edit, _mech_option]
-	_ssh_controls = [_ssh_host_edit, _ssh_user_edit]
-	_ssl_controls = [_ssl_ca_edit]
 
 	_apply_style()
 
 	_set_enabled(_auth_controls, false)
-	_set_enabled(_ssh_controls, false)
-	_set_enabled(_ssl_controls, false)
 
 
 # Section toggles (wired in connection_dialog.tscn) ---------------------------
 func _on_auth_toggled(on: bool) -> void:
 	_set_enabled(_auth_controls, on)
-
-
-func _on_ssh_toggled(on: bool) -> void:
-	_set_enabled(_ssh_controls, on)
-
-
-func _on_ssl_toggled(on: bool) -> void:
-	_set_enabled(_ssl_controls, on)
 
 
 func _apply_style() -> void:
@@ -112,16 +92,9 @@ func _reset() -> void:
 	_user_edit.text = ""
 	_pass_edit.text = ""
 	_mech_option.selected = 0
-	_ssh_check.button_pressed = false
-	_ssh_host_edit.text = ""
-	_ssh_user_edit.text = ""
-	_ssl_check.button_pressed = false
-	_ssl_ca_edit.text = ""
 	_default_db_edit.text = ""
 	_status.text = ""
 	_set_enabled(_auth_controls, false)
-	_set_enabled(_ssh_controls, false)
-	_set_enabled(_ssl_controls, false)
 
 
 # Actions ---------------------------------------------------------------------
