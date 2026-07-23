@@ -28,6 +28,12 @@ func _init() -> void:
 	highlighted_collections = HIGHLIGHTED_COLLECTIONS
 	type_rules = [
 		{"collection": "users", "field": "", "type": "User"},
+		# Fields that hold a user's id, wherever they appear across collections.
+		{"collection": "users", "field": "_id", "type": "UserId"},
+		{"collection": "rocketchat_room", "field": "u._id", "type": "UserId"},
+		{"collection": "rocketchat_message", "field": "u._id", "type": "UserId"},
+		{"collection": "rocketchat_subscription", "field": "u._id", "type": "UserId"},
+		{"collection": "rocketchat_video_conference", "field": "createdBy._id", "type": "UserId"},
 	]
 	type_actions = {
 		"User": [
@@ -36,6 +42,16 @@ func _init() -> void:
 				"label": "List User's Messages",
 				"target_collection": "rocketchat_message",
 				"filter": {"u._id": "$_id"},
+				"function": "find",
+			},
+		],
+		"UserId": [
+			# Source is the clicked id string, so "$" refers to the value itself.
+			{
+				"id": "list_user_messages",
+				"label": "List User's Messages",
+				"target_collection": "rocketchat_message",
+				"filter": {"u._id": "$"},
 				"function": "find",
 			},
 		],

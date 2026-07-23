@@ -48,6 +48,8 @@ var highlighted_collections: Array = []
 #   { "id", "label", "target_collection", "filter": Dictionary, "function" }.
 #   In `filter`, a String value shaped like "$dotted.path" is replaced at trigger
 #   time with the value at that path in the selected document (or field value).
+#   "$" on its own resolves to the selected value itself (useful for field-level
+#   types whose source is a scalar, e.g. "$" == the clicked _id string).
 var type_rules: Array = []
 var type_actions: Dictionary = {}
 
@@ -136,6 +138,10 @@ static func _substitute(value: Variant, source: Variant) -> Variant:
 
 
 static func _value_at_path(source: Variant, path: String) -> Variant:
+	# An empty path ("$" on its own) means the source value itself — handy when the
+	# source is a scalar (e.g. a field value) rather than a document.
+	if path.is_empty():
+		return source
 	var cur: Variant = source
 	for seg in path.split("."):
 		if cur is Dictionary and (cur as Dictionary).has(seg):
