@@ -35,16 +35,10 @@ func _init() -> void:
 		{"collection": "rocketchat_subscription", "field": "u._id", "type": "UserId"},
 		{"collection": "rocketchat_video_conference", "field": "createdBy._id", "type": "UserId"},
 	]
+	# The "User" document type carries no actions of its own; a user document's
+	# context menu instead surfaces its typed attributes (e.g. _id → UserId) as
+	# sub-menus, so all user-id actions live on the UserId type in one place.
 	type_actions = {
-		"User": [
-			{
-				"id": "list_user_messages",
-				"label": "List User's Messages",
-				"target_collection": "rocketchat_message",
-				"filter": {"u._id": "$_id"},
-				"function": "find",
-			},
-		],
 		"UserId": [
 			# Source is the clicked id string, so "$" refers to the value itself.
 			{

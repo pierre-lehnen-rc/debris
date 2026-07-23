@@ -41,10 +41,14 @@ var _menu_item: TreeItem
 ## collection name itself. Set via set_type_context(); null/"" disables the feature.
 var _schema: DatabaseSchema = null
 var _collection := ""
-## Custom actions currently offered by the open context menu, and the value they
-## act on (the selected document or field value) for filter substitution.
-var _menu_actions: Array = []
-var _menu_source: Variant = null
+## Flat registry of the custom actions currently offered by the open context menu.
+## Each entry is { "action": Dictionary, "source": Variant }; a menu item's id is
+## CUSTOM_ACTION_BASE + its index here, so items in the main menu and any dynamic
+## sub-menus share one id-space and one handler.
+var _menu_action_entries: Array = []
+## Sub-menu PopupMenus built for the current open (one per typed attribute), freed
+## before the next open.
+var _custom_submenus: Array = []
 
 # Column resizing -------------------------------------------------------------
 ## Godot's Tree has no built-in interactive column resize, so we implement it by
@@ -142,33 +146,81 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	_doc_menu.popup()
 
 
-## Append schema-defined custom actions for the type of the selected row. The
-## type is resolved from the selected field's path (or the whole document); each
-## matching action becomes a menu item whose id is CUSTOM_ACTION_BASE + index.
-## `_menu_actions`/`_menu_source` are recorded so _on_doc_action can resolve the
-## action's filter against the selected value when triggered.
+## Append schema-defined custom actions to the context menu. For a document row,
+## each of its typed attributes becomes a sub-menu (named by the field path)
+## holding that type's actions, resolved against the attribute's value — e.g. a
+## user document shows "_id › List User's Messages". Any whole-document type's
+## actions are still added inline. For a field row, that field's type actions are
+## added inline (right-clicking the attribute directly).
 func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
-	_menu_actions = []
-	_menu_source = null
+	_clear_custom_menus()
 	if _schema == null or _collection.is_empty():
 		return
 	var meta: Variant = item.get_metadata(0)
 	if not (meta is Dictionary):
 		return
 	var value: Variant = (meta as Dictionary).get("value")
-	var field_path := "" if is_document else _meta_path(item)
-	var type_name := _resolve_type(field_path, value)
+	if is_document:
+		_add_document_type_menus(value)
+	else:
+		_add_inline_actions(_resolve_type(_meta_path(item), value), value)
+
+
+## Whole-document type actions inline, then a sub-menu per typed attribute.
+func _add_document_type_menus(doc: Variant) -> void:
+	if not (doc is Dictionary):
+		return
+	_add_inline_actions(_resolve_type("", doc), doc)
+	for entry in _schema.typed_fields(_collection):
+		var field_path: String = entry["field"]
+		var field_value: Variant = DatabaseSchema.value_at_path(doc, field_path)
+		if field_value == null:
+			continue
+		var actions := _schema.actions_for_type(entry["type"])
+		if not actions.is_empty():
+			_add_actions_submenu(field_path, actions, field_value)
+
+
+## Add a type's actions straight into the main menu, acting on `source`.
+func _add_inline_actions(type_name: String, source: Variant) -> void:
 	if type_name.is_empty():
 		return
 	var actions := _schema.actions_for_type(type_name)
 	if actions.is_empty():
 		return
-	_menu_actions = actions
-	_menu_source = value
 	_doc_menu.add_separator()
-	for i in actions.size():
-		var action: Dictionary = actions[i]
-		_doc_menu.add_item(str(action.get("label", action.get("id", "Action"))), CUSTOM_ACTION_BASE + i)
+	for action in actions:
+		_doc_menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+
+
+## Add a `label` sub-menu holding `actions`, each acting on `source`.
+func _add_actions_submenu(label: String, actions: Array, source: Variant) -> void:
+	var submenu := PopupMenu.new()
+	submenu.theme = AppTheme.shared()
+	submenu.id_pressed.connect(_on_doc_action)
+	for action in actions:
+		submenu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+	_doc_menu.add_submenu_node_item(label, submenu)
+	_custom_submenus.append(submenu)
+
+
+## Record an action + its source value, returning its index in the flat registry.
+func _register_entry(action: Dictionary, source: Variant) -> int:
+	_menu_action_entries.append({"action": action, "source": source})
+	return _menu_action_entries.size() - 1
+
+
+func _action_label(action: Dictionary) -> String:
+	return str(action.get("label", action.get("id", "Action")))
+
+
+## Drop the previous open's action registry and free its dynamic sub-menus.
+func _clear_custom_menus() -> void:
+	_menu_action_entries.clear()
+	for submenu in _custom_submenus:
+		if is_instance_valid(submenu):
+			submenu.queue_free()
+	_custom_submenus.clear()
 
 
 func _on_doc_action(id: int) -> void:
@@ -198,15 +250,16 @@ func _on_doc_action(id: int) -> void:
 			delete_requested.emit(_menu_doc_index)
 
 
-## Resolve a custom action's filter template against the selected value and ask
-## the owner to open a new query tab on the action's target collection.
+## Resolve a registered action's filter template against its recorded source value
+## and ask the owner to open a new query tab on the action's target collection.
 func _trigger_custom_action(index: int) -> void:
-	if index < 0 or index >= _menu_actions.size():
+	if index < 0 or index >= _menu_action_entries.size():
 		return
-	var action: Dictionary = _menu_actions[index]
+	var entry: Dictionary = _menu_action_entries[index]
+	var action: Dictionary = entry["action"]
 	var template: Variant = action.get("filter", {})
 	var filter: Dictionary = template if template is Dictionary else {}
-	var resolved := DatabaseSchema.resolve_filter(filter, _menu_source)
+	var resolved := DatabaseSchema.resolve_filter(filter, entry["source"])
 	open_query_requested.emit(
 		str(action.get("target_collection", _collection)),
 		resolved,

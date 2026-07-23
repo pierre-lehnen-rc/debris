@@ -111,6 +111,30 @@ func actions_for_type(type_name: String) -> Array:
 	return actions if actions is Array else []
 
 
+## The distinct attribute fields of `collection` that carry a custom type (i.e.
+## every rule with a non-empty field), each as { "field": String, "type": String }
+## in rule order. Used to build per-attribute sub-menus on a document's context
+## menu. The whole-document rule (field == "") is excluded.
+func typed_fields(collection: String) -> Array:
+	var out: Array = []
+	var seen: Dictionary = {}
+	for rule in type_rules:
+		if str(rule.get("collection", "")) != collection:
+			continue
+		var field := str(rule.get("field", ""))
+		if field.is_empty() or seen.has(field):
+			continue
+		seen[field] = true
+		out.append({"field": field, "type": str(rule.get("type", ""))})
+	return out
+
+
+## Public accessor for the value at a dotted `path` within `source` (a document),
+## or null when any segment is missing. "" returns the source itself.
+static func value_at_path(source: Variant, path: String) -> Variant:
+	return _value_at_path(source, path)
+
+
 ## Produce a concrete query filter from an action's `filter` template by replacing
 ## every "$dotted.path" String with the value at that path in `source` (the
 ## selected document or field value).
