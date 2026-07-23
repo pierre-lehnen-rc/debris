@@ -163,7 +163,13 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	if is_document:
 		_add_document_type_menus(value)
 	else:
-		var type_name := _resolve_type(_meta_path(item), value)
+		# Prefer the index-free path stored in metadata (so array elements resolve to
+		# their parent's field path, e.g. "mentions._id"); fall back to the bracketed
+		# path only if it's absent.
+		var field_path: String = str((meta as Dictionary).get("path", ""))
+		if field_path.is_empty():
+			field_path = _meta_path(item)
+		var type_name := _resolve_type(field_path, value)
 		if not type_name.is_empty():
 			_add_inline_actions(type_name, value)
 		elif value is String:
@@ -181,6 +187,10 @@ func _add_document_type_menus(doc: Variant) -> void:
 		var field_path: String = entry["field"]
 		var field_value: Variant = DatabaseSchema.value_at_path(doc, field_path)
 		if field_value == null:
+			continue
+		# A path that dug through arrays but found nothing yields an empty list — no
+		# values to search by, so skip the attribute entirely.
+		if field_value is Array and (field_value as Array).is_empty():
 			continue
 		var actions := _schema.actions_for_type(entry["type"])
 		if not actions.is_empty():

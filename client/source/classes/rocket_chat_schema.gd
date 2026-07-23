@@ -35,18 +35,92 @@ func _init() -> void:
 		{"collection": "rocketchat_message", "field": "", "type": "Message"},
 		{"collection": "rocketchat_subscription", "field": "", "type": "Subscription"},
 		{"collection": "rocketchat_video_conference", "field": "", "type": "VideoConference"},
+		{"collection": "rocketchat_team", "field": "", "type": "Team"},
+		{"collection": "rocketchat_team_member", "field": "", "type": "TeamMember"},
+		{"collection": "rocketchat_livechat_visitor", "field": "", "type": "LivechatVisitor"},
+		{"collection": "rocketchat_livechat_department", "field": "", "type": "LivechatDepartment"},
+		{"collection": "rocketchat_livechat_department_agents", "field": "", "type": "DepartmentAgent"},
+		{"collection": "rocketchat_livechat_inquiry", "field": "", "type": "LivechatInquiry"},
+		{"collection": "rocketchat_apps", "field": "", "type": "App"},
+		{"collection": "rocketchat_apps_logs", "field": "", "type": "AppLog"},
+		{"collection": "rocketchat_apps_persistence", "field": "", "type": "AppPersistence"},
+		{"collection": "rocketchat_apps_settings", "field": "", "type": "AppSetting"},
+		{"collection": "rocketchat_uploads", "field": "", "type": "Upload"},
+		{"collection": "rocketchat_read_receipts", "field": "", "type": "ReadReceipt"},
+
 		# Fields that hold a user's id, wherever they appear across collections.
 		{"collection": "users", "field": "_id", "type": "UserId"},
 		{"collection": "rocketchat_room", "field": "u._id", "type": "UserId"},
+		{"collection": "rocketchat_room", "field": "uids", "type": "UserId"},  # array
+		{"collection": "rocketchat_room", "field": "servedBy._id", "type": "UserId"},
 		{"collection": "rocketchat_message", "field": "u._id", "type": "UserId"},
+		{"collection": "rocketchat_message", "field": "editedBy._id", "type": "UserId"},
+		{"collection": "rocketchat_message", "field": "pinnedBy._id", "type": "UserId"},
+		{"collection": "rocketchat_message", "field": "mentions._id", "type": "UserId"},  # array
+		{"collection": "rocketchat_message", "field": "starred._id", "type": "UserId"},  # array
+		{"collection": "rocketchat_message", "field": "replies", "type": "UserId"},  # array of ids
 		{"collection": "rocketchat_subscription", "field": "u._id", "type": "UserId"},
 		{"collection": "rocketchat_video_conference", "field": "createdBy._id", "type": "UserId"},
+		{"collection": "rocketchat_uploads", "field": "userId", "type": "UserId"},
+		{"collection": "rocketchat_read_receipts", "field": "userId", "type": "UserId"},
+		{"collection": "rocketchat_team", "field": "createdBy._id", "type": "UserId"},
+		{"collection": "rocketchat_team_member", "field": "userId", "type": "UserId"},
+		{"collection": "rocketchat_livechat_department_agents", "field": "agentId", "type": "UserId"},
+
+		# Fields that hold a user's username, wherever they appear.
+		{"collection": "users", "field": "username", "type": "Username"},
+		{"collection": "rocketchat_room", "field": "u.username", "type": "Username"},
+		{"collection": "rocketchat_message", "field": "u.username", "type": "Username"},
+		{"collection": "rocketchat_message", "field": "mentions.username", "type": "Username"},  # array
+		{"collection": "rocketchat_subscription", "field": "u.username", "type": "Username"},
+
 		# Fields that hold a room's id, wherever they appear across collections.
 		{"collection": "rocketchat_room", "field": "_id", "type": "RoomId"},
+		{"collection": "rocketchat_room", "field": "prid", "type": "RoomId"},  # parent room (discussion)
 		{"collection": "rocketchat_subscription", "field": "rid", "type": "RoomId"},
 		{"collection": "rocketchat_video_conference", "field": "rid", "type": "RoomId"},
 		{"collection": "rocketchat_message", "field": "rid", "type": "RoomId"},
-		#
+		{"collection": "rocketchat_message", "field": "drid", "type": "RoomId"},  # discussion room
+		{"collection": "rocketchat_uploads", "field": "rid", "type": "RoomId"},
+		{"collection": "rocketchat_read_receipts", "field": "roomId", "type": "RoomId"},
+		{"collection": "rocketchat_livechat_inquiry", "field": "rid", "type": "RoomId"},
+		{"collection": "rocketchat_team", "field": "roomId", "type": "RoomId"},
+		{"collection": "rocketchat_team_member", "field": "roomId", "type": "RoomId"},
+
+		# Fields that hold a message's id.
+		{"collection": "rocketchat_message", "field": "_id", "type": "MessageId"},
+		{"collection": "rocketchat_message", "field": "tmid", "type": "MessageId"},  # thread parent
+		{"collection": "rocketchat_read_receipts", "field": "messageId", "type": "MessageId"},
+
+		# Fields that hold a team's id.
+		{"collection": "rocketchat_team", "field": "_id", "type": "TeamId"},
+		{"collection": "rocketchat_room", "field": "teamId", "type": "TeamId"},
+		{"collection": "rocketchat_subscription", "field": "teamId", "type": "TeamId"},
+		{"collection": "rocketchat_team_member", "field": "teamId", "type": "TeamId"},
+
+		# Fields that hold a livechat department's id.
+		{"collection": "rocketchat_livechat_department", "field": "_id", "type": "DepartmentId"},
+		{"collection": "rocketchat_room", "field": "departmentId", "type": "DepartmentId"},
+		{"collection": "rocketchat_livechat_department_agents", "field": "departmentId", "type": "DepartmentId"},
+		{"collection": "rocketchat_livechat_inquiry", "field": "department", "type": "DepartmentId"},
+
+		# Fields that hold a livechat visitor's id.
+		{"collection": "rocketchat_livechat_visitor", "field": "_id", "type": "VisitorId"},
+		{"collection": "rocketchat_room", "field": "v._id", "type": "VisitorId"},
+		{"collection": "rocketchat_livechat_inquiry", "field": "v._id", "type": "VisitorId"},
+
+		# Fields that hold an app's id.
+		{"collection": "rocketchat_apps", "field": "_id", "type": "AppId"},
+		{"collection": "rocketchat_apps_logs", "field": "appId", "type": "AppId"},
+		{"collection": "rocketchat_apps_persistence", "field": "appId", "type": "AppId"},
+		{"collection": "rocketchat_apps_settings", "field": "appId", "type": "AppId"},
+
+		# Fields that hold an upload/file id.
+		{"collection": "rocketchat_uploads", "field": "_id", "type": "FileId"},
+		{"collection": "rocketchat_message", "field": "file._id", "type": "FileId"},
+		{"collection": "rocketchat_message", "field": "files._id", "type": "FileId"},  # array
+
+		# Media call ids.
 		{"collection": "rocketchat_media_calls", "field": "_id", "type": "MediaCallId"},
 		{"collection": "rocketchat_media_call_negotiations", "field": "callId", "type": "MediaCallId"},
 		{"collection": "rocketchat_media_call_negotiations", "field": "_id", "type": "MediaCallNegotiationId"},

@@ -129,7 +129,7 @@ func actions_for_type(type_name: String) -> Array:
 		if field.is_empty():
 			continue  # Whole-document types can't be used as a filter value.
 		var collection := str(rule.get("collection", ""))
-		var label := "List %ss" % _collection_label(collection)
+		var label := "List %s" % _pluralize(_collection_label(collection))
 		if _type_field_count(type_name, collection) > 1:
 			label += " by %s" % field
 		actions.append({
@@ -159,6 +159,27 @@ func _humanize(name: String) -> String:
 			out += " "
 		out += ch
 	return out
+
+
+## Pluralize an English noun for action labels ("Room" -> "Rooms",
+## "Video Conference" -> "Video Conferences", "Livechat Inquiry" ->
+## "Livechat Inquiries"). Operates on the whole string's trailing characters, so
+## it works on multi-word labels. Not exhaustive — just the regular rules plus the
+## common -y/-s/-x/-ch/-sh endings.
+func _pluralize(word: String) -> String:
+	if word.is_empty():
+		return word
+	var lower := word.to_lower()
+	if lower.ends_with("y") and word.length() >= 2 and not _is_vowel(word[word.length() - 2]):
+		return word.substr(0, word.length() - 1) + "ies"  # inquiry -> inquiries
+	if lower.ends_with("s") or lower.ends_with("x") or lower.ends_with("z") \
+			or lower.ends_with("ch") or lower.ends_with("sh"):
+		return word + "es"  # box -> boxes, match -> matches
+	return word + "s"
+
+
+func _is_vowel(c: String) -> bool:
+	return c.to_lower() in ["a", "e", "i", "o", "u"]
 
 
 ## The custom types that are NOT whole-document (collection) types — i.e. types
@@ -241,7 +262,11 @@ static func _substitute(value: Variant, source: Variant) -> Variant:
 			a.append(_substitute(e, source))
 		return a
 	if value is String and (value as String).begins_with("$"):
-		return _value_at_path(source, (value as String).substr(1))
+		var resolved: Variant = _value_at_path(source, (value as String).substr(1))
+		# A path that dug through an array yields many values — match any of them.
+		if resolved is Array:
+			return {"$in": resolved}
+		return resolved
 	return value
 
 
@@ -250,13 +275,30 @@ static func _value_at_path(source: Variant, path: String) -> Variant:
 	# source is a scalar (e.g. a field value) rather than a document.
 	if path.is_empty():
 		return source
-	var cur: Variant = source
-	for seg in path.split("."):
-		if cur is Dictionary and (cur as Dictionary).has(seg):
-			cur = (cur as Dictionary)[seg]
-		else:
-			return null
-	return cur
+	return _dig(source, path.split("."), 0)
+
+
+## Walk `segs` from `index` into `cur`. Dictionaries descend by key. Arrays map
+## the remaining path over every element and flatten the results into one list
+## (so "mentions._id" over an array of {_id} dicts yields all the ids), skipping
+## elements where the path is missing. Returns null when a key is absent.
+static func _dig(cur: Variant, segs: PackedStringArray, index: int) -> Variant:
+	if index >= segs.size():
+		return cur
+	if cur is Array:
+		var out: Array = []
+		for elem in cur:
+			var v: Variant = _dig(elem, segs, index)
+			if v == null:
+				continue
+			if v is Array:
+				out.append_array(v)
+			else:
+				out.append(v)
+		return out
+	if cur is Dictionary and (cur as Dictionary).has(segs[index]):
+		return _dig((cur as Dictionary)[segs[index]], segs, index + 1)
+	return null
 
 
 # Display-tree construction ---------------------------------------------------

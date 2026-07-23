@@ -102,7 +102,7 @@ func _add_value_item(parent: TreeItem, key: String, value: Variant, path: String
 	else:
 		item.set_text(2, field_type)
 		item.set_custom_color(2, AppTheme.ACCENT)
-	item.set_metadata(0, {"key": key, "name": key, "value": value})
+	item.set_metadata(0, {"key": key, "name": key, "value": value, "path": path})
 
 	if value is Dictionary and _ejson_scalar(value).is_empty():
 		item.set_text(1, "{%d fields}" % value.size())
