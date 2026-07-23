@@ -8,8 +8,7 @@ extends Control
 ## picker. Both pickers open from the toolbar; the database picker also opens
 ## automatically when no tabs are open. Layout lives in main.tscn (theme too).
 
-const DATABASE_TAB_SCENE := preload("res://source/ui/database/database_tab.tscn")
-const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.tscn")
+const PROJECT_TAB_SCENE := preload("res://source/ui/project/project_tab.tscn")
 const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.tscn")
 
 @onready var _background: ColorRect = %Background
@@ -138,43 +137,38 @@ func _open_workspace_picker() -> void:
 	_workspace_picker.open()
 
 
-# Database tabs ---------------------------------------------------------------
+# Project tabs ----------------------------------------------------------------
+## Opening a database from the picker builds a project bound to just that DB.
+## (Stage 1: the pickers still supply the sources; attaching both a DB and an API
+## to one project comes with the document lifecycle in a later stage.)
 func _on_database_selected(connection: Dictionary, database: String) -> void:
-	_open_database_tab(connection, database)
+	var doc := WorkspaceDoc.new()
+	var conn_name := String(connection.get("name", ""))
+	doc.name = "%s · %s" % [conn_name, database] if not conn_name.is_empty() else database
+	doc.mongo = {"connection": connection, "database": database}
+	_open_project_tab(doc)
+	_status_label.text = "Opened %s on %s" % [database, conn_name]
 
 
-func _open_database_tab(connection: Dictionary, database: String) -> DatabaseTab:
-	var tab: DatabaseTab = DATABASE_TAB_SCENE.instantiate()
-	tab.configure(connection, database)
-	tab.status_changed.connect(_on_status_changed)
-	tab.name = "db_%d" % _tab_counter
-	_tab_counter += 1
-	_tabs.add_child(tab)
-	var index := _tabs.get_tab_count() - 1
-	_tabs.set_tab_title(index, tab.tab_title())
-	_tabs.set_tab_tooltip(index, "%s · %s" % [connection.get("name", ""), database])
-	_tabs.current_tab = index
-	_status_label.text = "Opened %s on %s" % [database, connection.get("name", "")]
-	return tab
-
-
-# Workspace tabs --------------------------------------------------------------
+## Opening a workspace from the picker builds a project bound to just that API.
 func _on_workspace_selected(workspace: Dictionary) -> void:
-	_open_workspace_tab(workspace)
+	var doc := WorkspaceDoc.new()
+	doc.name = String(workspace.get("name", ""))
+	doc.rocketchat = {"url": workspace.get("url", ""), "users": workspace.get("users", [])}
+	_open_project_tab(doc)
+	_status_label.text = "Opened workspace %s" % doc.name
 
 
-func _open_workspace_tab(workspace: Dictionary) -> WorkspaceTab:
-	var tab: WorkspaceTab = WORKSPACE_TAB_SCENE.instantiate()
-	tab.configure(workspace)
+func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
+	var tab: ProjectTab = PROJECT_TAB_SCENE.instantiate()
+	tab.configure(doc)
 	tab.status_changed.connect(_on_status_changed)
-	tab.name = "ws_%d" % _tab_counter
+	tab.name = "proj_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)
 	var index := _tabs.get_tab_count() - 1
 	_tabs.set_tab_title(index, tab.tab_title())
-	_tabs.set_tab_tooltip(index, workspace.get("url", ""))
 	_tabs.current_tab = index
-	_status_label.text = "Opened workspace %s" % workspace.get("name", "")
 	return tab
 
 
