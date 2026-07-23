@@ -4,10 +4,10 @@ extends Node
 ## (which proxies MongoDB through the Debris server), this talks straight to
 ## the configured Rocket.Chat server. Registered as the `RocketChat` autoload.
 ##
-## Every call takes a workspace config ({ url, user_id, token, … }) and returns a
-## result Dictionary shaped as { ok: bool, data: Variant, error: String, status:
-## int }. Auth headers (X-User-Id / X-Auth-Token) are attached when the workspace
-## carries credentials.
+## Every call takes a workspace config ({ url, users: [{name, user_id, token}], … })
+## and returns a result Dictionary shaped as { ok: bool, data: Variant, error:
+## String, status: int }. Auth headers (X-User-Id / X-Auth-Token) are attached from
+## the credentials on the workspace dict (see _headers).
 
 const REQUEST_TIMEOUT_SECONDS := 20.0
 const OPENAPI_PATH := "/api/docs/json"
@@ -117,10 +117,19 @@ func _base_url(workspace: Dictionary) -> String:
 	return url
 
 
+## Attach auth headers for the request. An explicit user_id/token on the workspace
+## dict wins (the endpoint tab sets these from the user picked for that tab, and
+## clears them for an anonymous call); otherwise fall back to the first configured
+## user so workspace-level calls like the OpenAPI fetch stay authenticated.
 func _headers(workspace: Dictionary) -> PackedStringArray:
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	var user_id := String(workspace.get("user_id", ""))
 	var token := String(workspace.get("token", ""))
+	if user_id.is_empty() and token.is_empty():
+		var users: Variant = workspace.get("users", [])
+		if users is Array and not (users as Array).is_empty() and users[0] is Dictionary:
+			user_id = String(users[0].get("user_id", ""))
+			token = String(users[0].get("token", ""))
 	if not user_id.is_empty() and not token.is_empty():
 		headers.append("X-User-Id: " + user_id)
 		headers.append("X-Auth-Token: " + token)

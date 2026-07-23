@@ -2,20 +2,19 @@ class_name WorkspaceDialog
 extends Window
 
 ## Add/Edit dialog for a Rocket.Chat workspace, modeled on the Mongo connection
-## dialog. It only gathers a config Dictionary (name, server URL and Personal
-## Access Token credentials) and emits `saved` / `updated`; actually talking to
-## the workspace's REST API comes later.
+## dialog. It gathers a config Dictionary (name, server URL and a list of users,
+## each a { name, user_id, token } Personal Access Token credential) and emits
+## `saved` / `updated`. A workspace can hold several users; the endpoint tab picks
+## which one to send a given request as.
 
 signal saved(config: Dictionary)
 signal updated(index: int, config: Dictionary)
 
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _url_edit: LineEdit = %UrlEdit
-@onready var _user_id_edit: LineEdit = %UserIdEdit
-@onready var _token_edit: LineEdit = %TokenEdit
+@onready var _users_list: VBoxContainer = %UsersList
 @onready var _status: Label = %Status
 @onready var _save_btn: Button = %SaveBtn
-@onready var _cancel_btn: Button = %CancelBtn
 
 var _edit_index := -1  # >= 0 when editing an existing workspace
 
@@ -30,7 +29,8 @@ func open_new() -> void:
 	_reset()
 	_edit_index = -1
 	title = "New Workspace"
-	popup_centered(Vector2i(480, 280))
+	_add_user_row()
+	popup_centered(Vector2i(560, 420))
 
 
 func open_edit(index: int, config: Dictionary) -> void:
@@ -39,18 +39,79 @@ func open_edit(index: int, config: Dictionary) -> void:
 	title = "Edit Workspace"
 	_name_edit.text = config.get("name", "")
 	_url_edit.text = config.get("url", "")
-	_user_id_edit.text = config.get("user_id", "")
-	_token_edit.text = config.get("token", "")
-	popup_centered(Vector2i(480, 280))
+	var users: Variant = config.get("users", [])
+	if users is Array and not (users as Array).is_empty():
+		for user in users:
+			_add_user_row(user)
+	else:
+		_add_user_row()
+	popup_centered(Vector2i(560, 420))
 
 
 # Helpers ---------------------------------------------------------------------
 func _reset() -> void:
 	_name_edit.text = ""
 	_url_edit.text = ""
-	_user_id_edit.text = ""
-	_token_edit.text = ""
 	_status.text = ""
+	for child in _users_list.get_children():
+		child.queue_free()
+
+
+## Build one user row (label + user id + secret token + remove button). The row's
+## LineEdits are stored in its metadata so _gather can read them back.
+func _add_user_row(user: Dictionary = {}) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+
+	var name_edit := LineEdit.new()
+	name_edit.custom_minimum_size = Vector2(110, 0)
+	name_edit.placeholder_text = "Label"
+	name_edit.text = user.get("name", "")
+
+	var user_id_edit := LineEdit.new()
+	user_id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	user_id_edit.placeholder_text = "User ID"
+	user_id_edit.text = user.get("user_id", "")
+
+	var token_edit := LineEdit.new()
+	token_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	token_edit.placeholder_text = "Access Token"
+	token_edit.secret = true
+	token_edit.text = user.get("token", "")
+
+	var remove_btn := Button.new()
+	remove_btn.text = "✕"
+	remove_btn.tooltip_text = "Remove this user"
+	remove_btn.focus_mode = Control.FOCUS_NONE
+	remove_btn.pressed.connect(func() -> void: row.queue_free())
+
+	row.add_child(name_edit)
+	row.add_child(user_id_edit)
+	row.add_child(token_edit)
+	row.add_child(remove_btn)
+	row.set_meta("fields", [name_edit, user_id_edit, token_edit])
+	_users_list.add_child(row)
+
+
+## Collect the non-empty user rows. A row with neither a user id nor a token is
+## treated as blank and dropped; an unnamed user is labelled by its user id.
+func _gather_users() -> Array:
+	var users: Array = []
+	for row in _users_list.get_children():
+		if not row.has_meta("fields"):
+			continue
+		var fields: Array = row.get_meta("fields")
+		var label: String = (fields[0] as LineEdit).text.strip_edges()
+		var user_id: String = (fields[1] as LineEdit).text.strip_edges()
+		var token: String = (fields[2] as LineEdit).text
+		if user_id.is_empty() and token.strip_edges().is_empty():
+			continue
+		users.append({
+			"name": label if not label.is_empty() else user_id,
+			"user_id": user_id,
+			"token": token,
+		})
+	return users
 
 
 func _gather() -> Dictionary:
@@ -61,12 +122,15 @@ func _gather() -> Dictionary:
 	return {
 		"name": display_name,
 		"url": url,
-		"user_id": _user_id_edit.text.strip_edges(),
-		"token": _token_edit.text,
+		"users": _gather_users(),
 	}
 
 
 # Actions ---------------------------------------------------------------------
+func _on_add_user() -> void:
+	_add_user_row()
+
+
 func _on_save() -> void:
 	if _url_edit.text.strip_edges().is_empty():
 		_status.text = "A server URL is required."

@@ -28,6 +28,10 @@ var _endpoint: ApiEndpoint = null
 var _active_args: Dictionary = {}
 ## param name -> input Control (LineEdit or CheckBox).
 var _inputs: Dictionary = {}
+## Dropdown for choosing which configured workspace user to send as (or none).
+## Null when the workspace has no users. Item metadata holds the user index, or
+## null for the anonymous "(none)" entry.
+var _user_select: OptionButton = null
 
 
 ## Bind this tab to a workspace + endpoint. Call before the node enters the tree.
@@ -84,10 +88,15 @@ func _build_form() -> void:
 	for child in _params_grid.get_children():
 		child.queue_free()
 	_inputs.clear()
+	_user_select = null
 
 	var params := _endpoint.form_params()
+	var users: Array = _workspace_users()
 	_no_params.visible = params.is_empty()
-	_params_grid.visible = not params.is_empty()
+	_params_grid.visible = not params.is_empty() or not users.is_empty()
+
+	if not users.is_empty():
+		_build_user_row(users)
 
 	for p in params:
 		var name: String = p.get("name", "")
@@ -103,6 +112,36 @@ func _build_form() -> void:
 		var input := _make_input(p)
 		_inputs[name] = input
 		_params_grid.add_child(input)
+
+
+## The workspace's configured users, or an empty array when it has none.
+func _workspace_users() -> Array:
+	var users: Variant = _workspace.get("users", [])
+	return users if users is Array else []
+
+
+## Add the "User" selector as the first form row: an anonymous "(none)" entry
+## followed by each configured user. Defaults to the first user so opening a tab
+## keeps the previous "always authenticated" behaviour.
+func _build_user_row(users: Array) -> void:
+	var label := Label.new()
+	label.text = "User"
+	label.custom_minimum_size = Vector2(120, 0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_params_grid.add_child(label)
+
+	var opt := OptionButton.new()
+	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opt.add_item("(none)")
+	opt.set_item_metadata(opt.item_count - 1, null)
+	for i in users.size():
+		var user: Dictionary = users[i]
+		opt.add_item(user.get("name", user.get("user_id", "User %d" % (i + 1))))
+		opt.set_item_metadata(opt.item_count - 1, i)
+	opt.select(1)  # first configured user
+	_user_select = opt
+	_params_grid.add_child(opt)
 
 
 ## Pick an input widget matched to the param's schema: a checkbox for bools, a
@@ -248,7 +287,7 @@ func _fetch_page(offset: int, limit: int) -> void:
 	_send_btn.disabled = true
 	status_changed.emit("%s %s…" % [_endpoint.method, path])
 	var result: Dictionary = await RocketChat.request(
-		_workspace, _http_method(_endpoint.method), path, query, body
+		_effective_workspace(), _http_method(_endpoint.method), path, query, body
 	)
 	_send_btn.disabled = false
 
@@ -273,6 +312,26 @@ func _fetch_page(offset: int, limit: int) -> void:
 		status_changed.emit("%s — %d %s%s" % [
 			_endpoint.id, data.size(), _endpoint.noun(), "" if data.size() == 1 else "s",
 		])
+
+
+## The workspace to send this tab's request as. Overrides the credentials with the
+## user picked in the form (empty for the anonymous "(none)" choice) and drops the
+## `users` list so RocketChat._headers uses exactly the chosen credentials rather
+## than falling back to the first user.
+func _effective_workspace() -> Dictionary:
+	var ws := _workspace.duplicate(true)
+	ws.erase("users")
+	ws["user_id"] = ""
+	ws["token"] = ""
+	if _user_select != null:
+		var index: Variant = _user_select.get_item_metadata(_user_select.selected)
+		if index != null:
+			var users := _workspace_users()
+			if int(index) < users.size():
+				var user: Dictionary = users[index]
+				ws["user_id"] = user.get("user_id", "")
+				ws["token"] = user.get("token", "")
+	return ws
 
 
 ## Map each declared param name to where it belongs in the request ("query" or

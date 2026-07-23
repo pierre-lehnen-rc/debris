@@ -42,19 +42,44 @@ func _load_workspaces() -> void:
 		_workspaces = [{
 			"name": "Local",
 			"url": "http://localhost:3000",
-			"user_id": "",
-			"token": "",
+			"users": [],
 		}]
 		Store.save_workspaces(_workspaces)
 		return
 	_workspaces = []
 	for saved in Store.workspaces():
-		_workspaces.append({
-			"name": saved.get("name", ""),
-			"url": saved.get("url", ""),
-			"user_id": saved.get("user_id", ""),
-			"token": saved.get("token", ""),
-		})
+		_workspaces.append(_normalize(saved))
+
+
+## Coerce a stored workspace into the current shape ({ name, url, users }).
+## Legacy configs carried a single top-level user_id/token pair; migrate those
+## into a one-entry users list so old settings keep working.
+func _normalize(config: Dictionary) -> Dictionary:
+	return {
+		"name": config.get("name", ""),
+		"url": config.get("url", ""),
+		"users": _users_of(config),
+	}
+
+
+func _users_of(config: Dictionary) -> Array:
+	var raw: Variant = config.get("users")
+	if raw is Array:
+		var users: Array = []
+		for entry in raw:
+			if entry is Dictionary:
+				users.append({
+					"name": entry.get("name", ""),
+					"user_id": entry.get("user_id", ""),
+					"token": entry.get("token", ""),
+				})
+		return users
+	# Legacy single-credential workspace.
+	var user_id: String = config.get("user_id", "")
+	var token: String = config.get("token", "")
+	if user_id.is_empty() and token.is_empty():
+		return []
+	return [{"name": "Default", "user_id": user_id, "token": token}]
 
 
 func open() -> void:
@@ -64,12 +89,7 @@ func open() -> void:
 
 # Public mutations (called by Main after the workspace dialog) -----------------
 func add_workspace(config: Dictionary) -> void:
-	_workspaces.append({
-		"name": config.get("name", "New Workspace"),
-		"url": config.get("url", ""),
-		"user_id": config.get("user_id", ""),
-		"token": config.get("token", ""),
-	})
+	_workspaces.append(_normalize(config))
 	Store.save_workspaces(_workspaces)
 	_populate()
 
@@ -77,12 +97,7 @@ func add_workspace(config: Dictionary) -> void:
 func update_workspace(index: int, config: Dictionary) -> void:
 	if index < 0 or index >= _workspaces.size():
 		return
-	_workspaces[index] = {
-		"name": config.get("name", _workspaces[index]["name"]),
-		"url": config.get("url", _workspaces[index]["url"]),
-		"user_id": config.get("user_id", _workspaces[index].get("user_id", "")),
-		"token": config.get("token", _workspaces[index].get("token", "")),
-	}
+	_workspaces[index] = _normalize(config)
 	Store.save_workspaces(_workspaces)
 	_populate()
 
