@@ -116,6 +116,9 @@ func _on_open_query_requested(collection: String, filter: Dictionary, function: 
 ## tree view changes; the table and text views are unaffected.
 func set_log_mode(enabled: bool) -> void:
 	_tree_view.set_log_mode(enabled)
+	# The table view keeps its normal rendering, but must know it's showing log
+	# entries so its context menu drops Insert/Edit just like the tree's.
+	_table_view.set_log_mode(enabled)
 
 
 ## Opens the document editor in insert mode (used by the sidebar's

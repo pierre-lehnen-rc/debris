@@ -25,6 +25,7 @@ const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.ts
 @onready var _picker: ConnectionPicker = $ConnectionPicker
 @onready var _workspace_dialog: WorkspaceDialog = $WorkspaceDialog
 @onready var _workspace_picker: WorkspacePicker = $WorkspacePicker
+@onready var _error_dialog: ErrorDialog = $ErrorDialog
 
 var _tab_counter := 0
 
@@ -55,8 +56,8 @@ func _ready() -> void:
 	bar.tab_close_display_policy = TabBar.CLOSE_BUTTON_SHOW_ALWAYS
 	bar.tab_close_pressed.connect(_on_tab_close_pressed)
 
-	# Surface failures immediately: any failed action pops the activity log open
-	# (or focuses it if already open) so the user sees what went wrong.
+	# Surface failures immediately: any failed action pops up a small error dialog
+	# offering to open the activity log, rather than opening the log unprompted.
 	ActivityLog.entry_added.connect(_on_activity_log_entry)
 
 	# Show the bundled-server startup progress in the status bar.
@@ -178,10 +179,11 @@ func _open_workspace_tab(workspace: Dictionary) -> WorkspaceTab:
 
 
 # Activity log tab ------------------------------------------------------------
-## A logged action failed — reveal the activity log so the error is visible.
+## A logged action failed — surface a small error popup. The user can dismiss it
+## or open the activity log from there; we never open the log on our own.
 func _on_activity_log_entry(entry: Dictionary) -> void:
 	if not entry.get("ok", false):
-		_open_activity_log_tab()
+		_error_dialog.show_error(entry)
 
 
 ## Open the activity log, or focus it if it's already open (only one is useful).

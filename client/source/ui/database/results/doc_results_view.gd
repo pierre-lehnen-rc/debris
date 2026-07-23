@@ -36,6 +36,11 @@ var _doc_menu: PopupMenu
 var _menu_doc_index := -1
 var _menu_item: TreeItem
 
+## When set, top-level rows render as activity-log entries (see the tree view) and
+## the context menu drops the Insert/Edit actions, since log entries aren't
+## editable documents. Delete stays available.
+var _log_mode := false
+
 # Schema-driven custom types/actions ------------------------------------------
 ## Schema resolving custom types for the collection currently displayed, and the
 ## collection name itself. Set via set_type_context(); null/"" disables the feature.
@@ -88,6 +93,13 @@ func set_type_context(schema: DatabaseSchema, collection: String) -> void:
 	_collection = collection
 
 
+## Toggle activity-log rendering. The Activity Log tab enables it via ResultsView;
+## subclasses read _log_mode when rendering rows and the base uses it to hide the
+## Insert/Edit context-menu actions.
+func set_log_mode(enabled: bool) -> void:
+	_log_mode = enabled
+
+
 ## The custom type name for a value at `field_path` in the current collection, or
 ## "" when no schema/collection/rule applies. field_path == "" is the document.
 func _resolve_type(field_path: String, value: Variant) -> String:
@@ -128,9 +140,11 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
 		)
 		_doc_menu.add_separator()
-	_doc_menu.add_item("Edit Document…", DocAction.EDIT)
+	if not _log_mode:
+		_doc_menu.add_item("Edit Document…", DocAction.EDIT)
 	_doc_menu.add_item("View Document", DocAction.VIEW)
-	_doc_menu.add_item("Insert Document…", DocAction.INSERT)
+	if not _log_mode:
+		_doc_menu.add_item("Insert Document…", DocAction.INSERT)
 	_doc_menu.add_separator()
 	if not is_document:
 		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)

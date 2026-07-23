@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/connection_picker.tscn" id="4_pick0"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/workspace_dialog.tscn" id="5_wsdlg"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/workspace_picker.tscn" id="6_wspick"]
+[ext_resource type="PackedScene" path="res://source/ui/dialogs/error_dialog.tscn" id="7_errdg"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -94,6 +95,8 @@ text = "Ready"
 
 [node name="WorkspacePicker" parent="." instance=ExtResource("6_wspick")]
 
+[node name="ErrorDialog" parent="." instance=ExtResource("7_errdg")]
+
 [connection signal="pressed" from="Box/Toolbar/Row/OpenDbBtn" to="." method="_open_picker"]
 [connection signal="pressed" from="Box/Toolbar/Row/OpenWsBtn" to="." method="_open_workspace_picker"]
 [connection signal="pressed" from="Box/Toolbar/Row/ActivityLogBtn" to="." method="_open_activity_log_tab"]
@@ -110,3 +113,4 @@ text = "Ready"
 [connection signal="add_workspace_requested" from="WorkspacePicker" to="." method="_on_add_workspace_requested"]
 [connection signal="edit_workspace_requested" from="WorkspacePicker" to="." method="_on_edit_workspace_requested"]
 [connection signal="status_changed" from="WorkspacePicker" to="." method="_on_status_changed"]
+[connection signal="open_log_requested" from="ErrorDialog" to="." method="_open_activity_log_tab"]

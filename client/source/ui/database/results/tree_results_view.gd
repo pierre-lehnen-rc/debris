@@ -3,17 +3,11 @@ extends DocResultsView
 
 ## Robo3T-style tree: one expandable row per document, then nested key/value/type
 ## rows for every field. The first document of the page starts expanded.
-
-## When set, top-level rows are rendered as activity-log entries: the Key column
-## shows source/action/target, the Value column shows the result or error, and
-## failed actions get an error background. Nested field rows are unaffected.
-var _log_mode := false
-
-
-## Toggle activity-log rendering for top-level rows. Called by the ResultsView
-## owner (only the Activity Log tab enables it).
-func set_log_mode(enabled: bool) -> void:
-	_log_mode = enabled
+##
+## When _log_mode is set (inherited from DocResultsView), top-level rows render as
+## activity-log entries: the Key column shows source/action/target, the Value
+## column shows the result or error, and failed actions get an error background.
+## Nested field rows are unaffected.
 
 
 func _ready_view() -> void:
