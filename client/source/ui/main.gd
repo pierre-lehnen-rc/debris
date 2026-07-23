@@ -41,6 +41,9 @@ func _ready() -> void:
 	# (or focuses it if already open) so the user sees what went wrong.
 	ActivityLog.entry_added.connect(_on_activity_log_entry)
 
+	# Show the bundled-server startup progress in the status bar.
+	ServerManager.status_changed.connect(_on_status_changed)
+
 
 ## Relays a child's status message to the status bar. Wired in main.tscn.
 func _on_status_changed(text: String) -> void:

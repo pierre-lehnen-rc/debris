@@ -382,7 +382,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"esbuild@npm:~0.28.0":
+"esbuild@npm:^0.28.1, esbuild@npm:~0.28.0":
   version: 0.28.1
   resolution: "esbuild@npm:0.28.1"
   dependencies:
@@ -826,6 +826,7 @@ __metadata:
   resolution: "quetzalcoatl-server@workspace:."
   dependencies:
     "@types/node": "npm:^26.0.1"
+    esbuild: "npm:^0.28.1"
     fastify: "npm:^5.8.5"
     mongodb: "npm:^7.4.0"
     tsx: "npm:^4.22.4"
