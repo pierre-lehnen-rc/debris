@@ -38,6 +38,39 @@ static func save_workspaces(list: Array) -> void:
 	_write(data)
 
 
+## Recently-opened project file paths, most-recent first. Backs the File ▸ Open
+## Recent menu in the document-based workspace model.
+static func recent_workspaces() -> Array:
+	return _read().get("recent_workspaces", [])
+
+
+## Record `path` as the most-recently-opened project, de-duplicating and capping
+## the list so it stays short.
+static func add_recent_workspace(path: String, limit: int = 10) -> void:
+	if path.is_empty():
+		return
+	var data := _read()
+	var list: Array = data.get("recent_workspaces", [])
+	list.erase(path)
+	list.insert(0, path)
+	while list.size() > limit:
+		list.remove_at(list.size() - 1)
+	data["recent_workspaces"] = list
+	_write(data)
+
+
+## Paths of the projects that were open at last shutdown, restored on launch.
+## Only saved (on-disk) projects are listed; memory-only Untitled ones are lost.
+static func open_workspaces() -> Array:
+	return _read().get("open_workspaces", [])
+
+
+static func save_open_workspaces(paths: Array) -> void:
+	var data := _read()
+	data["open_workspaces"] = paths
+	_write(data)
+
+
 ## Read a single user preference (kept in a "preferences" sub-object), returning
 ## `default_value` when it was never set.
 static func get_preference(key: String, default_value: Variant = null) -> Variant:
