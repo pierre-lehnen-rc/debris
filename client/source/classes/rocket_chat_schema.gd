@@ -34,6 +34,11 @@ func _init() -> void:
 		{"collection": "rocketchat_message", "field": "u._id", "type": "UserId"},
 		{"collection": "rocketchat_subscription", "field": "u._id", "type": "UserId"},
 		{"collection": "rocketchat_video_conference", "field": "createdBy._id", "type": "UserId"},
+		# Fields that hold a room's id, wherever they appear across collections.
+		{"collection": "rocketchat_room", "field": "_id", "type": "RoomId"},
+		{"collection": "rocketchat_subscription", "field": "rid", "type": "RoomId"},
+		{"collection": "rocketchat_video_conference", "field": "rid", "type": "RoomId"},
+		{"collection": "rocketchat_message", "field": "rid", "type": "RoomId"},
 	]
 	# The "User" document type carries no actions of its own; a user document's
 	# context menu instead surfaces its typed attributes (e.g. _id → UserId) as
@@ -46,6 +51,16 @@ func _init() -> void:
 				"label": "List User's Messages",
 				"target_collection": "rocketchat_message",
 				"filter": {"u._id": "$"},
+				"function": "find",
+			},
+		],
+		"RoomId": [
+			# Source is the clicked id string, so "$" refers to the value itself.
+			{
+				"id": "list_room_messages",
+				"label": "List Room's Messages",
+				"target_collection": "rocketchat_message",
+				"filter": {"rid": "$"},
 				"function": "find",
 			},
 		],
