@@ -27,7 +27,12 @@ func _init() -> void:
 	min_group_size = 3
 	highlighted_collections = HIGHLIGHTED_COLLECTIONS
 	type_rules = [
+		# Whole-document types, shown in the tree's Type column.
 		{"collection": "users", "field": "", "type": "User"},
+		{"collection": "rocketchat_room", "field": "", "type": "Room"},
+		{"collection": "rocketchat_message", "field": "", "type": "Message"},
+		{"collection": "rocketchat_subscription", "field": "", "type": "Subscription"},
+		{"collection": "rocketchat_video_conference", "field": "", "type": "VideoConference"},
 		# Fields that hold a user's id, wherever they appear across collections.
 		{"collection": "users", "field": "_id", "type": "UserId"},
 		{"collection": "rocketchat_room", "field": "u._id", "type": "UserId"},
