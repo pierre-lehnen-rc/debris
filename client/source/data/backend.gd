@@ -1,6 +1,6 @@
 extends Node
 
-## HTTP client for the Quetzalcoatl server (the stateless MongoDB proxy).
+## HTTP client for the Debris server (the stateless MongoDB proxy).
 ## Registered as the `Backend` autoload. Each public method POSTs a JSON body to
 ## an /api endpoint and awaits the reply, returning a result Dictionary shaped as
 ## { ok: bool, data: Variant, error: String }. Connection details (host, port,
@@ -14,7 +14,7 @@ var base_url := DEFAULT_BASE_URL
 
 func _ready() -> void:
 	# Allow pointing at a non-default server (e.g. a different PORT) for testing.
-	var env := OS.get_environment("QUETZAL_SERVER_URL")
+	var env := OS.get_environment("DEBRIS_SERVER_URL")
 	if env != "":
 		base_url = env
 

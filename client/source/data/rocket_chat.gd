@@ -1,7 +1,7 @@
 extends Node
 
 ## Direct HTTP client for a Rocket.Chat workspace's REST API. Unlike Backend
-## (which proxies MongoDB through the Quetzalcoatl server), this talks straight to
+## (which proxies MongoDB through the Debris server), this talks straight to
 ## the configured Rocket.Chat server. Registered as the `RocketChat` autoload.
 ##
 ## Every call takes a workspace config ({ url, user_id, token, … }) and returns a

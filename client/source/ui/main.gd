@@ -227,4 +227,4 @@ func _populate_menus() -> void:
 	_view_menu.add_item("Table", 1)
 	_view_menu.add_item("Text", 2)
 
-	_help_menu.add_item("About Quetzalcoatl", 0)
+	_help_menu.add_item("About Debris", 0)

@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Quetzalcoatl"
+config/name="Debris"
 run/main_scene="res://source/ui/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"

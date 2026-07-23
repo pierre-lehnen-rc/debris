@@ -1,6 +1,6 @@
 extends Node
 
-## Owns startup of the bundled Quetzalcoatl server. On launch it checks whether a
+## Owns startup of the bundled Debris server. On launch it checks whether a
 ## server is already answering at Backend's base URL (one the developer started by
 ## hand, or one this app opened earlier); if so it reuses it. Otherwise it locates
 ## a `node` binary, extracts the bundled server (res://server/…) to a writable
@@ -18,10 +18,10 @@ extends Node
 signal status_changed(text: String)
 
 ## Path (inside res://) of the bundled server produced by `yarn bundle`.
-const BUNDLE_RES_PATH := "res://server/quetzalcoatl-server.cjs"
+const BUNDLE_RES_PATH := "res://server/debris-server.cjs"
 ## Where the bundle is copied so `node` can run it (res:// may live inside a
 ## packed archive in exported builds and isn't a real filesystem path).
-const BUNDLE_USER_PATH := "user://server/quetzalcoatl-server.cjs"
+const BUNDLE_USER_PATH := "user://server/debris-server.cjs"
 ## Directory (inside user://) where we write the launcher script.
 const LAUNCHER_USER_DIR := "user://server"
 ## How long to wait for a freshly-launched server to answer /health.
@@ -61,7 +61,7 @@ func _start() -> void:
 
 	var node := _find_node()
 	if node.is_empty():
-		_set_status("Node.js not found — start the server manually (set QUETZAL_NODE to override)")
+		_set_status("Node.js not found — start the server manually (set DEBRIS_NODE to override)")
 		push_warning("ServerManager: no usable `node` binary found; server not started")
 		return
 
@@ -75,7 +75,13 @@ func _start() -> void:
 	if not windowed:
 		# No terminal emulator available (e.g. a headless box) — fall back to a
 		# plain background process so the app still works. Reuse detection keeps
-		# this from stacking up across runs.
+		# this from stacking up across runs. The server reads its port/host from
+		# the environment, which the child inherits from us. (The terminal path
+		# instead bakes these into the launcher script.)
+		OS.set_environment("PORT", str(_port))
+		OS.set_environment("HOST", _host)
+		if OS.get_environment("LOG_LEVEL").is_empty():
+			OS.set_environment("LOG_LEVEL", "warn")
 		var pid := OS.create_process(node, [script])
 		if pid <= 0:
 			_set_status("Failed to launch the bundled server")
@@ -113,7 +119,7 @@ func _healthy() -> bool:
 ## Find a runnable `node`: an explicit override first, then PATH, then the usual
 ## install locations (covers GUI launches with a minimal PATH).
 func _find_node() -> String:
-	var override := OS.get_environment("QUETZAL_NODE")
+	var override := OS.get_environment("DEBRIS_NODE")
 	if not override.is_empty() and _node_works(override):
 		return override
 
@@ -170,7 +176,7 @@ func _launch_in_terminal(node: String, script: String) -> bool:
 	match OS.get_name():
 		"Windows":
 			return OS.create_process("cmd", \
-				["/c", "start", "Quetzalcoatl Server", "cmd", "/k", launcher]) > 0
+				["/c", "start", "Debris Server", "cmd", "/k", launcher]) > 0
 		"macOS":
 			# Terminal.app runs an executable file; it needs the exec bit set.
 			OS.execute("chmod", ["+x", launcher])
@@ -185,11 +191,11 @@ func _launch_linux_terminal(launcher: String) -> bool:
 	# separate argv entries (-e sh <file>); a few want it as one string.
 	var candidates := [
 		["x-terminal-emulator", ["-e", "sh", launcher]],
-		["gnome-terminal", ["--title", "Quetzalcoatl Server", "--", "sh", launcher]],
+		["gnome-terminal", ["--title", "Debris Server", "--", "sh", launcher]],
 		["konsole", ["-e", "sh", launcher]],
 		["kitty", ["sh", launcher]],
 		["alacritty", ["-e", "sh", launcher]],
-		["xfce4-terminal", ["--title=Quetzalcoatl Server", "--command", "sh %s" % launcher]],
+		["xfce4-terminal", ["--title=Debris Server", "--command", "sh %s" % launcher]],
 		["tilix", ["-e", "sh %s" % launcher]],
 		["terminator", ["-e", "sh %s" % launcher]],
 		["xterm", ["-e", "sh", launcher]],
@@ -228,11 +234,11 @@ func _write_launcher(node: String, script: String) -> String:
 
 	if is_windows:
 		f.store_string("@echo off\r\n")
-		f.store_string("title Quetzalcoatl Server\r\n")
+		f.store_string("title Debris Server\r\n")
 		f.store_string("set PORT=%d\r\n" % _port)
 		f.store_string("set HOST=%s\r\n" % _host)
 		f.store_string("if \"%%LOG_LEVEL%%\"==\"\" set LOG_LEVEL=info\r\n")
-		f.store_string("echo Quetzalcoatl bundled server - close this window to stop it.\r\n")
+		f.store_string("echo Debris bundled server - close this window to stop it.\r\n")
 		f.store_string("echo.\r\n")
 		f.store_string("\"%s\" \"%s\"\r\n" % [node, script])
 		f.store_string("echo.\r\n")
@@ -243,7 +249,7 @@ func _write_launcher(node: String, script: String) -> String:
 		f.store_string("export PORT='%d'\n" % _port)
 		f.store_string("export HOST='%s'\n" % _host)
 		f.store_string(": \"${LOG_LEVEL:=info}\"; export LOG_LEVEL\n")
-		f.store_string("echo 'Quetzalcoatl bundled server - close this window (or Ctrl+C) to stop it.'\n")
+		f.store_string("echo 'Debris bundled server - close this window (or Ctrl+C) to stop it.'\n")
 		f.store_string("echo\n")
 		f.store_string("'%s' '%s'\n" % [node, script])
 		f.store_string("status=$?\n")
