@@ -174,7 +174,10 @@ static func _style_popup(theme: Theme) -> void:
 
 	theme.set_color("font_color", "MenuBar", TEXT)
 	theme.set_color("font_hover_color", "MenuBar", TEXT_BRIGHT)
-	theme.set_stylebox("normal", "MenuBar", StyleBoxEmpty.new())
+	# The normal state must carry the SAME content margins as hover/pressed;
+	# otherwise the title text jumps sideways when a menu is hovered/opened. Keep
+	# it transparent so only the background colour changes on hover.
+	theme.set_stylebox("normal", "MenuBar", _flat(Color(0, 0, 0, 0), 3))
 	theme.set_stylebox("hover", "MenuBar", _flat(BG_HOVER, 3))
 	theme.set_stylebox("pressed", "MenuBar", _flat(BG_PRESSED, 3))
 

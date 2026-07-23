@@ -196,7 +196,17 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_bffqy"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menunorm"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 8.0
+content_margin_bottom = 4.0
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.06666667, 0.07450981, 0.101960786, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1xnjp"]
 content_margin_left = 8.0
@@ -549,7 +559,7 @@ LineEdit/styles/normal = SubResource("StyleBoxFlat_fh101")
 MenuBar/colors/font_color = Color(0.78039217, 0.8, 0.8392157, 1)
 MenuBar/colors/font_hover_color = Color(0.9098039, 0.92156863, 0.9411765, 1)
 MenuBar/styles/hover = SubResource("StyleBoxFlat_sjyq0")
-MenuBar/styles/normal = SubResource("StyleBoxEmpty_bffqy")
+MenuBar/styles/normal = SubResource("StyleBoxFlat_menunorm")
 MenuBar/styles/pressed = SubResource("StyleBoxFlat_1xnjp")
 OptionButton/colors/font_color = Color(0.78039217, 0.8, 0.8392157, 1)
 OptionButton/styles/hover = SubResource("StyleBoxFlat_yy8hw")
