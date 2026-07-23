@@ -9,6 +9,7 @@ extends Control
 
 signal status_changed(text: String)
 
+@onready var _toolbar: PanelContainer = %Toolbar
 @onready var _sidebar: EndpointSidebar = %EndpointSidebar
 @onready var _explorer: EndpointWorkspace = %EndpointWorkspace
 @onready var _users_panel: UsersPanel = %UsersPanel
@@ -20,8 +21,18 @@ var _session: WorkspaceSession = null
 
 
 func _ready() -> void:
+	_apply_style()
 	if not _workspace.is_empty():
 		_setup()
+
+
+func _apply_style() -> void:
+	var sb := AppTheme._flat(AppTheme.BG_DARK, 0)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	_toolbar.add_theme_stylebox_override("panel", sb)
 
 
 ## Bind this tab to a workspace config. Safe to call before the node is in the
@@ -56,3 +67,7 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 
 func _on_status_changed(text: String) -> void:
 	status_changed.emit(text)
+
+
+func _on_users_toggled(shown: bool) -> void:
+	_users_panel.visible = shown
