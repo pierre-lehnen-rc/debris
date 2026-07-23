@@ -45,31 +45,10 @@ func _init() -> void:
 		{"collection": "rocketchat_video_conference", "field": "rid", "type": "RoomId"},
 		{"collection": "rocketchat_message", "field": "rid", "type": "RoomId"},
 	]
-	# The "User" document type carries no actions of its own; a user document's
-	# context menu instead surfaces its typed attributes (e.g. _id → UserId) as
-	# sub-menus, so all user-id actions live on the UserId type in one place.
-	type_actions = {
-		"UserId": [
-			# Source is the clicked id string, so "$" refers to the value itself.
-			{
-				"id": "list_user_messages",
-				"label": "List User's Messages",
-				"target_collection": "rocketchat_message",
-				"filter": {"u._id": "$"},
-				"function": "find",
-			},
-		],
-		"RoomId": [
-			# Source is the clicked id string, so "$" refers to the value itself.
-			{
-				"id": "list_room_messages",
-				"label": "List Room's Messages",
-				"target_collection": "rocketchat_message",
-				"filter": {"rid": "$"},
-				"function": "find",
-			},
-		],
-	}
+	# No explicit type_actions: actions_for_type() auto-generates a "List <X>"
+	# action for every collection/field where a type is used, so e.g. a UserId
+	# value can list users, messages, subscriptions, rooms and video conferences
+	# by the corresponding user-id field, all derived from the rules above.
 
 
 ## Sort the tree by each collection's grouped path, so it appears ordered by its

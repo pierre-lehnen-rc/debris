@@ -44,12 +44,15 @@ var highlighted_collections: Array = []
 # type_rules: Array of { "collection": String, "field": String, "type": String }.
 #   field == "" (or absent) matches the whole document; otherwise it's a dotted
 #   field path within the document ("u._id").
-# type_actions: Dictionary of type name -> Array of action Dictionaries, each
-#   { "id", "label", "target_collection", "filter": Dictionary, "function" }.
+# type_actions: Dictionary of type name -> Array of extra action Dictionaries,
+#   each { "id", "label", "target_collection", "filter": Dictionary, "function" }.
 #   In `filter`, a String value shaped like "$dotted.path" is replaced at trigger
 #   time with the value at that path in the selected document (or field value).
 #   "$" on its own resolves to the selected value itself (useful for field-level
 #   types whose source is a scalar, e.g. "$" == the clicked _id string).
+#   Most actions don't need to be listed here: actions_for_type() also derives one
+#   "list" action per field-level rule that references the type (see there), so a
+#   type used as a filterable field anywhere is listable everywhere it appears.
 var type_rules: Array = []
 var type_actions: Dictionary = {}
 
@@ -105,10 +108,69 @@ func type_for(collection: String, field_path: String, _value: Variant = null) ->
 	return ""
 
 
-## The context-menu actions offered by a custom type. Returns [] for unknown types.
+## The context-menu actions offered by a custom type. Beyond any actions listed
+## explicitly in type_actions, one "list" action is auto-generated per field-level
+## rule that references this type: it opens that rule's collection filtered by the
+## rule's field set to the clicked value ("$"). So because a "UserId" is used at
+## rocketchat_video_conference.createdBy._id, any UserId value gains a
+## "List Video Conferences" action filtering that collection by createdBy._id.
+## The field name is appended to the label only when a collection has more than
+## one field of the type (to disambiguate). Returns [] when the type has neither
+## explicit actions nor field usages.
 func actions_for_type(type_name: String) -> Array:
-	var actions: Variant = type_actions.get(type_name, [])
-	return actions if actions is Array else []
+	var actions: Array = []
+	var manual: Variant = type_actions.get(type_name, [])
+	if manual is Array:
+		actions.append_array(manual)
+	for rule in type_rules:
+		if str(rule.get("type", "")) != type_name:
+			continue
+		var field := str(rule.get("field", ""))
+		if field.is_empty():
+			continue  # Whole-document types can't be used as a filter value.
+		var collection := str(rule.get("collection", ""))
+		var label := "List %ss" % _collection_label(collection)
+		if _type_field_count(type_name, collection) > 1:
+			label += " by %s" % field
+		actions.append({
+			"id": "list_%s_by_%s" % [collection, field],
+			"label": label,
+			"target_collection": collection,
+			"filter": {field: "$"},
+			"function": "find",
+		})
+	return actions
+
+
+## A readable singular label for a collection: its whole-document type name split
+## into words ("VideoConference" -> "Video Conference"), or the raw collection
+## name when the collection has no document-level type.
+func _collection_label(collection: String) -> String:
+	var doc_type := type_for(collection, "", null)
+	return _humanize(doc_type) if not doc_type.is_empty() else collection
+
+
+## Split a CamelCase identifier into space-separated words.
+func _humanize(name: String) -> String:
+	var out := ""
+	for i in name.length():
+		var ch := name[i]
+		if i > 0 and _is_upper(ch) and _is_lower_or_digit(name[i - 1]):
+			out += " "
+		out += ch
+	return out
+
+
+## How many field-level rules give `collection` an attribute of `type_name`; used
+## to decide whether a generated action's label needs the field name to be unique.
+func _type_field_count(type_name: String, collection: String) -> int:
+	var n := 0
+	for rule in type_rules:
+		if str(rule.get("type", "")) == type_name \
+				and str(rule.get("collection", "")) == collection \
+				and not str(rule.get("field", "")).is_empty():
+			n += 1
+	return n
 
 
 ## The distinct attribute fields of `collection` that carry a custom type (i.e.
