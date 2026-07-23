@@ -167,6 +167,21 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="UriRow" type="VBoxContainer" parent="Margin/Col" unique_id=744562923]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="UriLabel" type="Label" parent="Margin/Col/UriRow" unique_id=1252562996]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Connection URI"
+
+[node name="UrlEdit" type="LineEdit" parent="Margin/Col/UriRow" unique_id=573249677]
+unique_name_in_owner = true
+layout_mode = 2
+editable = false
+placeholder_text = "mongodb://…"
+
 [node name="Buttons" type="HBoxContainer" parent="Margin/Col" unique_id=111653223]
 layout_mode = 2
 theme_override_constants/separation = 8

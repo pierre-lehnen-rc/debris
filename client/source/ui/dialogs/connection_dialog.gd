@@ -19,6 +19,8 @@ const MECHANISMS := ["SCRAM-SHA-256", "SCRAM-SHA-1", "MONGODB-CR"]
 @onready var _pass_edit: LineEdit = %PassEdit
 @onready var _mech_option: OptionButton = %MechOption
 @onready var _default_db_edit: LineEdit = %DefaultDbEdit
+@onready var _url_edit: LineEdit = %UrlEdit
+@onready var _uri_label: Label = %UriLabel
 @onready var _status: Label = %Status
 @onready var _test_btn: Button = %TestBtn
 @onready var _save_btn: Button = %SaveBtn
@@ -34,18 +36,26 @@ func _ready() -> void:
 
 	_auth_controls = [_auth_db_edit, _user_edit, _pass_edit, _mech_option]
 
+	# Keep the URI preview in sync with every field that shapes the URL.
+	for field in [_host_edit, _port_edit, _user_edit, _pass_edit, _auth_db_edit, _default_db_edit]:
+		field.text_changed.connect(_update_url_preview)
+	_mech_option.item_selected.connect(_update_url_preview)
+
 	_apply_style()
 
 	_set_enabled(_auth_controls, false)
+	_update_url_preview()
 
 
 # Section toggles (wired in connection_dialog.tscn) ---------------------------
 func _on_auth_toggled(on: bool) -> void:
 	_set_enabled(_auth_controls, on)
+	_update_url_preview()
 
 
 func _apply_style() -> void:
 	_status.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_uri_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	_save_btn.add_theme_color_override("font_color", AppTheme.ACCENT)
 
 
@@ -70,6 +80,14 @@ func open_edit(index: int, config: Dictionary) -> void:
 	else:
 		_host_edit.text = hostport
 	_default_db_edit.text = config.get("default_database", "")
+	var auth: Dictionary = config.get("auth", {})
+	_auth_check.button_pressed = auth.get("enabled", false)
+	_auth_db_edit.text = auth.get("database", "admin")
+	_user_edit.text = auth.get("username", "")
+	_pass_edit.text = auth.get("password", "")
+	_mech_option.selected = maxi(0, MECHANISMS.find(auth.get("mechanism", "")))
+	_set_enabled(_auth_controls, _auth_check.button_pressed)
+	_update_url_preview()
 	popup_centered(Vector2i(540, 460))
 
 
@@ -95,6 +113,7 @@ func _reset() -> void:
 	_default_db_edit.text = ""
 	_status.text = ""
 	_set_enabled(_auth_controls, false)
+	_update_url_preview()
 
 
 # Actions ---------------------------------------------------------------------
@@ -137,6 +156,50 @@ func _spec_from_fields() -> Dictionary:
 		spec["authSource"] = _auth_db_edit.text
 		spec["authMechanism"] = MECHANISMS[_mech_option.selected]
 	return spec
+
+
+## Refresh the read-only connection-URI preview from the current field values.
+## Accepts (and ignores) the argument the various field signals emit.
+func _update_url_preview(_changed: Variant = null) -> void:
+	if _url_edit != null:
+		_url_edit.text = _mongo_url()
+
+
+## Build a standard mongodb:// URI from the current fields, mirroring what the
+## backend spec (Backend.to_spec) would connect with: host:port, an optional
+## auth prefix + authSource/authMechanism, an optional default database path, and
+## directConnection. The password is masked so the URI can stay on screen safely.
+func _mongo_url() -> String:
+	var host := _host_edit.text.strip_edges()
+	if host.is_empty():
+		host = "localhost"
+	var port := _port_edit.text.strip_edges()
+	if port.is_empty():
+		port = "27017"
+
+	var auth_on := _auth_check.button_pressed and not _user_edit.text.strip_edges().is_empty()
+	var creds := ""
+	if auth_on:
+		creds = _user_edit.text.strip_edges().uri_encode()
+		if not _pass_edit.text.is_empty():
+			creds += ":****"
+		creds += "@"
+
+	var url := "mongodb://%s%s:%s" % [creds, host, port]
+
+	var db := _default_db_edit.text.strip_edges()
+	if not db.is_empty():
+		url += "/" + db.uri_encode()
+
+	var params: Array[String] = ["directConnection=true"]
+	if auth_on:
+		var auth_db := _auth_db_edit.text.strip_edges()
+		if auth_db.is_empty():
+			auth_db = "admin"
+		params.append("authSource=" + auth_db.uri_encode())
+		params.append("authMechanism=" + MECHANISMS[_mech_option.selected])
+	url += "?" + "&".join(params)
+	return url
 
 
 func _on_test() -> void:
