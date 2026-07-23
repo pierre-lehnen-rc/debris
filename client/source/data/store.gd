@@ -38,6 +38,23 @@ static func save_workspaces(list: Array) -> void:
 	_write(data)
 
 
+## Read a single user preference (kept in a "preferences" sub-object), returning
+## `default_value` when it was never set.
+static func get_preference(key: String, default_value: Variant = null) -> Variant:
+	var prefs: Variant = _read().get("preferences", {})
+	if prefs is Dictionary and (prefs as Dictionary).has(key):
+		return (prefs as Dictionary)[key]
+	return default_value
+
+
+static func set_preference(key: String, value: Variant) -> void:
+	var data := _read()
+	var prefs: Dictionary = data.get("preferences", {})
+	prefs[key] = value
+	data["preferences"] = prefs
+	_write(data)
+
+
 static func _read() -> Dictionary:
 	if not FileAccess.file_exists(PATH):
 		return {}
