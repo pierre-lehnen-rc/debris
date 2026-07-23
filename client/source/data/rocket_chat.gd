@@ -11,12 +11,42 @@ extends Node
 
 const REQUEST_TIMEOUT_SECONDS := 20.0
 const OPENAPI_PATH := "/api/docs/json"
+const LOGIN_PATH := "/api/v1/login"
 
 
 # Public API ------------------------------------------------------------------
 ## Fetch the workspace's OpenAPI document (the source of the endpoint catalog).
 func fetch_openapi(workspace: Dictionary) -> Dictionary:
 	return await _request(workspace, HTTPClient.METHOD_GET, OPENAPI_PATH, {}, {})
+
+
+## Exchange a username/email + password for a temporary access token via the
+## login endpoint. Sent without auth headers (only the workspace URL is used).
+## Returns { ok, user_id, token, error }; user_id/token are the credentials to
+## put in X-User-Id / X-Auth-Token for later calls.
+func login(workspace: Dictionary, user: String, password: String) -> Dictionary:
+	var anon := {"url": workspace.get("url", "")}
+	var result := await _request(
+		anon, HTTPClient.METHOD_POST, LOGIN_PATH, {}, {"user": user, "password": password}
+	)
+	var raw: Variant = result.get("data")
+	if not result.get("ok", false):
+		var message: String = result.get("error", "login failed")
+		if raw is Dictionary and raw.get("error") is String:
+			message = raw["error"]
+		elif raw is Dictionary and raw.get("message") is String:
+			message = raw["message"]
+		return {"ok": false, "user_id": "", "token": "", "error": message}
+
+	var data: Variant = raw.get("data") if raw is Dictionary else null
+	if not (data is Dictionary) or not data.has("authToken") or not data.has("userId"):
+		return {"ok": false, "user_id": "", "token": "", "error": "unexpected login response"}
+	return {
+		"ok": true,
+		"user_id": String(data["userId"]),
+		"token": String(data["authToken"]),
+		"error": "",
+	}
 
 
 ## Issue an arbitrary REST call. `query` becomes the URL query string (GET-style
@@ -120,7 +150,9 @@ func _base_url(workspace: Dictionary) -> String:
 ## Attach auth headers for the request. An explicit user_id/token on the workspace
 ## dict wins (the endpoint tab sets these from the user picked for that tab, and
 ## clears them for an anonymous call); otherwise fall back to the first configured
-## user so workspace-level calls like the OpenAPI fetch stay authenticated.
+## user so workspace-level calls like the OpenAPI fetch stay authenticated. The two
+## headers go out independently: a request needs both to authenticate, but sending
+## just one is allowed so it can be exercised in isolation for targeted tests.
 func _headers(workspace: Dictionary) -> PackedStringArray:
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	var user_id := String(workspace.get("user_id", ""))
@@ -130,8 +162,9 @@ func _headers(workspace: Dictionary) -> PackedStringArray:
 		if users is Array and not (users as Array).is_empty() and users[0] is Dictionary:
 			user_id = String(users[0].get("user_id", ""))
 			token = String(users[0].get("token", ""))
-	if not user_id.is_empty() and not token.is_empty():
+	if not user_id.is_empty():
 		headers.append("X-User-Id: " + user_id)
+	if not token.is_empty():
 		headers.append("X-Auth-Token: " + token)
 	return headers
 

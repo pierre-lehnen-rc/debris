@@ -21,22 +21,21 @@ signal status_changed(text: String)
 @onready var _no_params: Label = %NoParams
 @onready var _results: ResultsView = %Results
 
-var _workspace: Dictionary = {}
+var _session: WorkspaceSession = null
 var _endpoint: ApiEndpoint = null
 ## Form values captured at the last "Send"; page navigation reuses them so paging
 ## doesn't pick up half-typed edits.
 var _active_args: Dictionary = {}
 ## param name -> input Control (LineEdit or CheckBox).
 var _inputs: Dictionary = {}
-## Dropdown for choosing which configured workspace user to send as (or none).
-## Null when the workspace has no users. Item metadata holds the user index, or
-## null for the anonymous "(none)" entry.
+## Dropdown for choosing which session user to send as. Item metadata holds the
+## session user id, or -1 for the anonymous "(none)" entry.
 var _user_select: OptionButton = null
 
 
-## Bind this tab to a workspace + endpoint. Call before the node enters the tree.
-func configure(workspace: Dictionary, endpoint: ApiEndpoint) -> void:
-	_workspace = workspace
+## Bind this tab to a session + endpoint. Call before the node enters the tree.
+func configure(session: WorkspaceSession, endpoint: ApiEndpoint) -> void:
+	_session = session
 	_endpoint = endpoint
 
 
@@ -63,6 +62,9 @@ func _ready() -> void:
 	_results.set_pagination_enabled(_endpoint.paginated)
 	_results.set_item_noun(_endpoint.noun())
 	_build_form()
+	# Keep the user picker in step with the session's live user/token list.
+	if _session != null:
+		_session.changed.connect(_refresh_user_options)
 	# Don't auto-run: wait for the user to press Send so opening a tab (which may
 	# be a mutating POST/PUT/DELETE) never fires a request on its own.
 	status_changed.emit("%s %s — press Send to run" % [_endpoint.method, _endpoint.path])
@@ -91,12 +93,10 @@ func _build_form() -> void:
 	_user_select = null
 
 	var params := _endpoint.form_params()
-	var users: Array = _workspace_users()
 	_no_params.visible = params.is_empty()
-	_params_grid.visible = not params.is_empty() or not users.is_empty()
+	_params_grid.visible = true  # always at least the User row
 
-	if not users.is_empty():
-		_build_user_row(users)
+	_build_user_row()
 
 	for p in params:
 		var name: String = p.get("name", "")
@@ -114,16 +114,10 @@ func _build_form() -> void:
 		_params_grid.add_child(input)
 
 
-## The workspace's configured users, or an empty array when it has none.
-func _workspace_users() -> Array:
-	var users: Variant = _workspace.get("users", [])
-	return users if users is Array else []
-
-
 ## Add the "User" selector as the first form row: an anonymous "(none)" entry
-## followed by each configured user. Defaults to the first user so opening a tab
+## followed by each session user. Defaults to the first user so opening a tab
 ## keeps the previous "always authenticated" behaviour.
-func _build_user_row(users: Array) -> void:
+func _build_user_row() -> void:
 	var label := Label.new()
 	label.text = "User"
 	label.custom_minimum_size = Vector2(120, 0)
@@ -133,15 +127,57 @@ func _build_user_row(users: Array) -> void:
 
 	var opt := OptionButton.new()
 	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	opt.add_item("(none)")
-	opt.set_item_metadata(opt.item_count - 1, null)
-	for i in users.size():
-		var user: Dictionary = users[i]
-		opt.add_item(user.get("name", user.get("user_id", "User %d" % (i + 1))))
-		opt.set_item_metadata(opt.item_count - 1, i)
-	opt.select(1)  # first configured user
 	_user_select = opt
 	_params_grid.add_child(opt)
+	_populate_user_options(-2)  # -2: no prior selection, so default to first user
+
+
+## The id of the currently selected session user, or -1 for "(none)".
+func _selected_user_id() -> int:
+	if _user_select == null or _user_select.selected < 0:
+		return -1
+	var meta: Variant = _user_select.get_item_metadata(_user_select.selected)
+	return int(meta) if meta != null else -1
+
+
+## (Re)fill the picker from the session's live user list, keeping the previously
+## selected user when it still exists. Called on session changes (login/logout,
+## user added/removed) so every open tab stays in sync.
+func _refresh_user_options() -> void:
+	if _user_select != null:
+		_populate_user_options(_selected_user_id())
+
+
+## Rebuild the option items. `keep_id` is the user id to reselect if still present
+## (-1 keeps "(none)", -2 means default to the first user).
+func _populate_user_options(keep_id: int) -> void:
+	var opt := _user_select
+	opt.clear()
+	opt.add_item("(none)")
+	opt.set_item_metadata(0, -1)
+	var users: Array = _session.users() if _session != null else []
+	var keep_position := -1
+	for i in users.size():
+		var user: Dictionary = users[i]
+		opt.add_item(_user_label(user))
+		opt.set_item_metadata(opt.item_count - 1, user["id"])
+		if user["id"] == keep_id:
+			keep_position = opt.item_count - 1
+	if keep_position >= 0:
+		opt.select(keep_position)
+	elif keep_id == -2 and users.size() > 0:
+		opt.select(1)  # default to the first user
+	else:
+		opt.select(0)  # (none)
+
+
+## Label a user in the picker: their derived label, with a hint when a password
+## user is not logged in (so it's clear the request will go out unauthenticated).
+func _user_label(user: Dictionary) -> String:
+	var label := WorkspaceSession.display_label(user)
+	if not _session.has_token(user["id"]):
+		label += " (no token)"
+	return label
 
 
 ## Pick an input widget matched to the param's schema: a checkbox for bools, a
@@ -314,24 +350,13 @@ func _fetch_page(offset: int, limit: int) -> void:
 		])
 
 
-## The workspace to send this tab's request as. Overrides the credentials with the
-## user picked in the form (empty for the anonymous "(none)" choice) and drops the
-## `users` list so RocketChat._headers uses exactly the chosen credentials rather
-## than falling back to the first user.
+## The workspace to send this tab's request as: the session resolves the picked
+## user's credentials (empty when the user has no token, so no auth header goes
+## out; empty too for the anonymous "(none)" choice).
 func _effective_workspace() -> Dictionary:
-	var ws := _workspace.duplicate(true)
-	ws.erase("users")
-	ws["user_id"] = ""
-	ws["token"] = ""
-	if _user_select != null:
-		var index: Variant = _user_select.get_item_metadata(_user_select.selected)
-		if index != null:
-			var users := _workspace_users()
-			if int(index) < users.size():
-				var user: Dictionary = users[index]
-				ws["user_id"] = user.get("user_id", "")
-				ws["token"] = user.get("token", "")
-	return ws
+	if _session == null:
+		return {}
+	return _session.effective_workspace(_selected_user_id())
 
 
 ## Map each declared param name to where it belongs in the request ("query" or

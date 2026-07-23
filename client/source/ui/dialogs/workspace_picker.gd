@@ -68,18 +68,31 @@ func _users_of(config: Dictionary) -> Array:
 		var users: Array = []
 		for entry in raw:
 			if entry is Dictionary:
-				users.append({
-					"name": entry.get("name", ""),
-					"user_id": entry.get("user_id", ""),
-					"token": entry.get("token", ""),
-				})
+				users.append(_user_entry(entry))
 		return users
 	# Legacy single-credential workspace.
 	var user_id: String = config.get("user_id", "")
 	var token: String = config.get("token", "")
 	if user_id.is_empty() and token.is_empty():
 		return []
-	return [{"name": "Default", "user_id": user_id, "token": token}]
+	return [_user_entry({"user_id": user_id, "token": token})]
+
+
+## Normalize one persisted user. Both identifiers (user_id, username) are always
+## stored; `auth` decides which secret is used — a permanent token (token auth) or
+## a password (password auth), inferred from a present token on older entries.
+func _user_entry(entry: Dictionary) -> Dictionary:
+	var token: String = entry.get("token", "")
+	var auth: String = entry.get("auth", "token" if not token.is_empty() else "password")
+	if auth != "password":
+		auth = "token"
+	return {
+		"auth": auth,
+		"user_id": entry.get("user_id", ""),
+		"username": entry.get("username", ""),
+		"token": token,
+		"password": entry.get("password", ""),
+	}
 
 
 func open() -> void:

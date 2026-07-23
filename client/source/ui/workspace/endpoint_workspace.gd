@@ -16,7 +16,7 @@ const ENDPOINT_TAB_SCENE := preload("res://source/ui/workspace/endpoint_tab.tscn
 @onready var _welcome_hint: Label = %WelcomeHint
 
 var _tab_counter := 0
-var _workspace: Dictionary = {}
+var _session: WorkspaceSession = null
 
 
 func _ready() -> void:
@@ -29,9 +29,9 @@ func _ready() -> void:
 	_update_welcome()
 
 
-## The workspace these endpoint tabs run against.
-func configure(workspace: Dictionary) -> void:
-	_workspace = workspace
+## The shared session these endpoint tabs run against.
+func configure(session: WorkspaceSession) -> void:
+	_session = session
 
 
 func open_endpoint(endpoint: ApiEndpoint) -> EndpointTab:
@@ -42,7 +42,7 @@ func open_endpoint(endpoint: ApiEndpoint) -> EndpointTab:
 		return existing
 
 	var tab: EndpointTab = ENDPOINT_TAB_SCENE.instantiate()
-	tab.configure(_workspace, endpoint)
+	tab.configure(_session, endpoint)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.name = "ep_%d" % _tab_counter
 	_tab_counter += 1

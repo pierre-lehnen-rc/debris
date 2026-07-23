@@ -10,6 +10,10 @@ extends Window
 signal saved(config: Dictionary)
 signal updated(index: int, config: Dictionary)
 
+## Auth-mode dropdown ids, per user row.
+const AUTH_TOKEN := 0
+const AUTH_PASSWORD := 1
+
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _url_edit: LineEdit = %UrlEdit
 @onready var _users_list: VBoxContainer = %UsersList
@@ -30,7 +34,7 @@ func open_new() -> void:
 	_edit_index = -1
 	title = "New Workspace"
 	_add_user_row()
-	popup_centered(Vector2i(560, 420))
+	popup_centered(Vector2i(680, 440))
 
 
 func open_edit(index: int, config: Dictionary) -> void:
@@ -45,7 +49,7 @@ func open_edit(index: int, config: Dictionary) -> void:
 			_add_user_row(user)
 	else:
 		_add_user_row()
-	popup_centered(Vector2i(560, 420))
+	popup_centered(Vector2i(680, 440))
 
 
 # Helpers ---------------------------------------------------------------------
@@ -57,27 +61,30 @@ func _reset() -> void:
 		child.queue_free()
 
 
-## Build one user row (label + user id + secret token + remove button). The row's
-## LineEdits are stored in its metadata so _gather can read them back.
+## Build one user row: User ID + Username/Email (always present) + auth-mode
+## dropdown + the matching secret field (Access Token or Password) + remove button.
+## The row's controls are stored in its metadata so _gather can read them back.
 func _add_user_row(user: Dictionary = {}) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
-
-	var name_edit := LineEdit.new()
-	name_edit.custom_minimum_size = Vector2(110, 0)
-	name_edit.placeholder_text = "Label"
-	name_edit.text = user.get("name", "")
 
 	var user_id_edit := LineEdit.new()
 	user_id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	user_id_edit.placeholder_text = "User ID"
 	user_id_edit.text = user.get("user_id", "")
 
-	var token_edit := LineEdit.new()
-	token_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	token_edit.placeholder_text = "Access Token"
-	token_edit.secret = true
-	token_edit.text = user.get("token", "")
+	var username_edit := LineEdit.new()
+	username_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	username_edit.placeholder_text = "Username or Email"
+	username_edit.text = user.get("username", "")
+
+	var mode := OptionButton.new()
+	mode.add_item("Access Token", AUTH_TOKEN)
+	mode.add_item("Password", AUTH_PASSWORD)
+
+	var secret := LineEdit.new()
+	secret.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	secret.secret = true
 
 	var remove_btn := Button.new()
 	remove_btn.text = "✕"
@@ -85,32 +92,51 @@ func _add_user_row(user: Dictionary = {}) -> void:
 	remove_btn.focus_mode = Control.FOCUS_NONE
 	remove_btn.pressed.connect(func() -> void: row.queue_free())
 
-	row.add_child(name_edit)
 	row.add_child(user_id_edit)
-	row.add_child(token_edit)
+	row.add_child(username_edit)
+	row.add_child(mode)
+	row.add_child(secret)
 	row.add_child(remove_btn)
-	row.set_meta("fields", [name_edit, user_id_edit, token_edit])
+	row.set_meta("controls", {
+		"user_id": user_id_edit, "username": username_edit, "mode": mode, "secret": secret,
+	})
+
+	var is_password: bool = String(user.get("auth", "")) == "password"
+	mode.select(AUTH_PASSWORD if is_password else AUTH_TOKEN)
+	secret.text = user.get("password", "") if is_password else user.get("token", "")
+	_apply_mode(mode, secret)
+	mode.item_selected.connect(func(_i: int) -> void: _apply_mode(mode, secret))
+
 	_users_list.add_child(row)
 
 
-## Collect the non-empty user rows. A row with neither a user id nor a token is
-## treated as blank and dropped; an unnamed user is labelled by its user id.
+## Relabel the secret field to match the chosen auth mode; it stays masked either
+## way (an access token or a password).
+func _apply_mode(mode: OptionButton, secret: LineEdit) -> void:
+	secret.placeholder_text = "Password" if mode.get_selected_id() == AUTH_PASSWORD else "Access Token"
+
+
+## Collect the non-empty user rows. A row with no user id, username or secret is
+## treated as empty and dropped.
 func _gather_users() -> Array:
 	var users: Array = []
 	for row in _users_list.get_children():
-		if not row.has_meta("fields"):
+		if not row.has_meta("controls"):
 			continue
-		var fields: Array = row.get_meta("fields")
-		var label: String = (fields[0] as LineEdit).text.strip_edges()
-		var user_id: String = (fields[1] as LineEdit).text.strip_edges()
-		var token: String = (fields[2] as LineEdit).text
-		if user_id.is_empty() and token.strip_edges().is_empty():
+		var c: Dictionary = row.get_meta("controls")
+		var user_id: String = (c["user_id"] as LineEdit).text.strip_edges()
+		var username: String = (c["username"] as LineEdit).text.strip_edges()
+		var secret: String = (c["secret"] as LineEdit).text
+		if user_id.is_empty() and username.is_empty() and secret.strip_edges().is_empty():
 			continue
-		users.append({
-			"name": label if not label.is_empty() else user_id,
-			"user_id": user_id,
-			"token": token,
-		})
+		var entry := {"user_id": user_id, "username": username}
+		if (c["mode"] as OptionButton).get_selected_id() == AUTH_PASSWORD:
+			entry["auth"] = "password"
+			entry["password"] = secret
+		else:
+			entry["auth"] = "token"
+			entry["token"] = secret
+		users.append(entry)
 	return users
 
 

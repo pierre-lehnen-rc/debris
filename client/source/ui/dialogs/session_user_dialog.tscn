@@ -1,0 +1,109 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://source/ui/dialogs/session_user_dialog.gd" id="2_sudlg"]
+
+[node name="SessionUserDialog" type="Window"]
+title = "Add User"
+size = Vector2i(460, 260)
+visible = false
+transient = true
+transient_to_focused = true
+exclusive = true
+min_size = Vector2i(400, 240)
+theme = ExtResource("1_theme")
+script = ExtResource("2_sudlg")
+
+[node name="Bg" type="Panel" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Col" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Grid" type="GridContainer" parent="Margin/Col"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="AuthLabel" type="Label" parent="Margin/Col/Grid"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+text = "Auth"
+horizontal_alignment = 2
+
+[node name="ModeOption" type="OptionButton" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="UserIdLabel" type="Label" parent="Margin/Col/Grid"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+text = "User ID"
+horizontal_alignment = 2
+
+[node name="UserIdEdit" type="LineEdit" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="UsernameLabel" type="Label" parent="Margin/Col/Grid"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+text = "Username or Email"
+horizontal_alignment = 2
+
+[node name="UsernameEdit" type="LineEdit" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SecretLabel" type="Label" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+text = "Access Token"
+horizontal_alignment = 2
+
+[node name="SecretEdit" type="LineEdit" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+secret = true
+
+[node name="Buttons" type="HBoxContainer" parent="Margin/Col"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Status" type="Label" parent="Margin/Col/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddBtn" type="Button" parent="Margin/Col/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Add"
+
+[node name="CancelBtn" type="Button" parent="Margin/Col/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[connection signal="close_requested" from="." to="." method="_on_cancel"]
+[connection signal="pressed" from="Margin/Col/Buttons/AddBtn" to="." method="_on_add"]
+[connection signal="pressed" from="Margin/Col/Buttons/CancelBtn" to="." method="_on_cancel"]

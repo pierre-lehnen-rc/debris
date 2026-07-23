@@ -1,0 +1,47 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/users_panel.gd" id="1_users"]
+
+[node name="UsersPanel" type="PanelContainer"]
+script = ExtResource("1_users")
+
+[node name="Col" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Header" type="PanelContainer" parent="Col"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="Col/Header"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="Col/Header/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "USERS"
+
+[node name="AddBtn" type="Button" parent="Col/Header/HeaderRow"]
+layout_mode = 2
+focus_mode = 0
+text = "Add User"
+
+[node name="Scroll" type="ScrollContainer" parent="Col"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="List" type="VBoxContainer" parent="Col/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="Empty" type="Label" parent="Col/Scroll/List"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "No users. Add one to send authenticated requests."
+autowrap_mode = 2
+
+[connection signal="pressed" from="Col/Header/HeaderRow/AddBtn" to="." method="_on_add_user"]

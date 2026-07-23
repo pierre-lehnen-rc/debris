@@ -11,8 +11,12 @@ signal status_changed(text: String)
 
 @onready var _sidebar: EndpointSidebar = %EndpointSidebar
 @onready var _explorer: EndpointWorkspace = %EndpointWorkspace
+@onready var _users_panel: UsersPanel = %UsersPanel
 
 var _workspace: Dictionary = {}
+## Shared, in-RAM state (users + acquired tokens) for this workspace tab; the
+## users panel and every endpoint tab reference the same instance.
+var _session: WorkspaceSession = null
 
 
 func _ready() -> void:
@@ -29,8 +33,10 @@ func configure(workspace: Dictionary) -> void:
 
 
 func _setup() -> void:
+	_session = WorkspaceSession.new(_workspace)
 	_sidebar.configure(_workspace)
-	_explorer.configure(_workspace)
+	_explorer.configure(_session)
+	_users_panel.configure(_session)
 
 
 func workspace() -> Dictionary:

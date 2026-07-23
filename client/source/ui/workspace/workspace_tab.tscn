@@ -1,8 +1,9 @@
-[gd_scene format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://source/ui/workspace/workspace_tab.gd" id="1_ws"]
 [ext_resource type="PackedScene" path="res://source/ui/workspace/endpoint_sidebar.tscn" id="2_side"]
 [ext_resource type="PackedScene" path="res://source/ui/workspace/endpoint_workspace.tscn" id="3_explorer"]
+[ext_resource type="PackedScene" path="res://source/ui/workspace/users_panel.tscn" id="4_users"]
 
 [node name="WorkspaceTab" type="Control"]
 layout_mode = 3
@@ -23,11 +24,21 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 
-[node name="EndpointWorkspace" parent="Split" instance=ExtResource("3_explorer")]
+[node name="RightSplit" type="HSplitContainer" parent="Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EndpointWorkspace" parent="Split/RightSplit" instance=ExtResource("3_explorer")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="UsersPanel" parent="Split/RightSplit" instance=ExtResource("4_users")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
 [connection signal="endpoint_activated" from="Split/EndpointSidebar" to="." method="_on_endpoint_activated"]
 [connection signal="status_changed" from="Split/EndpointSidebar" to="." method="_on_status_changed"]
-[connection signal="status_changed" from="Split/EndpointWorkspace" to="." method="_on_status_changed"]
+[connection signal="status_changed" from="Split/RightSplit/EndpointWorkspace" to="." method="_on_status_changed"]
+[connection signal="status_changed" from="Split/RightSplit/UsersPanel" to="." method="_on_status_changed"]
