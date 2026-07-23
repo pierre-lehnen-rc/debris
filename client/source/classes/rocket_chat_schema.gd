@@ -30,6 +30,8 @@ func _init() -> void:
 		# Whole-document types, shown in the tree's Type column.
 		{"collection": "users", "field": "", "type": "User"},
 		{"collection": "rocketchat_room", "field": "", "type": "Room"},
+		{"collection": "rocketchat_media_calls", "field": "", "type": "MediaCall"},
+		{"collection": "rocketchat_media_call_negotiations", "field": "", "type": "MediaCallNegotiation"},
 		{"collection": "rocketchat_message", "field": "", "type": "Message"},
 		{"collection": "rocketchat_subscription", "field": "", "type": "Subscription"},
 		{"collection": "rocketchat_video_conference", "field": "", "type": "VideoConference"},
@@ -44,6 +46,10 @@ func _init() -> void:
 		{"collection": "rocketchat_subscription", "field": "rid", "type": "RoomId"},
 		{"collection": "rocketchat_video_conference", "field": "rid", "type": "RoomId"},
 		{"collection": "rocketchat_message", "field": "rid", "type": "RoomId"},
+		#
+		{"collection": "rocketchat_media_calls", "field": "_id", "type": "MediaCallId"},
+		{"collection": "rocketchat_media_call_negotiations", "field": "callId", "type": "MediaCallId"},
+		{"collection": "rocketchat_media_call_negotiations", "field": "_id", "type": "MediaCallNegotiationId"},
 	]
 	# No explicit type_actions: actions_for_type() auto-generates a "List <X>"
 	# action for every collection/field where a type is used, so e.g. a UserId
