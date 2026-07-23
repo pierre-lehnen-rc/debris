@@ -163,7 +163,13 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	if is_document:
 		_add_document_type_menus(value)
 	else:
-		_add_inline_actions(_resolve_type(_meta_path(item), value), value)
+		var type_name := _resolve_type(_meta_path(item), value)
+		if not type_name.is_empty():
+			_add_inline_actions(type_name, value)
+		elif value is String:
+			# An untyped string: let the user reinterpret it as any known id type
+			# and search other collections by that value.
+			_add_unknown_type_menu(value)
 
 
 ## Whole-document type actions inline, then a sub-menu per typed attribute.
@@ -193,15 +199,43 @@ func _add_inline_actions(type_name: String, source: Variant) -> void:
 		_doc_menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
 
 
-## Add a `label` sub-menu holding `actions`, each acting on `source`.
+## Add a `label` sub-menu to the main menu holding `actions`, each acting on `source`.
 func _add_actions_submenu(label: String, actions: Array, source: Variant) -> void:
-	var submenu := PopupMenu.new()
-	submenu.theme = AppTheme.shared()
-	submenu.id_pressed.connect(_on_doc_action)
+	var submenu := _make_submenu()
 	for action in actions:
 		submenu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
 	_doc_menu.add_submenu_node_item(label, submenu)
+
+
+## Offer an "Unknown Type" sub-menu on an untyped string: one sub-menu per known
+## scalar type (UserId, RoomId, …), each holding that type's actions resolved
+## against `value`, so the string can be searched for as if it were that type.
+func _add_unknown_type_menu(value: Variant) -> void:
+	if _schema == null:
+		return
+	var root := _make_submenu()
+	for type_name in _schema.scalar_types():
+		var actions := _schema.actions_for_type(type_name)
+		if actions.is_empty():
+			continue
+		var type_menu := _make_submenu()
+		for action in actions:
+			type_menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, value))
+		root.add_submenu_node_item(type_name, type_menu)
+	if root.get_item_count() == 0:
+		return  # No usable scalar types; leave the menu unchanged (root is freed on next open).
+	_doc_menu.add_separator()
+	_doc_menu.add_submenu_node_item("Unknown Type", root)
+
+
+## Create a themed sub-menu wired to the shared action handler and tracked for
+## cleanup. Not yet parented; add it via add_submenu_node_item on its owner.
+func _make_submenu() -> PopupMenu:
+	var submenu := PopupMenu.new()
+	submenu.theme = AppTheme.shared()
+	submenu.id_pressed.connect(_on_doc_action)
 	_custom_submenus.append(submenu)
+	return submenu
 
 
 ## Record an action + its source value, returning its index in the flat registry.

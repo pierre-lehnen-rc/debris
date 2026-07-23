@@ -161,6 +161,28 @@ func _humanize(name: String) -> String:
 	return out
 
 
+## The custom types that are NOT whole-document (collection) types — i.e. types
+## that only ever appear as field-level rules (UserId, RoomId, …), in first-seen
+## order. Used to let an untyped value be treated as any of these id types and
+## searched for across collections.
+func scalar_types() -> Array:
+	var doc_types: Dictionary = {}  # types used as a whole-document type (field == "").
+	for rule in type_rules:
+		if str(rule.get("field", "")).is_empty():
+			doc_types[str(rule.get("type", ""))] = true
+	var out: Array = []
+	var seen: Dictionary = {}
+	for rule in type_rules:
+		if str(rule.get("field", "")).is_empty():
+			continue
+		var type_name := str(rule.get("type", ""))
+		if type_name.is_empty() or seen.has(type_name) or doc_types.has(type_name):
+			continue
+		seen[type_name] = true
+		out.append(type_name)
+	return out
+
+
 ## How many field-level rules give `collection` an attribute of `type_name`; used
 ## to decide whether a generated action's label needs the field name to be unique.
 func _type_field_count(type_name: String, collection: String) -> int:
