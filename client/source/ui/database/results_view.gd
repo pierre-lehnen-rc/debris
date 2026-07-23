@@ -46,6 +46,12 @@ var _item_noun := "document"
 
 func _ready() -> void:
 	_apply_style()
+	# ViewHost is a plain Control (not a Container), so its stacked sub-views must
+	# anchor themselves to fill it. Force the full-rect preset at runtime: the
+	# scene's baked anchors survive an editor run but can serialize to a zero-size
+	# rect in an exported binary (.scn), which collapsed the views to a tiny box.
+	for view in [_tree_view, _table_view, _text_view] as Array[Control]:
+		view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_set_mode(ViewMode.TREE)
 	_update_pager()
 

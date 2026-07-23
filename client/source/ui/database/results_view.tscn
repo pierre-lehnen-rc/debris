@@ -107,7 +107,8 @@ size_flags_vertical = 3
 
 [node name="TreeView" type="Tree" parent="ViewHost" unique_id=1353931198 instance=ExtResource("2_v1gr8")]
 unique_name_in_owner = true
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 columns = 3
@@ -119,7 +120,8 @@ script = ExtResource("3_s1b83")
 
 [node name="TableView" type="Tree" parent="ViewHost" unique_id=1065542661 instance=ExtResource("4_i1wbe")]
 unique_name_in_owner = true
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 column_titles_visible = true
@@ -130,7 +132,8 @@ script = ExtResource("5_l1ggu")
 
 [node name="TextView" type="CodeEdit" parent="ViewHost" unique_id=409958440 instance=ExtResource("6_ewpu8")]
 unique_name_in_owner = true
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 editable = false
