@@ -2,3 +2,6 @@
 .godot/
 /android/
 /client/export/
+
+*.sublime-workspace
+
