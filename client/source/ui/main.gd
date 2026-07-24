@@ -225,6 +225,19 @@ func _attach_api() -> void:
 	_workspace_picker.open()
 
 
+## An unattached source icon was clicked in a project's activity bar — open the
+## matching picker aimed at that project.
+func _on_project_attach_requested(source: String, proj: ProjectTab) -> void:
+	if not is_instance_valid(proj):
+		return
+	if source == "mongo" and not proj.has_mongo():
+		_attach_target = proj
+		_picker.open()
+	elif source == "api" and not proj.has_rocketchat():
+		_attach_target = proj
+		_workspace_picker.open()
+
+
 # Project tabs ----------------------------------------------------------------
 ## A database was picked. When an attach is pending, bind it to that project;
 ## otherwise open a new project bound to just this DB.
@@ -265,6 +278,7 @@ func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
 	var tab: ProjectTab = PROJECT_TAB_SCENE.instantiate()
 	tab.configure(doc)
 	tab.status_changed.connect(_on_status_changed)
+	tab.attach_requested.connect(_on_project_attach_requested.bind(tab))
 	tab.name = "proj_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)

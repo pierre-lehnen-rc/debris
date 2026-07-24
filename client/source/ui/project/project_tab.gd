@@ -10,6 +10,9 @@ extends Control
 ## the leaf sidebars/center are instanced scenes.
 
 signal status_changed(text: String)
+## Emitted when an unattached source's activity-bar icon is clicked, asking the
+## host to attach that source ("mongo" | "api") to this project.
+signal attach_requested(source: String)
 
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
@@ -101,50 +104,61 @@ func _build_layout() -> void:
 
 # Setup -----------------------------------------------------------------------
 func _setup() -> void:
-	if _doc.has_mongo():
-		_build_mongo_views()
+	_build_collections_view()
+	_build_endpoints_view()
 	if _doc.has_rocketchat():
-		_build_rocketchat_views()
+		_build_users_view()
 	_refresh_activity()
 
 
 func has_mongo() -> bool:
-	return _views.has(VIEW_COLLECTIONS)
+	return _doc != null and _doc.has_mongo()
 
 
 func has_rocketchat() -> bool:
-	return _views.has(VIEW_ENDPOINTS)
+	return _doc != null and _doc.has_rocketchat()
 
 
-## Attach a Mongo database to this project at runtime (from the connection picker),
-## building its sidebar/center binding and switching to the Collections view. No-op
-## if a database is already attached (a project holds at most one).
+## Attach a Mongo database at runtime (from the connection picker): replace the
+## Collections attach-placeholder with the real sidebar and switch to it. No-op if a
+## database is already attached (a project holds at most one).
 func attach_mongo(connection: Dictionary, database: String) -> void:
 	if has_mongo():
 		return
 	_doc.set_mongo(connection, database)
-	_build_mongo_views()
+	_remove_view(VIEW_COLLECTIONS)
+	_build_collections_view()
 	_refresh_activity(VIEW_COLLECTIONS)
 	# An endpoint tab opened before the DB existed now gets the cross-query action.
 	_center.set_cross_query_enabled(true)
 
 
-## Attach a Rocket.Chat API to this project at runtime (from the workspace picker),
-## building its endpoint/users sidebars and switching to the Endpoints view. No-op
-## if an API is already attached.
+## Attach a Rocket.Chat API at runtime (from the workspace picker): replace the
+## Endpoints attach-placeholder with the real sidebar, add the Users view, and
+## switch to Endpoints. No-op if an API is already attached.
 func attach_rocketchat(config: Dictionary) -> void:
 	if has_rocketchat():
 		return
 	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
-	_build_rocketchat_views()
+	_remove_view(VIEW_ENDPOINTS)
+	_build_endpoints_view()
+	_build_users_view()
 	_refresh_activity(VIEW_ENDPOINTS)
 
 
-func _build_mongo_views() -> void:
+# View building ---------------------------------------------------------------
+## The Collections view: the real collection sidebar when a DB is attached, else an
+## attach placeholder inviting the user to attach one.
+func _build_collections_view() -> void:
+	if not _doc.has_mongo():
+		_add_view(VIEW_COLLECTIONS, _make_attach_placeholder(
+			"mongo", "No database in this project.", "Attach Database…"
+		))
+		return
 	var connection := _doc.mongo_connection()
 	var database := _doc.mongo_database()
 	_collection_sidebar = COLLECTION_SIDEBAR_SCENE.instantiate()
-	_add_sidebar(VIEW_COLLECTIONS, _collection_sidebar)
+	_add_view(VIEW_COLLECTIONS, _collection_sidebar)
 	_collection_sidebar.collection_activated.connect(_on_collection_activated)
 	_collection_sidebar.insert_document_requested.connect(_on_insert_document_requested)
 	_collection_sidebar.list_indexes_requested.connect(_on_list_indexes_requested)
@@ -154,43 +168,95 @@ func _build_mongo_views() -> void:
 	_collection_sidebar.configure(connection, database)
 
 
-func _build_rocketchat_views() -> void:
-	var config := _doc.rocketchat_config()
-	_session = WorkspaceSession.new(config)
-	_center.bind_session(_session)
-
+## The Endpoints view: the real endpoint sidebar when an API is attached, else an
+## attach placeholder.
+func _build_endpoints_view() -> void:
+	if not _doc.has_rocketchat():
+		_add_view(VIEW_ENDPOINTS, _make_attach_placeholder(
+			"api", "No API in this project.", "Attach API…"
+		))
+		return
+	_ensure_session()
 	_endpoint_sidebar = ENDPOINT_SIDEBAR_SCENE.instantiate()
-	_add_sidebar(VIEW_ENDPOINTS, _endpoint_sidebar)
+	_add_view(VIEW_ENDPOINTS, _endpoint_sidebar)
 	_endpoint_sidebar.endpoint_activated.connect(_on_endpoint_activated)
 	_endpoint_sidebar.status_changed.connect(_on_status_changed)
-	_endpoint_sidebar.configure(config)
+	_endpoint_sidebar.configure(_doc.rocketchat_config())
 
+
+func _build_users_view() -> void:
+	_ensure_session()
 	_users_panel = USERS_PANEL_SCENE.instantiate()
-	_add_sidebar(VIEW_USERS, _users_panel)
+	_add_view(VIEW_USERS, _users_panel)
 	_users_panel.status_changed.connect(_on_status_changed)
 	_users_panel.configure(_session)
 
 
-## Rebuild the activity bar from the views that currently exist (in a stable
-## order), optionally selecting `select_view`.
+## Create the shared Rocket.Chat session once, binding it to the center.
+func _ensure_session() -> void:
+	if _session == null:
+		_session = WorkspaceSession.new(_doc.rocketchat_config())
+		_center.bind_session(_session)
+
+
+## A placeholder panel shown in the sidebar for an unattached source: a message and
+## a button that asks the host to attach that source.
+func _make_attach_placeholder(source: String, message: String, button_text: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", AppTheme._flat(AppTheme.BG_DARKEST, 0))
+
+	var center := CenterContainer.new()
+	panel.add_child(center)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 10)
+	center.add_child(box)
+
+	var label := Label.new()
+	label.text = message
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	box.add_child(label)
+
+	var btn := Button.new()
+	btn.text = button_text
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.pressed.connect(func() -> void: attach_requested.emit(source))
+	box.add_child(btn)
+	return panel
+
+
+## Rebuild the activity bar: Collections and Endpoints are always shown; Users
+## appears once an API is attached. `select_view` optionally picks the active view.
 func _refresh_activity(select_view: String = "") -> void:
-	var views: Array = []
-	if _views.has(VIEW_COLLECTIONS):
-		views.append({"id": VIEW_COLLECTIONS, "icon": ICON_COLLECTIONS, "tooltip": "Collections"})
-	if _views.has(VIEW_ENDPOINTS):
-		views.append({"id": VIEW_ENDPOINTS, "icon": ICON_ENDPOINTS, "tooltip": "Endpoints"})
-	if _views.has(VIEW_USERS):
+	var views: Array = [
+		{"id": VIEW_COLLECTIONS, "icon": ICON_COLLECTIONS, "tooltip": "Collections"},
+		{"id": VIEW_ENDPOINTS, "icon": ICON_ENDPOINTS, "tooltip": "Endpoints"},
+	]
+	if _doc.has_rocketchat():
 		views.append({"id": VIEW_USERS, "icon": ICON_USERS, "tooltip": "Users"})
 	_activity.set_views(views, select_view)
 
 
-## Add a sidebar to the swappable stack, hidden until its view is selected. The
-## MarginContainer stretches whichever child is visible to fill the pane, so the
-## sidebars need no anchor/size setup of their own.
-func _add_sidebar(view: String, node: Control) -> void:
+## Add a view (sidebar or attach placeholder) to the swappable stack, hidden until
+## selected. The MarginContainer stretches whichever child is visible to fill the
+## pane, so the views need no anchor/size setup of their own.
+func _add_view(view: String, node: Control) -> void:
 	_stack.add_child(node)
 	node.visible = false
 	_views[view] = node
+
+
+## Remove and free a view from the stack (e.g. an attach placeholder being replaced
+## by the real sidebar).
+func _remove_view(view: String) -> void:
+	if not _views.has(view):
+		return
+	var node: Control = _views[view]
+	_stack.remove_child(node)
+	node.queue_free()
+	_views.erase(view)
 
 
 # Sidebar view switching ------------------------------------------------------

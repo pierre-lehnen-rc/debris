@@ -3,10 +3,10 @@ extends PanelContainer
 
 ## A compact horizontal row of view-toggle icons across the top of a project tab's
 ## sidebar (VSCode-style views, placed along the top to spare horizontal space). It
-## holds one toggle button per available sidebar view; selecting one emits
-## `view_selected` so the project tab can swap the sidebar below it. The available
-## views are supplied by the tab from what the project has attached — a DB adds
-## Collections, an API adds Endpoints and Users. Built entirely in code (no scene).
+## holds one toggle button per view; selecting one emits `view_selected` so the
+## project tab can swap the sidebar below it. The tab always shows Collections and
+## Endpoints (their panels host an attach button until the source is attached) and
+## adds Users once an API is attached. Built entirely in code (no scene).
 
 signal view_selected(view: String)
 
