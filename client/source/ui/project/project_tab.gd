@@ -16,6 +16,9 @@ signal attach_requested(source: String)
 ## Emitted when a source panel's edit button is pressed, asking the host to open
 ## the connection/API editor for that source ("mongo" | "api").
 signal edit_source_requested(source: String)
+## Emitted when the project's document became dirty on its own (e.g. a user was
+## added/removed in the Users panel), so the host can refresh the tab's title.
+signal dirty_changed()
 
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
@@ -164,15 +167,16 @@ func update_mongo_connection(connection: Dictionary) -> void:
 		_collection_sidebar.configure(connection, database)
 
 
-## Apply an edited API config (from the workspace editor): rebuild the session and
-## reload the endpoint/users panels against it. Endpoint tabs already open keep
-## their original session until reopened.
+## Apply an edited API URL (from the workspace editor): keep the existing users
+## (they're managed by the Users panel), rebuild the session, and reload the
+## endpoint/users panels. Endpoint tabs already open keep their original session
+## until reopened.
 func update_rocketchat(config: Dictionary) -> void:
 	if not has_rocketchat():
 		return
-	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
-	_session = WorkspaceSession.new(_doc.rocketchat_config())
-	_center.bind_session(_session)
+	var users: Array = _doc.rocketchat.get("users", [])
+	_doc.set_rocketchat(String(config.get("url", "")), users)
+	_set_session(_doc.rocketchat_config())
 	if _endpoint_sidebar != null:
 		_endpoint_sidebar.configure(_doc.rocketchat_config())
 	if _users_panel != null:
@@ -230,8 +234,23 @@ func _build_users_view() -> void:
 ## Create the shared Rocket.Chat session once, binding it to the center.
 func _ensure_session() -> void:
 	if _session == null:
-		_session = WorkspaceSession.new(_doc.rocketchat_config())
-		_center.bind_session(_session)
+		_set_session(_doc.rocketchat_config())
+
+
+## Build a fresh session for `config`, bind it to the center, and observe it so
+## user changes made in the Users panel are persisted to the project file.
+func _set_session(config: Dictionary) -> void:
+	_session = WorkspaceSession.new(config)
+	_session.changed.connect(_on_session_changed)
+	_center.bind_session(_session)
+
+
+## The session changed (a user was added/removed/edited, or logged in/out). Persist
+## the user list to the project; login-acquired tokens are stripped by the doc, so
+## login/logout make no persistable change and don't dirty the project.
+func _on_session_changed() -> void:
+	if _doc.sync_rocketchat_users(_session.users()):
+		dirty_changed.emit()
 
 
 ## A placeholder panel shown in the sidebar for an unattached source: a message and

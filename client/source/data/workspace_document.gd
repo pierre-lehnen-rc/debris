@@ -72,6 +72,21 @@ func clear_rocketchat() -> void:
 	dirty = true
 
 
+## Persist an updated user list (from the Users panel's live session) without
+## touching the URL. Runtime-only fields (login-acquired tokens) are stripped, so
+## login/logout produce no change. Returns true when the persisted list actually
+## changed (so the caller can flag the project dirty / update its title).
+func sync_rocketchat_users(raw_users: Array) -> bool:
+	if not has_rocketchat():
+		return false
+	var cleaned := _clean_users(raw_users)
+	if cleaned == rocketchat.get("users", []):
+		return false
+	rocketchat["users"] = cleaned
+	dirty = true
+	return true
+
+
 func set_name(new_name: String) -> void:
 	name = new_name
 	dirty = true

@@ -267,6 +267,7 @@ func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
 	tab.status_changed.connect(_on_status_changed)
 	tab.attach_requested.connect(_on_project_attach_requested.bind(tab))
 	tab.edit_source_requested.connect(_on_project_edit_requested.bind(tab))
+	tab.dirty_changed.connect(_update_project_tab_title.bind(tab))
 	tab.name = "proj_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)

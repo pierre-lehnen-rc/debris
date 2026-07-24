@@ -1,11 +1,12 @@
 class_name UsersPanel
 extends PanelContainer
 
-## Right-side panel of a workspace tab. Lists the session's users and their token
-## status. Token-auth users carry a permanent access token (shown, no button);
-## password-auth users get a Login/Logout button — Login exchanges their password
-## for a temporary token (kept in the session only), Logout discards it. "Add User"
-## adds a user for this session, never written to the workspace config.
+## The Users sidebar view of a project's API. The sole place users are managed:
+## Add User and the ✕ remove button add/remove any user, and those changes are
+## persisted to the project file (ProjectTab observes the session's `changed`).
+## Token-auth users carry a permanent access token (shown, no button); password-
+## auth users get a Login/Logout button — Login exchanges their password for a
+## temporary token kept in the session only (never saved), Logout discards it.
 
 signal status_changed(text: String)
 
@@ -95,13 +96,12 @@ func _make_row(user: Dictionary) -> Control:
 			btn.pressed.connect(func() -> void: _on_login(id, btn))
 		box.add_child(btn)
 
-	if user.get("source", "") == "session":
-		var remove := Button.new()
-		remove.text = "✕"
-		remove.tooltip_text = "Remove this session user"
-		remove.focus_mode = Control.FOCUS_NONE
-		remove.pressed.connect(func() -> void: _session.remove_user(id))
-		box.add_child(remove)
+	var remove := Button.new()
+	remove.text = "✕"
+	remove.tooltip_text = "Remove this user"
+	remove.focus_mode = Control.FOCUS_NONE
+	remove.pressed.connect(func() -> void: _session.remove_user(id))
+	box.add_child(remove)
 
 	return row
 
