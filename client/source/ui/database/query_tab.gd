@@ -84,6 +84,12 @@ func results() -> ResultsView:
 	return _results
 
 
+## Re-run the current query (from a keyboard shortcut). Public entry point mirroring
+## the "Run" button, so the host can trigger it for the active tab.
+func run_query() -> void:
+	_run()
+
+
 ## Relay a results-view request to open a new query tab (custom type action).
 func _on_results_open_query_requested(
 	collection: String, filter: Dictionary, function: String
@@ -141,6 +147,7 @@ func _apply_style() -> void:
 	sb.content_margin_bottom = 5
 	_toolbar.add_theme_stylebox_override("panel", sb)
 	_run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
+	_run_btn.tooltip_text = "Run (F5)"
 	_target_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 
 

@@ -46,6 +46,12 @@ func endpoint() -> ApiEndpoint:
 	return _endpoint
 
 
+## Re-issue the request (from a keyboard shortcut). Public entry point mirroring the
+## "Send" button, so the host can trigger it for the active tab.
+func send_request() -> void:
+	_send()
+
+
 func results() -> ResultsView:
 	return _results
 
@@ -100,6 +106,7 @@ func _apply_style() -> void:
 	sb.content_margin_bottom = 5
 	_toolbar.add_theme_stylebox_override("panel", sb)
 	_send_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
+	_send_btn.tooltip_text = "Send (F5)"
 	_method_label.add_theme_color_override("font_color", AppTheme.ACCENT)
 	_path_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	_summary_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)

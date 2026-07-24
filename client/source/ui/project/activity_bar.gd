@@ -62,6 +62,18 @@ func set_views(views: Array, select_id: String = "") -> void:
 			break
 
 
+## Programmatically select the view at `index` (0-based, in display order) as if its
+## button were clicked — driving the same view_selected path. Out-of-range indices
+## (e.g. the Users view on a DB-only project) are ignored. Used by view shortcuts.
+func select_index(index: int) -> void:
+	if _box == null:
+		return
+	var buttons := _box.get_children()
+	if index < 0 or index >= buttons.size():
+		return
+	(buttons[index] as Button).button_pressed = true
+
+
 func _has_view(views: Array, id: String) -> bool:
 	if id.is_empty():
 		return false

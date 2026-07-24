@@ -76,6 +76,39 @@ func tab_title() -> String:
 	return _doc.name
 
 
+## Re-run the active center tab (query find or endpoint request), from a keyboard
+## shortcut. No-op when no source tab is open.
+func run_current_tab() -> void:
+	if _center != null:
+		_center.run_current()
+
+
+## Close the active query/endpoint tab. Returns true when one was open to close, so
+## the host can fall back to closing the whole project tab when the center is empty.
+func close_current_tab() -> bool:
+	return _center != null and _center.close_current_tab()
+
+
+## Cycle the active query/endpoint tab by `delta` (+1 next, -1 previous).
+func cycle_tab(delta: int) -> void:
+	if _center != null:
+		_center.cycle_tab(delta)
+
+
+## Focus the query/endpoint tab at `index` (0-based; values past the end focus the
+## last tab).
+func focus_tab(index: int) -> void:
+	if _center != null:
+		_center.focus_tab(index)
+
+
+## Switch the sidebar to the activity-bar view at `index` (0-based, display order:
+## Collections, Endpoints, Users). Out-of-range indices are ignored.
+func select_view(index: int) -> void:
+	if _activity != null:
+		_activity.select_index(index)
+
+
 # Layout ----------------------------------------------------------------------
 ## Assemble the fixed shell: split[ sidebar column | center ], where the sidebar
 ## column is [ activity row (top) / sidebar stack ]. The stack and center exist up

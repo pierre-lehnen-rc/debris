@@ -69,6 +69,94 @@ func _ready() -> void:
 	_restore_open_projects()
 
 
+# Keyboard shortcuts ----------------------------------------------------------
+## App-wide shortcuts, handled in _input (not _shortcut_input) so they run *before*
+## a focused control consumes the key — otherwise the query editor swallows Enter as
+## a newline, and the File-menu accelerators only fire while their menu is open. Each
+## match consumes the event; unmatched keys fall through untouched. The menu-item
+## accelerators mirror these purely as visible hints (and cover the menu-open case,
+## where the popup — not this window — owns the input).
+func _input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	var proj := _current_project()
+
+	# F5, or Cmd/Ctrl+Enter (the query-editor convention), re-runs the active tab.
+	var enter := key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER
+	if key.keycode == KEY_F5 or (enter and key.is_command_or_control_pressed()):
+		if proj != null:
+			proj.run_current_tab()
+		accept_event()
+		return
+
+	# Alt+1/2/3 → switch the activity-bar view (Collections / Endpoints / Users).
+	if key.alt_pressed and not key.is_command_or_control_pressed() and not key.shift_pressed:
+		var view_index := key.keycode - KEY_1
+		if view_index >= 0 and view_index <= 2:
+			if proj != null:
+				proj.select_view(view_index)
+			accept_event()
+		return
+
+	# Everything below is Cmd/Ctrl-based.
+	if not key.is_command_or_control_pressed():
+		return
+	var shift := key.shift_pressed
+
+	# Cmd/Ctrl+1..9 → jump to inner source tab N (9 = last).
+	if not shift and key.keycode >= KEY_1 and key.keycode <= KEY_9:
+		if proj != null:
+			proj.focus_tab(999 if key.keycode == KEY_9 else key.keycode - KEY_1)
+		accept_event()
+		return
+
+	match key.keycode:
+		KEY_N when not shift:
+			_new_project()
+			accept_event()
+		KEY_O when not shift:
+			_open_project_dialog()
+			accept_event()
+		KEY_S:
+			if shift:
+				_save_project_as()
+			else:
+				_save_project()
+			accept_event()
+		KEY_Q when not shift:
+			get_tree().quit()
+			accept_event()
+		KEY_W when not shift:
+			_close_current_document()
+			accept_event()
+		KEY_TAB:
+			# Ctrl+Tab / Ctrl+Shift+Tab cycle the inner source tabs.
+			if proj != null:
+				proj.cycle_tab(-1 if shift else 1)
+			accept_event()
+		KEY_PAGEUP when not shift:
+			if proj != null:
+				proj.cycle_tab(-1)
+			accept_event()
+		KEY_PAGEDOWN when not shift:
+			if proj != null:
+				proj.cycle_tab(1)
+			accept_event()
+
+
+## Cmd/Ctrl+W: close the active inner query/endpoint tab; when the project has none
+## open (or the focused tab isn't a project), close the current main tab instead,
+## through the same path as its close button so a dirty project still prompts to save.
+func _close_current_document() -> void:
+	var proj := _current_project()
+	if proj != null and proj.close_current_tab():
+		return
+	var index := _tabs.current_tab
+	if index >= 0:
+		_on_tab_close_pressed(index)
+
+
 ## The content-scale factor to apply: the user's explicit override when set,
 ## otherwise the display's reported DPI scale (floored at 1.0). On a 2x screen
 ## (e.g. a macOS Retina display) the OS reports the full pixel resolution, so an
@@ -722,19 +810,23 @@ func _apply_style() -> void:
 
 
 func _populate_menus() -> void:
-	_file_menu.add_item("New Project", FILE_NEW_PROJECT)
-	_file_menu.add_item("Open Project…", FILE_OPEN_PROJECT)
+	# Accelerators use CMD_OR_CTRL so they read as ⌘ on macOS and Ctrl elsewhere; the
+	# PopupMenu both displays the hint and fires the shortcut globally while in tree.
+	_file_menu.add_item("New Project", FILE_NEW_PROJECT, KEY_MASK_CMD_OR_CTRL | KEY_N)
+	_file_menu.add_item("Open Project…", FILE_OPEN_PROJECT, KEY_MASK_CMD_OR_CTRL | KEY_O)
 	_file_menu.add_submenu_node_item("Open Recent", _recent_menu)
 	_file_menu.add_separator()
-	_file_menu.add_item("Save Project", FILE_SAVE_PROJECT)
-	_file_menu.add_item("Save Project As…", FILE_SAVE_PROJECT_AS)
+	_file_menu.add_item("Save Project", FILE_SAVE_PROJECT, KEY_MASK_CMD_OR_CTRL | KEY_S)
+	_file_menu.add_item(
+		"Save Project As…", FILE_SAVE_PROJECT_AS, KEY_MASK_CMD_OR_CTRL | KEY_MASK_SHIFT | KEY_S
+	)
 	_file_menu.add_separator()
 	_file_menu.add_item("Attach Database…", FILE_ATTACH_DATABASE)
 	_file_menu.add_item("Attach API…", FILE_ATTACH_API)
 	_file_menu.add_separator()
 	_file_menu.add_item("Activity Log", FILE_ACTIVITY_LOG)
 	_file_menu.add_separator()
-	_file_menu.add_item("Quit", FILE_QUIT)
+	_file_menu.add_item("Quit", FILE_QUIT, KEY_MASK_CMD_OR_CTRL | KEY_Q)
 	# Enable/disable project items and refresh Open Recent each time the menu opens.
 	_file_menu.about_to_popup.connect(_refresh_file_menu)
 

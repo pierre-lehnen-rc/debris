@@ -151,6 +151,42 @@ func _find_endpoint_tab(endpoint: ApiEndpoint) -> EndpointTab:
 
 
 # Shared ----------------------------------------------------------------------
+## Re-run the active center tab (from a keyboard shortcut): a query tab's find or an
+## endpoint tab's request. No-op when nothing is open.
+func run_current() -> void:
+	var control := _tabs.get_current_tab_control()
+	if control is QueryTab:
+		(control as QueryTab).run_query()
+	elif control is EndpointTab:
+		(control as EndpointTab).send_request()
+
+
+## Close the active source tab. Returns true when one was open to close, so the host
+## can fall back to closing the whole project tab when the center is empty.
+func close_current_tab() -> bool:
+	if _tabs.get_tab_count() == 0:
+		return false
+	_on_tab_close_pressed(_tabs.current_tab)
+	return true
+
+
+## Move the active source-tab selection by `delta` (+1 next, -1 previous), wrapping
+## around the ends. No-op with fewer than two tabs.
+func cycle_tab(delta: int) -> void:
+	var count := _tabs.get_tab_count()
+	if count <= 1:
+		return
+	_tabs.current_tab = (_tabs.current_tab + delta + count) % count
+
+
+## Focus the source tab at `index` (0-based); values past the end focus the last tab.
+func focus_tab(index: int) -> void:
+	var count := _tabs.get_tab_count()
+	if count == 0:
+		return
+	_tabs.current_tab = clampi(index, 0, count - 1)
+
+
 func _on_tab_close_pressed(tab_index: int) -> void:
 	var control := _tabs.get_tab_control(tab_index)
 	if control == null:
