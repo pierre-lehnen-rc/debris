@@ -101,41 +101,87 @@ func _build_layout() -> void:
 
 # Setup -----------------------------------------------------------------------
 func _setup() -> void:
-	var views: Array = []
-
 	if _doc.has_mongo():
-		var connection := _doc.mongo_connection()
-		var database := _doc.mongo_database()
-		_collection_sidebar = COLLECTION_SIDEBAR_SCENE.instantiate()
-		_add_sidebar(VIEW_COLLECTIONS, _collection_sidebar)
-		_collection_sidebar.collection_activated.connect(_on_collection_activated)
-		_collection_sidebar.insert_document_requested.connect(_on_insert_document_requested)
-		_collection_sidebar.list_indexes_requested.connect(_on_list_indexes_requested)
-		_collection_sidebar.schema_changed.connect(_on_schema_changed)
-		_collection_sidebar.status_changed.connect(_on_status_changed)
-		_center.bind_mongo(connection, database)
-		_collection_sidebar.configure(connection, database)
-		views.append({"id": VIEW_COLLECTIONS, "icon": ICON_COLLECTIONS, "tooltip": "Collections"})
-
+		_build_mongo_views()
 	if _doc.has_rocketchat():
-		var config := _doc.rocketchat_config()
-		_session = WorkspaceSession.new(config)
-		_center.bind_session(_session)
+		_build_rocketchat_views()
+	_refresh_activity()
 
-		_endpoint_sidebar = ENDPOINT_SIDEBAR_SCENE.instantiate()
-		_add_sidebar(VIEW_ENDPOINTS, _endpoint_sidebar)
-		_endpoint_sidebar.endpoint_activated.connect(_on_endpoint_activated)
-		_endpoint_sidebar.status_changed.connect(_on_status_changed)
-		_endpoint_sidebar.configure(config)
+
+func has_mongo() -> bool:
+	return _views.has(VIEW_COLLECTIONS)
+
+
+func has_rocketchat() -> bool:
+	return _views.has(VIEW_ENDPOINTS)
+
+
+## Attach a Mongo database to this project at runtime (from the connection picker),
+## building its sidebar/center binding and switching to the Collections view. No-op
+## if a database is already attached (a project holds at most one).
+func attach_mongo(connection: Dictionary, database: String) -> void:
+	if has_mongo():
+		return
+	_doc.set_mongo(connection, database)
+	_build_mongo_views()
+	_refresh_activity(VIEW_COLLECTIONS)
+	# An endpoint tab opened before the DB existed now gets the cross-query action.
+	_center.set_cross_query_enabled(true)
+
+
+## Attach a Rocket.Chat API to this project at runtime (from the workspace picker),
+## building its endpoint/users sidebars and switching to the Endpoints view. No-op
+## if an API is already attached.
+func attach_rocketchat(config: Dictionary) -> void:
+	if has_rocketchat():
+		return
+	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
+	_build_rocketchat_views()
+	_refresh_activity(VIEW_ENDPOINTS)
+
+
+func _build_mongo_views() -> void:
+	var connection := _doc.mongo_connection()
+	var database := _doc.mongo_database()
+	_collection_sidebar = COLLECTION_SIDEBAR_SCENE.instantiate()
+	_add_sidebar(VIEW_COLLECTIONS, _collection_sidebar)
+	_collection_sidebar.collection_activated.connect(_on_collection_activated)
+	_collection_sidebar.insert_document_requested.connect(_on_insert_document_requested)
+	_collection_sidebar.list_indexes_requested.connect(_on_list_indexes_requested)
+	_collection_sidebar.schema_changed.connect(_on_schema_changed)
+	_collection_sidebar.status_changed.connect(_on_status_changed)
+	_center.bind_mongo(connection, database)
+	_collection_sidebar.configure(connection, database)
+
+
+func _build_rocketchat_views() -> void:
+	var config := _doc.rocketchat_config()
+	_session = WorkspaceSession.new(config)
+	_center.bind_session(_session)
+
+	_endpoint_sidebar = ENDPOINT_SIDEBAR_SCENE.instantiate()
+	_add_sidebar(VIEW_ENDPOINTS, _endpoint_sidebar)
+	_endpoint_sidebar.endpoint_activated.connect(_on_endpoint_activated)
+	_endpoint_sidebar.status_changed.connect(_on_status_changed)
+	_endpoint_sidebar.configure(config)
+
+	_users_panel = USERS_PANEL_SCENE.instantiate()
+	_add_sidebar(VIEW_USERS, _users_panel)
+	_users_panel.status_changed.connect(_on_status_changed)
+	_users_panel.configure(_session)
+
+
+## Rebuild the activity bar from the views that currently exist (in a stable
+## order), optionally selecting `select_view`.
+func _refresh_activity(select_view: String = "") -> void:
+	var views: Array = []
+	if _views.has(VIEW_COLLECTIONS):
+		views.append({"id": VIEW_COLLECTIONS, "icon": ICON_COLLECTIONS, "tooltip": "Collections"})
+	if _views.has(VIEW_ENDPOINTS):
 		views.append({"id": VIEW_ENDPOINTS, "icon": ICON_ENDPOINTS, "tooltip": "Endpoints"})
-
-		_users_panel = USERS_PANEL_SCENE.instantiate()
-		_add_sidebar(VIEW_USERS, _users_panel)
-		_users_panel.status_changed.connect(_on_status_changed)
-		_users_panel.configure(_session)
+	if _views.has(VIEW_USERS):
 		views.append({"id": VIEW_USERS, "icon": ICON_USERS, "tooltip": "Users"})
-
-	_activity.set_views(views)
+	_activity.set_views(views, select_view)
 
 
 ## Add a sidebar to the swappable stack, hidden until its view is selected. The

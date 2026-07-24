@@ -26,7 +26,6 @@ enum DocAction {
 	COPY_PATH,
 	COPY_JSON,
 	DELETE,
-	FIND_IN_DB,
 }
 
 ## Custom type actions are added to the context menu with ids offset by this base
@@ -42,9 +41,9 @@ var _menu_item: TreeItem
 ## editable documents. Delete stays available.
 var _log_mode := false
 
-## When set (endpoint results in a project that also has a database attached), a
-## scalar field row offers "Find in Database…", which opens a query tab on the
-## attached DB filtered by that field's value — the cross-browser handoff.
+## When set (endpoint results in a project that also has a database attached),
+## string values offer the schema's "Unknown Type" search actions even though this
+## view has no collection of its own — the cross-browser handoff.
 var _cross_query := false
 
 # Schema-driven custom types/actions ------------------------------------------
@@ -106,8 +105,9 @@ func set_log_mode(enabled: bool) -> void:
 	_log_mode = enabled
 
 
-## Enable the "Find in Database…" context action on scalar field rows. Set by the
-## workspace center on an endpoint results view when the project also has a DB.
+## Allow the schema's cross-query search actions on this view's string values even
+## when it has no collection of its own (endpoint results). Set by the workspace
+## center on an endpoint results view when the project also has a DB.
 func set_cross_query_enabled(enabled: bool) -> void:
 	_cross_query = enabled
 
@@ -163,10 +163,6 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
 	# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
 	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
-	# Cross-browser handoff: search the attached DB by a scalar value.
-	if _cross_query and not is_document and not has_children:
-		_doc_menu.add_separator()
-		_doc_menu.add_item("Find in Database…", DocAction.FIND_IN_DB)
 	_doc_menu.add_separator()
 	_doc_menu.add_item("Delete Document", DocAction.DELETE)
 	_add_custom_actions(item, is_document)
@@ -184,7 +180,13 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 ## added inline (right-clicking the attribute directly).
 func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	_clear_custom_menus()
-	if _schema == null or _collection.is_empty():
+	if _schema == null:
+		return
+	# A results view with a collection resolves typed fields normally. Endpoint
+	# results have no collection of their own, but when a database is attached
+	# (_cross_query) their string values still offer the schema's "Unknown Type"
+	# search actions — the cross-browser handoff.
+	if _collection.is_empty() and not _cross_query:
 		return
 	var meta: Variant = item.get_metadata(0)
 	if not (meta is Dictionary):
@@ -322,24 +324,6 @@ func _on_doc_action(id: int) -> void:
 			DisplayServer.clipboard_set(_meta_json(_menu_item))
 		DocAction.DELETE:
 			delete_requested.emit(_menu_doc_index)
-		DocAction.FIND_IN_DB:
-			_emit_find_in_database()
-
-
-## Open a query tab on the attached database filtered by the right-clicked field's
-## value (the cross-browser handoff). The target collection is left blank for the
-## user to name, and the value becomes a { field: value } filter.
-func _emit_find_in_database() -> void:
-	if _menu_item == null:
-		return
-	var meta: Variant = _menu_item.get_metadata(0)
-	if not (meta is Dictionary):
-		return
-	var key := str((meta as Dictionary).get("key", ""))
-	if key.is_empty():
-		return
-	var value: Variant = (meta as Dictionary).get("value")
-	open_query_requested.emit("", {key: value}, "find")
 
 
 ## Resolve a registered action's filter template against its recorded source value

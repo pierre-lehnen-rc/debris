@@ -121,8 +121,8 @@ func set_log_mode(enabled: bool) -> void:
 	_table_view.set_log_mode(enabled)
 
 
-## Enable the "Find in Database…" cross-query action on the tree/table views. Set
-## by the workspace center on an endpoint results view when the project has a DB.
+## Enable the cross-query search actions on the tree/table views. Set by the
+## workspace center on an endpoint results view when the project has a DB.
 func set_cross_query_enabled(enabled: bool) -> void:
 	_tree_view.set_cross_query_enabled(enabled)
 	_table_view.set_cross_query_enabled(enabled)

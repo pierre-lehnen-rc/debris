@@ -16,6 +16,9 @@ const META_VIEW := "view"
 
 var _group := ButtonGroup.new()
 var _box: HBoxContainer
+## The id of the currently selected view, so a rebuild (after attaching a source)
+## can keep the user on the same view instead of snapping back to the first.
+var _current_view := ""
 
 
 func _ready() -> void:
@@ -34,19 +37,38 @@ func _ready() -> void:
 
 
 ## Rebuild the bar from an ordered list of { id: String, icon: Texture2D,
-## tooltip: String } entries and select the first, which emits view_selected.
-func set_views(views: Array) -> void:
+## tooltip: String } entries. Selection order of preference: `select_id` when
+## given and present, else the previously-selected view when it still exists, else
+## the first view. Selecting a button emits view_selected.
+func set_views(views: Array, select_id: String = "") -> void:
 	if _box == null:
 		return
 	for child in _box.get_children():
+		_box.remove_child(child)
 		child.queue_free()
 	for v in views:
 		_box.add_child(_make_button(v))
-	if not views.is_empty():
-		# Setting button_pressed programmatically emits `toggled`, which fires
-		# view_selected for the initial view.
-		var first := _box.get_child(0) as Button
-		first.button_pressed = true
+	if views.is_empty():
+		return
+
+	var target := select_id
+	if not _has_view(views, target):
+		target = _current_view if _has_view(views, _current_view) else String(views[0]["id"])
+	for btn in _box.get_children():
+		if String((btn as Button).get_meta(META_VIEW)) == target:
+			# Setting button_pressed programmatically emits `toggled`, which fires
+			# view_selected for the target view.
+			(btn as Button).button_pressed = true
+			break
+
+
+func _has_view(views: Array, id: String) -> bool:
+	if id.is_empty():
+		return false
+	for v in views:
+		if String((v as Dictionary).get("id", "")) == id:
+			return true
+	return false
 
 
 func _make_button(v: Dictionary) -> Button:
@@ -68,4 +90,5 @@ func _make_button(v: Dictionary) -> Button:
 ## un-press of the previously selected one and act only on the new selection.
 func _on_toggled(pressed: bool, btn: Button) -> void:
 	if pressed:
-		view_selected.emit(String(btn.get_meta(META_VIEW)))
+		_current_view = String(btn.get_meta(META_VIEW))
+		view_selected.emit(_current_view)

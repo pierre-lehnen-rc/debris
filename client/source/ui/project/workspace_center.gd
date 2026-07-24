@@ -51,12 +51,23 @@ func bind_session(session: WorkspaceSession) -> void:
 	_session = session
 
 
-## Set the active schema and push it to every open query tab.
+## Toggle the cross-query search actions on every open endpoint tab. Called when a
+## database is attached after some endpoint tabs are already open.
+func set_cross_query_enabled(enabled: bool) -> void:
+	for child in _tabs.get_children():
+		if child is EndpointTab:
+			(child as EndpointTab).set_cross_query_enabled(enabled)
+
+
+## Set the active schema and push it to every open query tab, and to endpoint tabs
+## so their result values can be searched via the schema's cross-query actions.
 func set_schema(schema: DatabaseSchema) -> void:
 	_schema = schema
 	for child in _tabs.get_children():
 		if child is QueryTab:
 			(child as QueryTab).set_schema(schema)
+		elif child is EndpointTab:
+			(child as EndpointTab).set_schema(schema)
 
 
 # Mongo query tabs ------------------------------------------------------------
@@ -111,14 +122,16 @@ func open_endpoint(endpoint: ApiEndpoint) -> EndpointTab:
 	var tab: EndpointTab = ENDPOINT_TAB_SCENE.instantiate()
 	tab.configure(_session, endpoint)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
-	# A "Find in Database…" on a result opens a sibling query tab on the bound DB.
+	# A cross-query search action on a result opens a sibling query tab on the DB.
 	tab.open_query_requested.connect(_on_open_query_requested)
 	tab.name = "e_%d" % _tab_counter
 	_tab_counter += 1
 
 	_tabs.add_child(tab)
-	# Offer the cross-query action only when this project also has a database.
+	# Offer the cross-query search actions only when this project also has a
+	# database, and give the new tab the current schema to resolve them.
 	tab.set_cross_query_enabled(not _bound_database.is_empty())
+	tab.set_schema(_schema)
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_ENDPOINT)

@@ -11,8 +11,8 @@ extends VBoxContainer
 ## be called before the node enters the tree so _ready() can build the form.
 
 signal status_changed(text: String)
-## Bubbled up from the results view when "Find in Database…" is used on a result
-## value, asking the workspace center to open a query tab on the attached DB.
+## Bubbled up from the results view when a cross-query search action (the schema's
+## "Unknown Type" menu on a result value) asks to open a query tab on the DB.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 @onready var _toolbar: PanelContainer = %Toolbar
@@ -50,10 +50,18 @@ func results() -> ResultsView:
 	return _results
 
 
-## Enable/disable the "Find in Database…" action on this tab's result rows. The
+## Enable/disable the cross-query search actions on this tab's result rows. The
 ## workspace center enables it when the project also has a database attached.
 func set_cross_query_enabled(enabled: bool) -> void:
 	_results.set_cross_query_enabled(enabled)
+
+
+## Apply the attached database's schema so result string values can be searched via
+## the schema's "Unknown Type" actions. Endpoint results have no collection of their
+## own, so an empty collection is passed.
+func set_schema(schema: DatabaseSchema) -> void:
+	if is_node_ready():
+		_results.set_type_context(schema, "")
 
 
 func tab_title() -> String:
@@ -62,7 +70,7 @@ func tab_title() -> String:
 
 func _ready() -> void:
 	_apply_style()
-	# Relay a results-view "Find in Database…" up to the workspace center.
+	# Relay a results-view cross-query request up to the workspace center.
 	_results.open_query_requested.connect(
 		func(collection: String, filter: Dictionary, function: String) -> void:
 			open_query_requested.emit(collection, filter, function)
