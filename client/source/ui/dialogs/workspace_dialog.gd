@@ -26,7 +26,7 @@ func open_new() -> void:
 	_reset()
 	_edit_index = -1
 	title = "New Workspace"
-	popup_centered(Vector2i(560, 180))
+	UiScale.popup_centered(self, Vector2i(560, 180))
 
 
 func open_edit(index: int, config: Dictionary) -> void:
@@ -34,7 +34,7 @@ func open_edit(index: int, config: Dictionary) -> void:
 	_edit_index = index
 	title = "Edit Workspace"
 	_url_edit.text = config.get("url", "")
-	popup_centered(Vector2i(560, 180))
+	UiScale.popup_centered(self, Vector2i(560, 180))
 
 
 # Helpers ---------------------------------------------------------------------

@@ -65,7 +65,7 @@ func open_new() -> void:
 	_reset()
 	_edit_index = -1
 	title = "New Connection"
-	popup_centered(Vector2i(540, 460))
+	UiScale.popup_centered(self, Vector2i(540, 460))
 
 
 func open_edit(index: int, config: Dictionary) -> void:
@@ -88,7 +88,7 @@ func open_edit(index: int, config: Dictionary) -> void:
 	_mech_option.selected = maxi(0, MECHANISMS.find(auth.get("mechanism", "")))
 	_set_enabled(_auth_controls, _auth_check.button_pressed)
 	_update_url_preview()
-	popup_centered(Vector2i(540, 460))
+	UiScale.popup_centered(self, Vector2i(540, 460))
 
 
 # Helpers ---------------------------------------------------------------------

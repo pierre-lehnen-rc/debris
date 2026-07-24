@@ -152,7 +152,7 @@ func _open_popup() -> void:
 		_view_year = date["year"]
 		_view_month = date["month"]
 	_render_calendar()
-	_popup.reset_size()
+	UiScale.prepare(_popup)
 	# Native pop-ups position in absolute screen coordinates; drop below the field.
 	_popup.position = Vector2i(get_screen_position() + Vector2(0, size.y))
 	_popup.popup()

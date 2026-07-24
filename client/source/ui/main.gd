@@ -307,7 +307,7 @@ func _save_project_as(proj: ProjectTab = null) -> void:
 		_file_dialog.current_path = doc.file_path
 	else:
 		_file_dialog.current_file = "%s.%s" % [_project_basename(doc), WorkspaceFile.EXTENSION]
-	_file_dialog.popup_centered(Vector2i(720, 520))
+	UiScale.popup_centered(_file_dialog, Vector2i(720, 520))
 
 
 ## Prompt for a project file to open.
@@ -317,7 +317,7 @@ func _open_project_dialog() -> void:
 	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	_file_dialog.title = "Open Project"
 	_file_dialog.ok_button_text = "Open"
-	_file_dialog.popup_centered(Vector2i(720, 520))
+	UiScale.popup_centered(_file_dialog, Vector2i(720, 520))
 
 
 func _on_file_dialog_selected(path: String) -> void:
@@ -538,7 +538,7 @@ func _on_tab_close_pressed(tab_index: int) -> void:
 	if proj != null and proj.doc().dirty:
 		_closing_project = proj
 		_close_confirm.dialog_text = "Save changes to \"%s\" before closing?" % proj.tab_title()
-		_close_confirm.popup_centered()
+		UiScale.popup_centered(_close_confirm)
 		return
 	_close_tab(control)
 

@@ -68,7 +68,7 @@ func open_view(text: String) -> void:
 
 # Internals -------------------------------------------------------------------
 func _popup() -> void:
-	popup_centered(Vector2i(560, 460))
+	UiScale.popup_centered(self, Vector2i(560, 460))
 	_editor.grab_focus()
 
 

@@ -34,7 +34,7 @@ func show_error(entry: Dictionary) -> void:
 	var error: String = str(entry.get("error", ""))
 	_message.text = error if not error.is_empty() else "The action failed without an error message."
 
-	popup_centered(Vector2i(440, 200))
+	UiScale.popup_centered(self, Vector2i(440, 200))
 
 
 # Wired in error_dialog.tscn ---------------------------------------------------

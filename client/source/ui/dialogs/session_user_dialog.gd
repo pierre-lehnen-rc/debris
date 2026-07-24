@@ -39,7 +39,7 @@ func open() -> void:
 	_status.text = ""
 	_mode.select(AUTH_PASSWORD)
 	_apply_mode()
-	popup_centered(Vector2i(460, 300))
+	UiScale.popup_centered(self, Vector2i(460, 300))
 	_username_edit.grab_focus()
 
 
