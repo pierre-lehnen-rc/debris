@@ -118,8 +118,8 @@ static func from_dict(data: Dictionary) -> WorkspaceDoc:
 
 ## Reduce a users array to the persisted config shape, dropping any runtime-only
 ## fields (session_user_id/session_token) so login-acquired tokens never land in a
-## file. Mirrors WorkspacePicker._user_entry so legacy configs keep working:
-## `auth` is inferred from a present token when not stated.
+## file. `auth` is inferred from a present token when not stated, so older/looser
+## user entries keep working.
 static func _clean_users(raw: Variant) -> Array:
 	var out: Array = []
 	if not (raw is Array):

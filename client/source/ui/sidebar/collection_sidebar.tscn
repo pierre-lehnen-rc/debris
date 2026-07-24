@@ -27,6 +27,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "COLLECTIONS"
 
+[node name="EditBtn" type="Button" parent="Box/Header/HeaderBox/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Edit database connection"
+focus_mode = 0
+text = "✎"
+
 [node name="RefreshBtn" type="Button" parent="Box/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -73,6 +80,7 @@ select_mode = 1
 unique_name_in_owner = true
 theme = ExtResource("2_theme")
 
+[connection signal="pressed" from="Box/Header/HeaderBox/Row/EditBtn" to="." method="_on_edit_pressed"]
 [connection signal="pressed" from="Box/Header/HeaderBox/Row/RefreshBtn" to="." method="_on_refresh_pressed"]
 [connection signal="item_selected" from="Box/Header/HeaderBox/SchemaRow/SchemaOption" to="." method="_on_schema_selected"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]

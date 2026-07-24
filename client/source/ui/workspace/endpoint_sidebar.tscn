@@ -23,6 +23,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "ENDPOINTS"
 
+[node name="EditBtn" type="Button" parent="Box/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Edit API connection"
+focus_mode = 0
+text = "✎"
+
 [node name="Tree" type="Tree" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -35,6 +42,7 @@ select_mode = 1
 unique_name_in_owner = true
 theme = ExtResource("2_theme")
 
+[connection signal="pressed" from="Box/Header/Row/EditBtn" to="." method="_on_edit_pressed"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
 [connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
 [connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]

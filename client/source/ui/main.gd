@@ -1,12 +1,13 @@
 class_name Main
 extends Control
 
-## Application shell: menu bar, toolbar, a bottom-tabbed stack of open tabs, and
-## a status bar. Tabs come in two kinds: a database tab (bound to one Mongo
-## database, with its own collection sidebar + query workspace) chosen from the
-## connection picker, and a Rocket.Chat workspace tab chosen from the workspace
-## picker. Both pickers open from the toolbar; the database picker also opens
-## automatically when no tabs are open. Layout lives in main.tscn (theme too).
+## Application shell: menu bar, toolbar, a bottom-tabbed stack of open tabs, and a
+## status bar. Tabs are Debris projects (ProjectTab) — each optionally binding one
+## Mongo database and one Rocket.Chat API, saved as a .debris-project file. New
+## Project / Open Project drive the lifecycle; a project attaches or edits its
+## sources from within (activity-bar attach buttons and per-panel edit buttons),
+## which open the connection/workspace pickers and dialogs. A start screen shows
+## when no tab is open. Layout lives in main.tscn (theme too).
 
 const PROJECT_TAB_SCENE := preload("res://source/ui/project/project_tab.tscn")
 const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.tscn")
@@ -21,9 +22,7 @@ const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.ts
 @onready var _status_label: Label = %StatusLabel
 @onready var _tabs: TabContainer = %MainTabs
 @onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
-@onready var _picker: ConnectionPicker = $ConnectionPicker
 @onready var _workspace_dialog: WorkspaceDialog = $WorkspaceDialog
-@onready var _workspace_picker: WorkspacePicker = $WorkspacePicker
 @onready var _error_dialog: ErrorDialog = $ErrorDialog
 
 var _tab_counter := 0
@@ -135,10 +134,11 @@ func _on_status_changed(text: String) -> void:
 	_status_label.text = text
 
 
-# When set, the next picker selection attaches its source to this existing project
-# instead of opening a new one. Cleared once used, or when a picker opens for a new
-# project (so a cancelled attach doesn't leak into the next open).
-var _attach_target: ProjectTab = null
+# The connection/workspace dialogs configure a project's source directly (there is
+# no shared library). `_dialog_project` is the project a pending dialog targets and
+# `_dialog_editing` is true for an edit (update in place) vs an attach (add new).
+var _dialog_project: ProjectTab = null
+var _dialog_editing := false
 
 # Project file lifecycle (.debris-project). One shared FileDialog serves both Save
 # and Open; `_file_dialog_mode` says which, and `_file_dialog_project` is the
@@ -181,23 +181,13 @@ func _build_project_dialogs() -> void:
 	_recent_menu.id_pressed.connect(_on_recent_selected)
 
 
-func _open_picker() -> void:
-	_attach_target = null
-	_picker.open()
-
-
-func _open_workspace_picker() -> void:
-	_attach_target = null
-	_workspace_picker.open()
-
-
 ## The project tab currently in focus, or null if the active tab isn't a project.
 func _current_project() -> ProjectTab:
 	var control := _tabs.get_current_tab_control()
 	return control as ProjectTab
 
 
-# New / attach ----------------------------------------------------------------
+# New / attach / edit ---------------------------------------------------------
 ## Open a fresh empty project (no sources yet); the user attaches a DB and/or API.
 func _new_project() -> void:
 	var doc := WorkspaceDoc.new()
@@ -206,79 +196,77 @@ func _new_project() -> void:
 	_status_label.text = "New project"
 
 
-## Attach a database to the current project: open the connection picker aimed at
-## the active project so its selection binds there instead of opening a new tab.
+## Attach a database to the current project by configuring one in the connection
+## dialog (there is no library — the config lives in the project).
 func _attach_database() -> void:
-	var proj := _current_project()
-	if proj == null or proj.has_mongo():
-		return
-	_attach_target = proj
-	_picker.open()
+	_begin_mongo_dialog(_current_project(), false)
 
 
-## Attach an API to the current project via the workspace picker.
+## Attach an API to the current project via the workspace dialog.
 func _attach_api() -> void:
-	var proj := _current_project()
-	if proj == null or proj.has_rocketchat():
-		return
-	_attach_target = proj
-	_workspace_picker.open()
+	_begin_api_dialog(_current_project(), false)
 
 
-## An unattached source icon was clicked in a project's activity bar — open the
-## matching picker aimed at that project.
+## An unattached source icon was clicked in a project's activity bar.
 func _on_project_attach_requested(source: String, proj: ProjectTab) -> void:
-	if not is_instance_valid(proj):
+	if source == "mongo":
+		_begin_mongo_dialog(proj, false)
+	elif source == "api":
+		_begin_api_dialog(proj, false)
+
+
+## A source panel's edit button was pressed — edit that source in place.
+func _on_project_edit_requested(source: String, proj: ProjectTab) -> void:
+	if source == "mongo":
+		_begin_mongo_dialog(proj, true)
+	elif source == "api":
+		_begin_api_dialog(proj, true)
+
+
+## Open the connection dialog for a project's database — as an edit (prefilled from
+## the project's connection) or an attach (blank). The result is applied in
+## _on_connection_saved / _on_connection_updated.
+func _begin_mongo_dialog(proj: ProjectTab, editing: bool) -> void:
+	if proj == null or not is_instance_valid(proj):
 		return
-	if source == "mongo" and not proj.has_mongo():
-		_attach_target = proj
-		_picker.open()
-	elif source == "api" and not proj.has_rocketchat():
-		_attach_target = proj
-		_workspace_picker.open()
+	if editing and not proj.has_mongo():
+		return
+	if not editing and proj.has_mongo():
+		return
+	_dialog_project = proj
+	_dialog_editing = editing
+	if editing:
+		# Carry the project's actual bound database into the dialog so it pre-selects
+		# even before the database list is fetched.
+		var config := proj.doc().mongo_connection().duplicate(true)
+		config["database"] = proj.doc().mongo_database()
+		_connection_dialog.open_edit(0, config)
+	else:
+		_connection_dialog.open_new()
+
+
+func _begin_api_dialog(proj: ProjectTab, editing: bool) -> void:
+	if proj == null or not is_instance_valid(proj):
+		return
+	if editing and not proj.has_rocketchat():
+		return
+	if not editing and proj.has_rocketchat():
+		return
+	_dialog_project = proj
+	_dialog_editing = editing
+	if editing:
+		_workspace_dialog.open_edit(0, proj.doc().rocketchat_config())
+	else:
+		_workspace_dialog.open_new()
 
 
 # Project tabs ----------------------------------------------------------------
-## A database was picked. When an attach is pending, bind it to that project;
-## otherwise open a new project bound to just this DB.
-func _on_database_selected(connection: Dictionary, database: String) -> void:
-	var conn_name := String(connection.get("name", ""))
-	if _attach_target != null and is_instance_valid(_attach_target):
-		var target := _attach_target
-		_attach_target = null
-		target.attach_mongo(connection, database)
-		_update_project_tab_title(target)
-		_status_label.text = "Attached %s on %s" % [database, conn_name]
-		return
-	var doc := WorkspaceDoc.new()
-	doc.name = "%s · %s" % [conn_name, database] if not conn_name.is_empty() else database
-	doc.set_mongo(connection, database)
-	_open_project_tab(doc)
-	_status_label.text = "Opened %s on %s" % [database, conn_name]
-
-
-## A workspace was picked. When an attach is pending, bind it to that project;
-## otherwise open a new project bound to just this API.
-func _on_workspace_selected(workspace: Dictionary) -> void:
-	if _attach_target != null and is_instance_valid(_attach_target):
-		var target := _attach_target
-		_attach_target = null
-		target.attach_rocketchat(workspace)
-		_update_project_tab_title(target)
-		_status_label.text = "Attached workspace %s" % workspace.get("name", "")
-		return
-	var doc := WorkspaceDoc.new()
-	doc.name = String(workspace.get("name", ""))
-	doc.set_rocketchat(String(workspace.get("url", "")), workspace.get("users", []))
-	_open_project_tab(doc)
-	_status_label.text = "Opened workspace %s" % doc.name
-
-
 func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
 	var tab: ProjectTab = PROJECT_TAB_SCENE.instantiate()
 	tab.configure(doc)
 	tab.status_changed.connect(_on_status_changed)
 	tab.attach_requested.connect(_on_project_attach_requested.bind(tab))
+	tab.edit_source_requested.connect(_on_project_edit_requested.bind(tab))
 	tab.name = "proj_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)
@@ -588,48 +576,56 @@ func _on_close_custom_action(action: StringName) -> void:
 
 
 # Connection picker / dialog --------------------------------------------------
-func _on_add_connection_requested() -> void:
-	_connection_dialog.open_new()
-
-
-func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
-	_connection_dialog.open_edit(index, config)
-
-
+# The connection dialog produces the database config for `_dialog_project`. Both
+# signals route to the same apply — `saved` from an attach (open_new), `updated`
+# from an edit (open_edit); `_dialog_editing` says which.
 func _on_connection_saved(config: Dictionary) -> void:
-	_picker.add_connection(config)
-	_status_label.text = "Added connection '%s'" % config.get("name", "")
+	_apply_mongo_config(config)
 
 
-func _on_connection_updated(index: int, config: Dictionary) -> void:
-	_picker.update_connection(index, config)
-	_status_label.text = "Updated connection '%s'" % config.get("name", "")
+func _on_connection_updated(_index: int, config: Dictionary) -> void:
+	_apply_mongo_config(config)
 
 
-# Workspace picker / dialog ---------------------------------------------------
-func _on_add_workspace_requested() -> void:
-	_workspace_dialog.open_new()
+func _apply_mongo_config(config: Dictionary) -> void:
+	var proj := _dialog_project
+	_dialog_project = null
+	if proj == null or not is_instance_valid(proj):
+		return
+	if _dialog_editing:
+		proj.update_mongo_connection(config)
+		_status_label.text = "Updated database connection"
+	else:
+		proj.attach_mongo(config, String(config.get("database", "")))
+		_status_label.text = "Attached database"
+	_update_project_tab_title(proj)
 
 
-func _on_edit_workspace_requested(index: int, config: Dictionary) -> void:
-	_workspace_dialog.open_edit(index, config)
-
-
+# Same pattern for the API config.
 func _on_workspace_saved(config: Dictionary) -> void:
-	_workspace_picker.add_workspace(config)
-	_status_label.text = "Added workspace '%s'" % config.get("name", "")
+	_apply_api_config(config)
 
 
-func _on_workspace_updated(index: int, config: Dictionary) -> void:
-	_workspace_picker.update_workspace(index, config)
-	_status_label.text = "Updated workspace '%s'" % config.get("name", "")
+func _on_workspace_updated(_index: int, config: Dictionary) -> void:
+	_apply_api_config(config)
+
+
+func _apply_api_config(config: Dictionary) -> void:
+	var proj := _dialog_project
+	_dialog_project = null
+	if proj == null or not is_instance_valid(proj):
+		return
+	if _dialog_editing:
+		proj.update_rocketchat(config)
+		_status_label.text = "Updated API connection"
+	else:
+		proj.attach_rocketchat(config)
+		_status_label.text = "Attached API"
+	_update_project_tab_title(proj)
 
 
 # Menus / styling -------------------------------------------------------------
 # File menu item ids.
-const FILE_NEW_CONNECTION := 0
-const FILE_OPEN_DATABASE := 1
-const FILE_OPEN_WORKSPACE := 2
 const FILE_QUIT := 3
 const FILE_ACTIVITY_LOG := 4
 const FILE_NEW_PROJECT := 5
@@ -650,12 +646,6 @@ func _on_file_menu(id: int) -> void:
 			_save_project()
 		FILE_SAVE_PROJECT_AS:
 			_save_project_as()
-		FILE_NEW_CONNECTION:
-			_connection_dialog.open_new()
-		FILE_OPEN_DATABASE:
-			_open_picker()
-		FILE_OPEN_WORKSPACE:
-			_open_workspace_picker()
 		FILE_ATTACH_DATABASE:
 			_attach_database()
 		FILE_ATTACH_API:
@@ -729,12 +719,9 @@ func _populate_menus() -> void:
 	_file_menu.add_item("Save Project", FILE_SAVE_PROJECT)
 	_file_menu.add_item("Save Project As…", FILE_SAVE_PROJECT_AS)
 	_file_menu.add_separator()
-	_file_menu.add_item("Open Database…", FILE_OPEN_DATABASE)
-	_file_menu.add_item("Open Workspace…", FILE_OPEN_WORKSPACE)
 	_file_menu.add_item("Attach Database…", FILE_ATTACH_DATABASE)
 	_file_menu.add_item("Attach API…", FILE_ATTACH_API)
 	_file_menu.add_separator()
-	_file_menu.add_item("New Connection…", FILE_NEW_CONNECTION)
 	_file_menu.add_item("Activity Log", FILE_ACTIVITY_LOG)
 	_file_menu.add_separator()
 	_file_menu.add_item("Quit", FILE_QUIT)

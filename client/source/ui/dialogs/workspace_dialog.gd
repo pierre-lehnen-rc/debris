@@ -14,7 +14,6 @@ signal updated(index: int, config: Dictionary)
 const AUTH_TOKEN := 0
 const AUTH_PASSWORD := 1
 
-@onready var _name_edit: LineEdit = %NameEdit
 @onready var _url_edit: LineEdit = %UrlEdit
 @onready var _users_list: VBoxContainer = %UsersList
 @onready var _status: Label = %Status
@@ -41,7 +40,6 @@ func open_edit(index: int, config: Dictionary) -> void:
 	_reset()
 	_edit_index = index
 	title = "Edit Workspace"
-	_name_edit.text = config.get("name", "")
 	_url_edit.text = config.get("url", "")
 	var users: Variant = config.get("users", [])
 	if users is Array and not (users as Array).is_empty():
@@ -54,7 +52,6 @@ func open_edit(index: int, config: Dictionary) -> void:
 
 # Helpers ---------------------------------------------------------------------
 func _reset() -> void:
-	_name_edit.text = ""
 	_url_edit.text = ""
 	_status.text = ""
 	for child in _users_list.get_children():
@@ -141,13 +138,10 @@ func _gather_users() -> Array:
 
 
 func _gather() -> Dictionary:
-	var url := _url_edit.text.strip_edges()
-	var display_name := _name_edit.text.strip_edges()
-	if display_name.is_empty():
-		display_name = url
+	# No separate name field — the workspace lives in its project. The project name
+	# is used as its display name (see WorkspaceDoc.rocketchat_config).
 	return {
-		"name": display_name,
-		"url": url,
+		"url": _url_edit.text.strip_edges(),
 		"users": _gather_users(),
 	}
 

@@ -13,6 +13,9 @@ signal status_changed(text: String)
 ## Emitted when an unattached source's activity-bar icon is clicked, asking the
 ## host to attach that source ("mongo" | "api") to this project.
 signal attach_requested(source: String)
+## Emitted when a source panel's edit button is pressed, asking the host to open
+## the connection/API editor for that source ("mongo" | "api").
+signal edit_source_requested(source: String)
 
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
@@ -146,6 +149,36 @@ func attach_rocketchat(config: Dictionary) -> void:
 	_refresh_activity(VIEW_ENDPOINTS)
 
 
+## Apply an edited Mongo connection (from the connection editor) and reload the
+## collection sidebar against it. The browsed database follows the connection's
+## default database when set, otherwise the currently-bound one is kept.
+func update_mongo_connection(connection: Dictionary) -> void:
+	if not has_mongo():
+		return
+	var database := String(connection.get("database", ""))
+	if database.is_empty():
+		database = _doc.mongo_database()
+	_doc.set_mongo(connection, database)
+	_center.bind_mongo(connection, database)
+	if _collection_sidebar != null:
+		_collection_sidebar.configure(connection, database)
+
+
+## Apply an edited API config (from the workspace editor): rebuild the session and
+## reload the endpoint/users panels against it. Endpoint tabs already open keep
+## their original session until reopened.
+func update_rocketchat(config: Dictionary) -> void:
+	if not has_rocketchat():
+		return
+	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
+	_session = WorkspaceSession.new(_doc.rocketchat_config())
+	_center.bind_session(_session)
+	if _endpoint_sidebar != null:
+		_endpoint_sidebar.configure(_doc.rocketchat_config())
+	if _users_panel != null:
+		_users_panel.configure(_session)
+
+
 # View building ---------------------------------------------------------------
 ## The Collections view: the real collection sidebar when a DB is attached, else an
 ## attach placeholder inviting the user to attach one.
@@ -164,6 +197,7 @@ func _build_collections_view() -> void:
 	_collection_sidebar.list_indexes_requested.connect(_on_list_indexes_requested)
 	_collection_sidebar.schema_changed.connect(_on_schema_changed)
 	_collection_sidebar.status_changed.connect(_on_status_changed)
+	_collection_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("mongo"))
 	_center.bind_mongo(connection, database)
 	_collection_sidebar.configure(connection, database)
 
@@ -181,6 +215,7 @@ func _build_endpoints_view() -> void:
 	_add_view(VIEW_ENDPOINTS, _endpoint_sidebar)
 	_endpoint_sidebar.endpoint_activated.connect(_on_endpoint_activated)
 	_endpoint_sidebar.status_changed.connect(_on_status_changed)
+	_endpoint_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
 	_endpoint_sidebar.configure(_doc.rocketchat_config())
 
 
