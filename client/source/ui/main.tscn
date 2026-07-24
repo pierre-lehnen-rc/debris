@@ -1,79 +1,83 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://piousfu756bp"]
 
-[ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_61xnp"]
-[ext_resource type="Script" path="res://source/ui/main.gd" id="2_2lg2j"]
+[ext_resource type="Theme" uid="uid://dobtybal00kfi" path="res://source/ui/theme/app_theme.tres" id="1_61xnp"]
+[ext_resource type="Script" uid="uid://dpap0hwtsl75k" path="res://source/ui/main.gd" id="2_2lg2j"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/connection_dialog.tscn" id="3_cdlg0"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/workspace_dialog.tscn" id="5_wsdlg"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/error_dialog.tscn" id="7_errdg"]
+[ext_resource type="PackedScene" path="res://source/ui/dialogs/about_dialog.tscn" id="8_about"]
 
-[node name="Main" type="Control"]
+[node name="Main" type="Control" unique_id=1910404599]
 layout_mode = 3
-anchors_preset = 0
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 theme = ExtResource("1_61xnp")
 script = ExtResource("2_2lg2j")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=1475358015]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Box" type="VBoxContainer" parent="."]
+[node name="Box" type="VBoxContainer" parent="." unique_id=309674609]
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_constants/separation = 0
 
-[node name="MenuBar" type="MenuBar" parent="Box"]
+[node name="MenuBar" type="MenuBar" parent="Box" unique_id=1132975338]
 layout_mode = 2
 flat = true
 
-[node name="File" type="PopupMenu" parent="Box/MenuBar"]
+[node name="File" type="PopupMenu" parent="Box/MenuBar" unique_id=341773695]
 unique_name_in_owner = true
 
-[node name="Edit" type="PopupMenu" parent="Box/MenuBar"]
+[node name="Edit" type="PopupMenu" parent="Box/MenuBar" unique_id=1807677540]
 unique_name_in_owner = true
 
-[node name="View" type="PopupMenu" parent="Box/MenuBar"]
+[node name="View" type="PopupMenu" parent="Box/MenuBar" unique_id=460307999]
 unique_name_in_owner = true
 
-[node name="Help" type="PopupMenu" parent="Box/MenuBar"]
+[node name="Help" type="PopupMenu" parent="Box/MenuBar" unique_id=1894206837]
 unique_name_in_owner = true
 
-[node name="Toolbar" type="PanelContainer" parent="Box"]
+[node name="Toolbar" type="PanelContainer" parent="Box" unique_id=1028126587]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="Row" type="HBoxContainer" parent="Box/Toolbar"]
+[node name="Row" type="HBoxContainer" parent="Box/Toolbar" unique_id=413723199]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="MainTabs" type="TabContainer" parent="Box"]
+[node name="MainTabs" type="TabContainer" parent="Box" unique_id=1683596330]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 tabs_rearrange_group = 0
 
-[node name="StatusBar" type="PanelContainer" parent="Box"]
+[node name="StatusBar" type="PanelContainer" parent="Box" unique_id=462012741]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="StatusLabel" type="Label" parent="Box/StatusBar"]
+[node name="StatusLabel" type="Label" parent="Box/StatusBar" unique_id=837624093]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Ready"
 
-[node name="ConnectionDialog" parent="." instance=ExtResource("3_cdlg0")]
+[node name="ConnectionDialog" parent="." unique_id=1285638377 instance=ExtResource("3_cdlg0")]
 
-[node name="WorkspaceDialog" parent="." instance=ExtResource("5_wsdlg")]
+[node name="WorkspaceDialog" parent="." unique_id=254629159 instance=ExtResource("5_wsdlg")]
 
-[node name="ErrorDialog" parent="." instance=ExtResource("7_errdg")]
+[node name="ErrorDialog" parent="." unique_id=1779921709 instance=ExtResource("7_errdg")]
+
+[node name="AboutDialog" parent="." unique_id=1425677542 instance=ExtResource("8_about")]
 
 [connection signal="id_pressed" from="Box/MenuBar/File" to="." method="_on_file_menu"]
+[connection signal="id_pressed" from="Box/MenuBar/Help" to="." method="_on_help_menu"]
 [connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
 [connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]
 [connection signal="saved" from="WorkspaceDialog" to="." method="_on_workspace_saved"]

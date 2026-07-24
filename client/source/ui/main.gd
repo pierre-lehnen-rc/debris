@@ -24,6 +24,7 @@ const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.ts
 @onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
 @onready var _workspace_dialog: WorkspaceDialog = $WorkspaceDialog
 @onready var _error_dialog: ErrorDialog = $ErrorDialog
+@onready var _about_dialog: AboutDialog = $AboutDialog
 
 var _tab_counter := 0
 
@@ -657,6 +658,12 @@ func _on_file_menu(id: int) -> void:
 			_open_activity_log_tab()
 		FILE_QUIT:
 			get_tree().quit()
+
+
+## Handle Help menu selections. Currently only "About Debris" (id 0).
+func _on_help_menu(id: int) -> void:
+	if id == 0:
+		_about_dialog.open()
 
 
 ## Enable project-scoped items only when a project is active, and the Attach items
