@@ -12,6 +12,9 @@ signal insert_document_requested(connection: Dictionary, database: String, colle
 signal list_indexes_requested(connection: Dictionary, database: String, collection: String)
 signal status_changed(text: String)
 signal schema_changed(schema: DatabaseSchema)
+## The header's edit button was pressed — the host should open the connection
+## editor for this database's connection.
+signal edit_requested()
 
 const META_TYPE := "type"  # "collection" | "collection_group" | "placeholder"
 const ICON_GROUP := preload("res://source/ui/icons/group.svg")
@@ -80,6 +83,10 @@ func _apply_style() -> void:
 # Wired in collection_sidebar.tscn from the header buttons -------------------
 func _on_refresh_pressed() -> void:
 	_load()
+
+
+func _on_edit_pressed() -> void:
+	edit_requested.emit()
 
 
 ## Schema selector in the header. A manual pick wins over auto-detection from

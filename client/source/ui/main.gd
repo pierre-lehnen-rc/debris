@@ -1,15 +1,15 @@
 class_name Main
 extends Control
 
-## Application shell: menu bar, toolbar, a bottom-tabbed stack of open tabs, and
-## a status bar. Tabs come in two kinds: a database tab (bound to one Mongo
-## database, with its own collection sidebar + query workspace) chosen from the
-## connection picker, and a Rocket.Chat workspace tab chosen from the workspace
-## picker. Both pickers open from the toolbar; the database picker also opens
-## automatically when no tabs are open. Layout lives in main.tscn (theme too).
+## Application shell: menu bar, toolbar, a bottom-tabbed stack of open tabs, and a
+## status bar. Tabs are Debris projects (ProjectTab) — each optionally binding one
+## Mongo database and one Rocket.Chat API, saved as a .debris-project file. New
+## Project / Open Project drive the lifecycle; a project attaches or edits its
+## sources from within (activity-bar attach buttons and per-panel edit buttons),
+## which open the connection/workspace pickers and dialogs. A start screen shows
+## when no tab is open. Layout lives in main.tscn (theme too).
 
-const DATABASE_TAB_SCENE := preload("res://source/ui/database/database_tab.tscn")
-const WORKSPACE_TAB_SCENE := preload("res://source/ui/workspace/workspace_tab.tscn")
+const PROJECT_TAB_SCENE := preload("res://source/ui/project/project_tab.tscn")
 const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.tscn")
 
 @onready var _background: ColorRect = %Background
@@ -22,9 +22,7 @@ const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.ts
 @onready var _status_label: Label = %StatusLabel
 @onready var _tabs: TabContainer = %MainTabs
 @onready var _connection_dialog: ConnectionDialog = $ConnectionDialog
-@onready var _picker: ConnectionPicker = $ConnectionPicker
 @onready var _workspace_dialog: WorkspaceDialog = $WorkspaceDialog
-@onready var _workspace_picker: WorkspacePicker = $WorkspacePicker
 @onready var _error_dialog: ErrorDialog = $ErrorDialog
 
 var _tab_counter := 0
@@ -50,6 +48,8 @@ func _ready() -> void:
 	# different density) so an "Auto" scale stays correct without a restart.
 	get_window().dpi_changed.connect(_on_dpi_changed)
 	_apply_style()
+	_build_project_dialogs()
+	_build_start_screen()
 	_populate_menus()
 
 	var bar := _tabs.get_tab_bar()
@@ -62,6 +62,10 @@ func _ready() -> void:
 
 	# Show the bundled-server startup progress in the status bar.
 	ServerManager.status_changed.connect(_on_status_changed)
+
+	# Reopen the projects that were open at last shutdown; show the start screen
+	# when there are none.
+	_restore_open_projects()
 
 
 ## The content-scale factor to apply: the user's explicit override when set,
@@ -130,52 +134,371 @@ func _on_status_changed(text: String) -> void:
 	_status_label.text = text
 
 
-func _open_picker() -> void:
-	_picker.open()
+# The connection/workspace dialogs configure a project's source directly (there is
+# no shared library). `_dialog_project` is the project a pending dialog targets and
+# `_dialog_editing` is true for an edit (update in place) vs an attach (add new).
+var _dialog_project: ProjectTab = null
+var _dialog_editing := false
+
+# Project file lifecycle (.debris-project). One shared FileDialog serves both Save
+# and Open; `_file_dialog_mode` says which, and `_file_dialog_project` is the
+# project a pending save writes to.
+var _file_dialog: FileDialog
+var _recent_menu: PopupMenu
+var _file_dialog_mode := ""  # "save" | "open"
+var _file_dialog_project: ProjectTab = null
+# Save-before-close flow.
+var _close_confirm: ConfirmationDialog
+var _closing_project: ProjectTab = null   # tab awaiting a close decision
+var _close_after_save: ProjectTab = null  # close this once its pending Save As lands
+# Start screen shown when no tabs are open.
+var _start_screen: Control
 
 
-func _open_workspace_picker() -> void:
-	_workspace_picker.open()
+## Build the shared save/open FileDialog, the save-before-close prompt, and the
+## Open Recent submenu.
+func _build_project_dialogs() -> void:
+	_file_dialog = FileDialog.new()
+	_file_dialog.theme = AppTheme.shared()
+	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_file_dialog.add_filter("*.%s" % WorkspaceFile.EXTENSION, "Debris Project")
+	_file_dialog.file_selected.connect(_on_file_dialog_selected)
+	_file_dialog.canceled.connect(_on_file_dialog_canceled)
+	add_child(_file_dialog)
+
+	_close_confirm = ConfirmationDialog.new()
+	_close_confirm.theme = AppTheme.shared()
+	_close_confirm.title = "Unsaved Changes"
+	_close_confirm.ok_button_text = "Save"
+	_close_confirm.add_button("Discard", false, "discard")
+	_close_confirm.confirmed.connect(_on_close_save)
+	_close_confirm.custom_action.connect(_on_close_custom_action)
+	_close_confirm.canceled.connect(func() -> void: _closing_project = null)
+	add_child(_close_confirm)
+
+	_recent_menu = PopupMenu.new()
+	_recent_menu.name = "OpenRecent"
+	_recent_menu.id_pressed.connect(_on_recent_selected)
 
 
-# Database tabs ---------------------------------------------------------------
-func _on_database_selected(connection: Dictionary, database: String) -> void:
-	_open_database_tab(connection, database)
+## The project tab currently in focus, or null if the active tab isn't a project.
+func _current_project() -> ProjectTab:
+	var control := _tabs.get_current_tab_control()
+	return control as ProjectTab
 
 
-func _open_database_tab(connection: Dictionary, database: String) -> DatabaseTab:
-	var tab: DatabaseTab = DATABASE_TAB_SCENE.instantiate()
-	tab.configure(connection, database)
+# New / attach / edit ---------------------------------------------------------
+## Open a fresh empty project (no sources yet); the user attaches a DB and/or API.
+func _new_project() -> void:
+	var doc := WorkspaceDoc.new()
+	doc.name = "Untitled"
+	_open_project_tab(doc)
+	_status_label.text = "New project"
+
+
+## Attach a database to the current project by configuring one in the connection
+## dialog (there is no library — the config lives in the project).
+func _attach_database() -> void:
+	_begin_mongo_dialog(_current_project(), false)
+
+
+## Attach an API to the current project via the workspace dialog.
+func _attach_api() -> void:
+	_begin_api_dialog(_current_project(), false)
+
+
+## An unattached source icon was clicked in a project's activity bar.
+func _on_project_attach_requested(source: String, proj: ProjectTab) -> void:
+	if source == "mongo":
+		_begin_mongo_dialog(proj, false)
+	elif source == "api":
+		_begin_api_dialog(proj, false)
+
+
+## A source panel's edit button was pressed — edit that source in place.
+func _on_project_edit_requested(source: String, proj: ProjectTab) -> void:
+	if source == "mongo":
+		_begin_mongo_dialog(proj, true)
+	elif source == "api":
+		_begin_api_dialog(proj, true)
+
+
+## Open the connection dialog for a project's database — as an edit (prefilled from
+## the project's connection) or an attach (blank). The result is applied in
+## _on_connection_saved / _on_connection_updated.
+func _begin_mongo_dialog(proj: ProjectTab, editing: bool) -> void:
+	if proj == null or not is_instance_valid(proj):
+		return
+	if editing and not proj.has_mongo():
+		return
+	if not editing and proj.has_mongo():
+		return
+	_dialog_project = proj
+	_dialog_editing = editing
+	if editing:
+		# Carry the project's actual bound database into the dialog so it pre-selects
+		# even before the database list is fetched.
+		var config := proj.doc().mongo_connection().duplicate(true)
+		config["database"] = proj.doc().mongo_database()
+		_connection_dialog.open_edit(0, config)
+	else:
+		_connection_dialog.open_new()
+
+
+func _begin_api_dialog(proj: ProjectTab, editing: bool) -> void:
+	if proj == null or not is_instance_valid(proj):
+		return
+	if editing and not proj.has_rocketchat():
+		return
+	if not editing and proj.has_rocketchat():
+		return
+	_dialog_project = proj
+	_dialog_editing = editing
+	if editing:
+		_workspace_dialog.open_edit(0, proj.doc().rocketchat_config())
+	else:
+		_workspace_dialog.open_new()
+
+
+# Project tabs ----------------------------------------------------------------
+func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
+	var tab: ProjectTab = PROJECT_TAB_SCENE.instantiate()
+	tab.configure(doc)
 	tab.status_changed.connect(_on_status_changed)
-	tab.name = "db_%d" % _tab_counter
+	tab.attach_requested.connect(_on_project_attach_requested.bind(tab))
+	tab.edit_source_requested.connect(_on_project_edit_requested.bind(tab))
+	tab.dirty_changed.connect(_update_project_tab_title.bind(tab))
+	tab.name = "proj_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)
-	var index := _tabs.get_tab_count() - 1
-	_tabs.set_tab_title(index, tab.tab_title())
-	_tabs.set_tab_tooltip(index, "%s · %s" % [connection.get("name", ""), database])
-	_tabs.current_tab = index
-	_status_label.text = "Opened %s on %s" % [database, connection.get("name", "")]
+	_tabs.current_tab = _tabs.get_tab_count() - 1
+	_update_project_tab_title(tab)
+	_after_tabs_changed()
 	return tab
 
 
-# Workspace tabs --------------------------------------------------------------
-func _on_workspace_selected(workspace: Dictionary) -> void:
-	_open_workspace_tab(workspace)
+# Save / open project files ---------------------------------------------------
+## Save a project (default: the current one) to its file, or fall through to Save
+## As when it has never been saved.
+func _save_project(proj: ProjectTab = null) -> void:
+	if proj == null:
+		proj = _current_project()
+	if proj == null:
+		return
+	if proj.doc().file_path.is_empty():
+		_save_project_as(proj)
+		return
+	_write_project(proj, proj.doc().file_path)
 
 
-func _open_workspace_tab(workspace: Dictionary) -> WorkspaceTab:
-	var tab: WorkspaceTab = WORKSPACE_TAB_SCENE.instantiate()
-	tab.configure(workspace)
-	tab.status_changed.connect(_on_status_changed)
-	tab.name = "ws_%d" % _tab_counter
-	_tab_counter += 1
-	_tabs.add_child(tab)
-	var index := _tabs.get_tab_count() - 1
-	_tabs.set_tab_title(index, tab.tab_title())
-	_tabs.set_tab_tooltip(index, workspace.get("url", ""))
-	_tabs.current_tab = index
-	_status_label.text = "Opened workspace %s" % workspace.get("name", "")
-	return tab
+## Prompt for a path and save a project (default: the current one) there.
+func _save_project_as(proj: ProjectTab = null) -> void:
+	if proj == null:
+		proj = _current_project()
+	if proj == null:
+		return
+	_file_dialog_mode = "save"
+	_file_dialog_project = proj
+	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	_file_dialog.title = "Save Project"
+	_file_dialog.ok_button_text = "Save"
+	var doc := proj.doc()
+	if not doc.file_path.is_empty():
+		_file_dialog.current_path = doc.file_path
+	else:
+		_file_dialog.current_file = "%s.%s" % [_project_basename(doc), WorkspaceFile.EXTENSION]
+	_file_dialog.popup_centered(Vector2i(720, 520))
+
+
+## Prompt for a project file to open.
+func _open_project_dialog() -> void:
+	_file_dialog_mode = "open"
+	_file_dialog_project = null
+	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_file_dialog.title = "Open Project"
+	_file_dialog.ok_button_text = "Open"
+	_file_dialog.popup_centered(Vector2i(720, 520))
+
+
+func _on_file_dialog_selected(path: String) -> void:
+	if _file_dialog_mode == "save":
+		if not path.ends_with("." + WorkspaceFile.EXTENSION):
+			path += "." + WorkspaceFile.EXTENSION
+		var proj := _file_dialog_project
+		_file_dialog_project = null
+		if proj != null and is_instance_valid(proj):
+			_write_project(proj, path)
+			# A Save triggered by the save-before-close prompt closes the tab now.
+			if _close_after_save == proj:
+				_close_tab(proj)
+		_close_after_save = null
+	elif _file_dialog_mode == "open":
+		_open_project_file(path)
+
+
+## The user dismissed the Save As dialog — cancel any pending close-after-save.
+func _on_file_dialog_canceled() -> void:
+	_file_dialog_project = null
+	_close_after_save = null
+
+
+## Write a project to `path`, deriving a name from the filename when the project is
+## still Untitled, then refresh its tab title and the recent list.
+func _write_project(proj: ProjectTab, path: String) -> void:
+	var doc := proj.doc()
+	if doc.name.is_empty() or doc.name == "Untitled":
+		doc.name = path.get_file().get_basename()
+	var result := WorkspaceFile.save(doc, path)
+	if not result.get("ok", false):
+		_status_label.text = "Save failed: %s" % result.get("error", "unknown error")
+		return
+	Store.add_recent_workspace(path)
+	_update_project_tab_title(proj)
+	# The project now has a path (or a new one), so refresh the restore list.
+	_save_open_projects()
+	_status_label.text = "Saved %s" % doc.name
+
+
+## Open a project file into a new tab, focusing it if it's already open.
+func _open_project_file(path: String) -> void:
+	for i in _tabs.get_tab_count():
+		var control := _tabs.get_tab_control(i)
+		if control is ProjectTab and (control as ProjectTab).doc().file_path == path:
+			_tabs.current_tab = i
+			return
+	var result := WorkspaceFile.load(path)
+	if not result.get("ok", false):
+		_status_label.text = "Open failed: %s" % result.get("error", "unknown error")
+		return
+	var doc: WorkspaceDoc = result["doc"]
+	_open_project_tab(doc)
+	Store.add_recent_workspace(path)
+	_status_label.text = "Opened %s" % path.get_file()
+
+
+func _on_recent_selected(index: int) -> void:
+	var recent := Store.recent_workspaces()
+	if index >= 0 and index < recent.size():
+		_open_project_file(String(recent[index]))
+
+
+# Tab title / helpers ---------------------------------------------------------
+## Set a project tab's title from its name, prefixed with a dot when it has unsaved
+## changes, and its tooltip to the file path.
+func _update_project_tab_title(proj: ProjectTab) -> void:
+	var index := _tab_index_of(proj)
+	if index < 0:
+		return
+	var doc := proj.doc()
+	var title := proj.tab_title()
+	if doc.dirty:
+		title = "• " + title
+	_tabs.set_tab_title(index, title)
+	_tabs.set_tab_tooltip(index, doc.file_path)
+
+
+func _tab_index_of(control: Control) -> int:
+	for i in _tabs.get_tab_count():
+		if _tabs.get_tab_control(i) == control:
+			return i
+	return -1
+
+
+## A filename-safe base for an Untitled project's default save name.
+func _project_basename(doc: WorkspaceDoc) -> String:
+	var name := doc.name
+	if name.is_empty() or name == "Untitled":
+		return "project"
+	return name.replace("·", "-").replace("/", "-").strip_edges()
+
+
+# Start screen / empty state --------------------------------------------------
+## Build the placeholder shown in the tab area while no project is open: a title
+## and New / Open buttons. It shares the tab area (toggled with MainTabs).
+func _build_start_screen() -> void:
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 10)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "Debris"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
+	box.add_child(title)
+
+	var hint := Label.new()
+	hint.text = "Create a new project or open an existing one to get started."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	box.add_child(hint)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+
+	var new_btn := Button.new()
+	new_btn.text = "New Project"
+	new_btn.focus_mode = Control.FOCUS_NONE
+	new_btn.pressed.connect(_new_project)
+	row.add_child(new_btn)
+
+	var open_btn := Button.new()
+	open_btn.text = "Open Project…"
+	open_btn.focus_mode = Control.FOCUS_NONE
+	open_btn.pressed.connect(_open_project_dialog)
+	row.add_child(open_btn)
+
+	_start_screen = center
+	var parent := _tabs.get_parent()
+	parent.add_child(_start_screen)
+	parent.move_child(_start_screen, _tabs.get_index() + 1)
+	_start_screen.visible = false
+
+
+## Toggle between the tab area and the start screen based on how many tabs are open.
+## The tab strip only appears once there's more than one tab to switch between.
+func _update_empty_state() -> void:
+	var count := _tabs.get_tab_count()
+	_tabs.visible = count > 0
+	_tabs.tabs_visible = count > 1
+	if _start_screen != null:
+		_start_screen.visible = count == 0
+
+
+## Run after any tab open/close: refresh the empty state and persist which saved
+## projects are open so they can be restored next launch.
+func _after_tabs_changed() -> void:
+	_update_empty_state()
+	_save_open_projects()
+
+
+## Persist the file paths of the currently-open (saved) projects.
+func _save_open_projects() -> void:
+	var paths: Array = []
+	for i in _tabs.get_tab_count():
+		var control := _tabs.get_tab_control(i)
+		if control is ProjectTab:
+			var path := (control as ProjectTab).doc().file_path
+			if not path.is_empty():
+				paths.append(path)
+	Store.save_open_workspaces(paths)
+
+
+## Reopen the projects that were open at last shutdown (skipping any whose files
+## have since gone), then settle the empty state.
+func _restore_open_projects() -> void:
+	for entry in Store.open_workspaces():
+		var path := String(entry)
+		if FileAccess.file_exists(path):
+			_open_project_file(path)
+	_update_empty_state()
 
 
 # Activity log tab ------------------------------------------------------------
@@ -200,71 +523,170 @@ func _open_activity_log_tab() -> void:
 	var index := _tabs.get_tab_count() - 1
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.current_tab = index
+	_after_tabs_changed()
 	_status_label.text = "Opened activity log"
 
 
+# Closing tabs ----------------------------------------------------------------
+## A tab's close button was pressed. A project with unsaved changes prompts first;
+## everything else closes immediately.
 func _on_tab_close_pressed(tab_index: int) -> void:
 	var control := _tabs.get_tab_control(tab_index)
 	if control == null:
 		return
+	var proj := control as ProjectTab
+	if proj != null and proj.doc().dirty:
+		_closing_project = proj
+		_close_confirm.dialog_text = "Save changes to \"%s\" before closing?" % proj.tab_title()
+		_close_confirm.popup_centered()
+		return
+	_close_tab(control)
+
+
+## Remove a tab and settle the empty state / restore list.
+func _close_tab(control: Control) -> void:
+	if not is_instance_valid(control):
+		return
 	_tabs.remove_child(control)
 	control.queue_free()
-	# Back to an empty shell — reopen the picker so the user can choose again.
-	if _tabs.get_tab_count() == 0:
-		_open_picker.call_deferred()
+	_after_tabs_changed()
+
+
+## Save chosen in the close prompt: write the project (via Save As when it has no
+## path yet, closing once that lands) and then close it.
+func _on_close_save() -> void:
+	var proj := _closing_project
+	_closing_project = null
+	if proj == null:
+		return
+	if proj.doc().file_path.is_empty():
+		_close_after_save = proj
+		_save_project_as(proj)
+		return
+	_write_project(proj, proj.doc().file_path)
+	_close_tab(proj)
+
+
+## Discard chosen in the close prompt: close without saving.
+func _on_close_custom_action(action: StringName) -> void:
+	if action != &"discard":
+		return
+	_close_confirm.hide()
+	var proj := _closing_project
+	_closing_project = null
+	if proj != null:
+		_close_tab(proj)
 
 
 # Connection picker / dialog --------------------------------------------------
-func _on_add_connection_requested() -> void:
-	_connection_dialog.open_new()
-
-
-func _on_edit_connection_requested(index: int, config: Dictionary) -> void:
-	_connection_dialog.open_edit(index, config)
-
-
+# The connection dialog produces the database config for `_dialog_project`. Both
+# signals route to the same apply — `saved` from an attach (open_new), `updated`
+# from an edit (open_edit); `_dialog_editing` says which.
 func _on_connection_saved(config: Dictionary) -> void:
-	_picker.add_connection(config)
-	_status_label.text = "Added connection '%s'" % config.get("name", "")
+	_apply_mongo_config(config)
 
 
-func _on_connection_updated(index: int, config: Dictionary) -> void:
-	_picker.update_connection(index, config)
-	_status_label.text = "Updated connection '%s'" % config.get("name", "")
+func _on_connection_updated(_index: int, config: Dictionary) -> void:
+	_apply_mongo_config(config)
 
 
-# Workspace picker / dialog ---------------------------------------------------
-func _on_add_workspace_requested() -> void:
-	_workspace_dialog.open_new()
+func _apply_mongo_config(config: Dictionary) -> void:
+	var proj := _dialog_project
+	_dialog_project = null
+	if proj == null or not is_instance_valid(proj):
+		return
+	if _dialog_editing:
+		proj.update_mongo_connection(config)
+		_status_label.text = "Updated database connection"
+	else:
+		proj.attach_mongo(config, String(config.get("database", "")))
+		_status_label.text = "Attached database"
+	_update_project_tab_title(proj)
 
 
-func _on_edit_workspace_requested(index: int, config: Dictionary) -> void:
-	_workspace_dialog.open_edit(index, config)
-
-
+# Same pattern for the API config.
 func _on_workspace_saved(config: Dictionary) -> void:
-	_workspace_picker.add_workspace(config)
-	_status_label.text = "Added workspace '%s'" % config.get("name", "")
+	_apply_api_config(config)
 
 
-func _on_workspace_updated(index: int, config: Dictionary) -> void:
-	_workspace_picker.update_workspace(index, config)
-	_status_label.text = "Updated workspace '%s'" % config.get("name", "")
+func _on_workspace_updated(_index: int, config: Dictionary) -> void:
+	_apply_api_config(config)
+
+
+func _apply_api_config(config: Dictionary) -> void:
+	var proj := _dialog_project
+	_dialog_project = null
+	if proj == null or not is_instance_valid(proj):
+		return
+	if _dialog_editing:
+		proj.update_rocketchat(config)
+		_status_label.text = "Updated API connection"
+	else:
+		proj.attach_rocketchat(config)
+		_status_label.text = "Attached API"
+	_update_project_tab_title(proj)
 
 
 # Menus / styling -------------------------------------------------------------
+# File menu item ids.
+const FILE_QUIT := 3
+const FILE_ACTIVITY_LOG := 4
+const FILE_NEW_PROJECT := 5
+const FILE_ATTACH_DATABASE := 6
+const FILE_ATTACH_API := 7
+const FILE_SAVE_PROJECT := 8
+const FILE_SAVE_PROJECT_AS := 9
+const FILE_OPEN_PROJECT := 10
+
+
 func _on_file_menu(id: int) -> void:
 	match id:
-		0:  # New Connection…
-			_connection_dialog.open_new()
-		1:  # Open Database…
-			_open_picker()
-		2:  # Open Workspace…
-			_open_workspace_picker()
-		4:  # Activity Log
+		FILE_NEW_PROJECT:
+			_new_project()
+		FILE_OPEN_PROJECT:
+			_open_project_dialog()
+		FILE_SAVE_PROJECT:
+			_save_project()
+		FILE_SAVE_PROJECT_AS:
+			_save_project_as()
+		FILE_ATTACH_DATABASE:
+			_attach_database()
+		FILE_ATTACH_API:
+			_attach_api()
+		FILE_ACTIVITY_LOG:
 			_open_activity_log_tab()
-		3:  # Quit
+		FILE_QUIT:
 			get_tree().quit()
+
+
+## Enable project-scoped items only when a project is active, and the Attach items
+## only when it can take that source (enforcing the ≤1-DB / ≤1-API rule). Also
+## refresh the Open Recent submenu.
+func _refresh_file_menu() -> void:
+	var proj := _current_project()
+	_file_menu.set_item_disabled(
+		_file_menu.get_item_index(FILE_ATTACH_DATABASE), proj == null or proj.has_mongo()
+	)
+	_file_menu.set_item_disabled(
+		_file_menu.get_item_index(FILE_ATTACH_API), proj == null or proj.has_rocketchat()
+	)
+	_file_menu.set_item_disabled(_file_menu.get_item_index(FILE_SAVE_PROJECT), proj == null)
+	_file_menu.set_item_disabled(_file_menu.get_item_index(FILE_SAVE_PROJECT_AS), proj == null)
+	_refresh_recent_menu()
+
+
+## Rebuild the Open Recent submenu from the stored recent-project paths.
+func _refresh_recent_menu() -> void:
+	_recent_menu.clear()
+	var recent := Store.recent_workspaces()
+	if recent.is_empty():
+		_recent_menu.add_item("(no recent projects)")
+		_recent_menu.set_item_disabled(0, true)
+		return
+	for i in recent.size():
+		var path := String(recent[i])
+		_recent_menu.add_item(path.get_file(), i)
+		_recent_menu.set_item_tooltip(i, path)
 
 
 func _apply_style() -> void:
@@ -293,13 +715,21 @@ func _apply_style() -> void:
 
 
 func _populate_menus() -> void:
-	_file_menu.add_item("New Connection…", 0)
-	_file_menu.add_item("Open Database…", 1)
-	_file_menu.add_item("Open Workspace…", 2)
+	_file_menu.add_item("New Project", FILE_NEW_PROJECT)
+	_file_menu.add_item("Open Project…", FILE_OPEN_PROJECT)
+	_file_menu.add_submenu_node_item("Open Recent", _recent_menu)
 	_file_menu.add_separator()
-	_file_menu.add_item("Activity Log", 4)
+	_file_menu.add_item("Save Project", FILE_SAVE_PROJECT)
+	_file_menu.add_item("Save Project As…", FILE_SAVE_PROJECT_AS)
 	_file_menu.add_separator()
-	_file_menu.add_item("Quit", 3)
+	_file_menu.add_item("Attach Database…", FILE_ATTACH_DATABASE)
+	_file_menu.add_item("Attach API…", FILE_ATTACH_API)
+	_file_menu.add_separator()
+	_file_menu.add_item("Activity Log", FILE_ACTIVITY_LOG)
+	_file_menu.add_separator()
+	_file_menu.add_item("Quit", FILE_QUIT)
+	# Enable/disable project items and refresh Open Recent each time the menu opens.
+	_file_menu.about_to_popup.connect(_refresh_file_menu)
 
 	_edit_menu.add_item("Copy", 0)
 	_edit_menu.add_item("Paste", 1)

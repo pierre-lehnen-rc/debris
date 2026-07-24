@@ -34,7 +34,6 @@ theme_override_constants/separation = 12
 
 [node name="Grid" type="GridContainer" parent="Margin/Col"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_override_constants/h_separation = 12
 theme_override_constants/v_separation = 10
 columns = 2
@@ -84,6 +83,16 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 secret = true
+
+[node name="Hint" type="Label" parent="Margin/Col"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "User ID is optional with Password auth; Username or Email is optional with Access Token auth."
+
+[node name="Spacer" type="Control" parent="Margin/Col"]
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="Buttons" type="HBoxContainer" parent="Margin/Col"]
 layout_mode = 2

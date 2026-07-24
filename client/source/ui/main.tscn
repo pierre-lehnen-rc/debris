@@ -3,9 +3,7 @@
 [ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="1_61xnp"]
 [ext_resource type="Script" path="res://source/ui/main.gd" id="2_2lg2j"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/connection_dialog.tscn" id="3_cdlg0"]
-[ext_resource type="PackedScene" path="res://source/ui/dialogs/connection_picker.tscn" id="4_pick0"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/workspace_dialog.tscn" id="5_wsdlg"]
-[ext_resource type="PackedScene" path="res://source/ui/dialogs/workspace_picker.tscn" id="6_wspick"]
 [ext_resource type="PackedScene" path="res://source/ui/dialogs/error_dialog.tscn" id="7_errdg"]
 
 [node name="Main" type="Control"]
@@ -47,35 +45,17 @@ unique_name_in_owner = true
 
 [node name="Toolbar" type="PanelContainer" parent="Box"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 
 [node name="Row" type="HBoxContainer" parent="Box/Toolbar"]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="OpenDbBtn" type="Button" parent="Box/Toolbar/Row"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-text = "Open Database…"
-
-[node name="OpenWsBtn" type="Button" parent="Box/Toolbar/Row"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-text = "Open Workspace…"
-
-[node name="ActivityLogBtn" type="Button" parent="Box/Toolbar/Row"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-text = "Activity Log"
-
 [node name="MainTabs" type="TabContainer" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-tabs_position = 1
 tabs_rearrange_group = 0
 
 [node name="StatusBar" type="PanelContainer" parent="Box"]
@@ -89,28 +69,13 @@ text = "Ready"
 
 [node name="ConnectionDialog" parent="." instance=ExtResource("3_cdlg0")]
 
-[node name="ConnectionPicker" parent="." instance=ExtResource("4_pick0")]
-
 [node name="WorkspaceDialog" parent="." instance=ExtResource("5_wsdlg")]
-
-[node name="WorkspacePicker" parent="." instance=ExtResource("6_wspick")]
 
 [node name="ErrorDialog" parent="." instance=ExtResource("7_errdg")]
 
-[connection signal="pressed" from="Box/Toolbar/Row/OpenDbBtn" to="." method="_open_picker"]
-[connection signal="pressed" from="Box/Toolbar/Row/OpenWsBtn" to="." method="_open_workspace_picker"]
-[connection signal="pressed" from="Box/Toolbar/Row/ActivityLogBtn" to="." method="_open_activity_log_tab"]
 [connection signal="id_pressed" from="Box/MenuBar/File" to="." method="_on_file_menu"]
 [connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
 [connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]
-[connection signal="database_selected" from="ConnectionPicker" to="." method="_on_database_selected"]
-[connection signal="add_connection_requested" from="ConnectionPicker" to="." method="_on_add_connection_requested"]
-[connection signal="edit_connection_requested" from="ConnectionPicker" to="." method="_on_edit_connection_requested"]
-[connection signal="status_changed" from="ConnectionPicker" to="." method="_on_status_changed"]
 [connection signal="saved" from="WorkspaceDialog" to="." method="_on_workspace_saved"]
 [connection signal="updated" from="WorkspaceDialog" to="." method="_on_workspace_updated"]
-[connection signal="workspace_selected" from="WorkspacePicker" to="." method="_on_workspace_selected"]
-[connection signal="add_workspace_requested" from="WorkspacePicker" to="." method="_on_add_workspace_requested"]
-[connection signal="edit_workspace_requested" from="WorkspacePicker" to="." method="_on_edit_workspace_requested"]
-[connection signal="status_changed" from="WorkspacePicker" to="." method="_on_status_changed"]
 [connection signal="open_log_requested" from="ErrorDialog" to="." method="_open_activity_log_tab"]

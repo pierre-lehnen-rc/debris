@@ -9,6 +9,9 @@ extends PanelContainer
 
 signal endpoint_activated(endpoint: ApiEndpoint)
 signal status_changed(text: String)
+## The header's edit button was pressed — the host should open the API/workspace
+## editor for this workspace.
+signal edit_requested()
 
 const META_TYPE := "type"  # "endpoint" | "group" | "placeholder"
 const META_ENDPOINT := "endpoint"
@@ -42,6 +45,10 @@ func configure(workspace: Dictionary) -> void:
 	_workspace = workspace
 	if is_node_ready():
 		_load()
+
+
+func _on_edit_pressed() -> void:
+	edit_requested.emit()
 
 
 # Loading ---------------------------------------------------------------------

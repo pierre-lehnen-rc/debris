@@ -41,6 +41,11 @@ var _menu_item: TreeItem
 ## editable documents. Delete stays available.
 var _log_mode := false
 
+## When set (endpoint results in a project that also has a database attached),
+## string values offer the schema's "Unknown Type" search actions even though this
+## view has no collection of its own — the cross-browser handoff.
+var _cross_query := false
+
 # Schema-driven custom types/actions ------------------------------------------
 ## Schema resolving custom types for the collection currently displayed, and the
 ## collection name itself. Set via set_type_context(); null/"" disables the feature.
@@ -98,6 +103,13 @@ func set_type_context(schema: DatabaseSchema, collection: String) -> void:
 ## Insert/Edit context-menu actions.
 func set_log_mode(enabled: bool) -> void:
 	_log_mode = enabled
+
+
+## Allow the schema's cross-query search actions on this view's string values even
+## when it has no collection of its own (endpoint results). Set by the workspace
+## center on an endpoint results view when the project also has a DB.
+func set_cross_query_enabled(enabled: bool) -> void:
+	_cross_query = enabled
 
 
 ## The custom type name for a value at `field_path` in the current collection, or
@@ -168,7 +180,13 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 ## added inline (right-clicking the attribute directly).
 func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	_clear_custom_menus()
-	if _schema == null or _collection.is_empty():
+	if _schema == null:
+		return
+	# A results view with a collection resolves typed fields normally. Endpoint
+	# results have no collection of their own, but when a database is attached
+	# (_cross_query) their string values still offer the schema's "Unknown Type"
+	# search actions — the cross-browser handoff.
+	if _collection.is_empty() and not _cross_query:
 		return
 	var meta: Variant = item.get_metadata(0)
 	if not (meta is Dictionary):

@@ -1,40 +1,44 @@
 class_name Store
 extends RefCounted
 
-## Persists user-configured connections and workspaces to a JSON file in the
-## user data directory, so they survive across launches. The connection browser
-## and workspace picker load their lists from here on startup and write back on
-## every add/edit/remove. Only the configuration is stored — transient runtime
-## state (a connection's live database list, connected flag, …) is left out and
-## rebuilt at load time. A missing key means "never configured", which lets the
-## UI seed a first-run default without re-seeding after the user clears the list.
+## Persists app state to a JSON file in the user data directory so it survives
+## across launches: UI preferences, the recent-projects list, and which projects
+## were open at last shutdown. Connection/API configuration is NOT stored here —
+## it lives inside each project's .debris-project file.
 
 const PATH := "user://settings.json"
 
 
-static func connections() -> Array:
-	return _read().get("connections", [])
+## Recently-opened project file paths, most-recent first. Backs the File ▸ Open
+## Recent menu in the document-based workspace model.
+static func recent_workspaces() -> Array:
+	return _read().get("recent_workspaces", [])
 
 
-static func workspaces() -> Array:
-	return _read().get("workspaces", [])
-
-
-## True once the given top-level key has been written at least once. Callers use
-## this to distinguish "first run" from "user cleared the list".
-static func has(key: String) -> bool:
-	return _read().has(key)
-
-
-static func save_connections(list: Array) -> void:
+## Record `path` as the most-recently-opened project, de-duplicating and capping
+## the list so it stays short.
+static func add_recent_workspace(path: String, limit: int = 10) -> void:
+	if path.is_empty():
+		return
 	var data := _read()
-	data["connections"] = list
+	var list: Array = data.get("recent_workspaces", [])
+	list.erase(path)
+	list.insert(0, path)
+	while list.size() > limit:
+		list.remove_at(list.size() - 1)
+	data["recent_workspaces"] = list
 	_write(data)
 
 
-static func save_workspaces(list: Array) -> void:
+## Paths of the projects that were open at last shutdown, restored on launch.
+## Only saved (on-disk) projects are listed; memory-only Untitled ones are lost.
+static func open_workspaces() -> Array:
+	return _read().get("open_workspaces", [])
+
+
+static func save_open_workspaces(paths: Array) -> void:
 	var data := _read()
-	data["workspaces"] = list
+	data["open_workspaces"] = paths
 	_write(data)
 
 
