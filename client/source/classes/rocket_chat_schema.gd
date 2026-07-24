@@ -47,6 +47,7 @@ func _init() -> void:
 		{"collection": "rocketchat_apps_settings", "field": "", "type": "AppSetting"},
 		{"collection": "rocketchat_uploads", "field": "", "type": "Upload"},
 		{"collection": "rocketchat_read_receipts", "field": "", "type": "ReadReceipt"},
+		{"collection": "rocketchat_roles", "field": "", "type": "Role"},
 
 		# Fields that hold a user's id, wherever they appear across collections.
 		{"collection": "users", "field": "_id", "type": "UserId"},
@@ -124,6 +125,11 @@ func _init() -> void:
 		{"collection": "rocketchat_media_calls", "field": "_id", "type": "MediaCallId"},
 		{"collection": "rocketchat_media_call_negotiations", "field": "callId", "type": "MediaCallId"},
 		{"collection": "rocketchat_media_call_negotiations", "field": "_id", "type": "MediaCallNegotiationId"},
+
+		# Fields that hold a role's id.
+		{"collection": "rocketchat_roles", "field": "_id", "type": "RoleId"},
+		{"collection": "users", "field": "roles", "type": "RoleId"},  # array
+		{"collection": "rocketchat_subscription", "field": "roles", "type": "RoleId"},  # array
 	]
 	# No explicit type_actions: actions_for_type() auto-generates a "List <X>"
 	# action for every collection/field where a type is used, so e.g. a UserId
