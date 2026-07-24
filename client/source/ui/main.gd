@@ -50,6 +50,7 @@ func _ready() -> void:
 	get_window().dpi_changed.connect(_on_dpi_changed)
 	_apply_style()
 	_build_project_dialogs()
+	_build_start_screen()
 	_populate_menus()
 
 	var bar := _tabs.get_tab_bar()
@@ -62,6 +63,10 @@ func _ready() -> void:
 
 	# Show the bundled-server startup progress in the status bar.
 	ServerManager.status_changed.connect(_on_status_changed)
+
+	# Reopen the projects that were open at last shutdown; show the start screen
+	# when there are none.
+	_restore_open_projects()
 
 
 ## The content-scale factor to apply: the user's explicit override when set,
@@ -142,16 +147,34 @@ var _file_dialog: FileDialog
 var _recent_menu: PopupMenu
 var _file_dialog_mode := ""  # "save" | "open"
 var _file_dialog_project: ProjectTab = null
+# Save-before-close flow.
+var _close_confirm: ConfirmationDialog
+var _closing_project: ProjectTab = null   # tab awaiting a close decision
+var _close_after_save: ProjectTab = null  # close this once its pending Save As lands
+# Start screen shown when no tabs are open.
+var _start_screen: Control
 
 
-## Build the shared save/open FileDialog and the Open Recent submenu.
+## Build the shared save/open FileDialog, the save-before-close prompt, and the
+## Open Recent submenu.
 func _build_project_dialogs() -> void:
 	_file_dialog = FileDialog.new()
 	_file_dialog.theme = AppTheme.shared()
 	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	_file_dialog.add_filter("*.%s" % WorkspaceFile.EXTENSION, "Debris Project")
 	_file_dialog.file_selected.connect(_on_file_dialog_selected)
+	_file_dialog.canceled.connect(_on_file_dialog_canceled)
 	add_child(_file_dialog)
+
+	_close_confirm = ConfirmationDialog.new()
+	_close_confirm.theme = AppTheme.shared()
+	_close_confirm.title = "Unsaved Changes"
+	_close_confirm.ok_button_text = "Save"
+	_close_confirm.add_button("Discard", false, "discard")
+	_close_confirm.confirmed.connect(_on_close_save)
+	_close_confirm.custom_action.connect(_on_close_custom_action)
+	_close_confirm.canceled.connect(func() -> void: _closing_project = null)
+	add_child(_close_confirm)
 
 	_recent_menu = PopupMenu.new()
 	_recent_menu.name = "OpenRecent"
@@ -247,25 +270,28 @@ func _open_project_tab(doc: WorkspaceDoc) -> ProjectTab:
 	_tabs.add_child(tab)
 	_tabs.current_tab = _tabs.get_tab_count() - 1
 	_update_project_tab_title(tab)
+	_after_tabs_changed()
 	return tab
 
 
 # Save / open project files ---------------------------------------------------
-## Save the current project to its file, or fall through to Save As when it has
-## never been saved.
-func _save_project() -> void:
-	var proj := _current_project()
+## Save a project (default: the current one) to its file, or fall through to Save
+## As when it has never been saved.
+func _save_project(proj: ProjectTab = null) -> void:
+	if proj == null:
+		proj = _current_project()
 	if proj == null:
 		return
 	if proj.doc().file_path.is_empty():
-		_save_project_as()
+		_save_project_as(proj)
 		return
 	_write_project(proj, proj.doc().file_path)
 
 
-## Prompt for a path and save the current project there.
-func _save_project_as() -> void:
-	var proj := _current_project()
+## Prompt for a path and save a project (default: the current one) there.
+func _save_project_as(proj: ProjectTab = null) -> void:
+	if proj == null:
+		proj = _current_project()
 	if proj == null:
 		return
 	_file_dialog_mode = "save"
@@ -295,11 +321,22 @@ func _on_file_dialog_selected(path: String) -> void:
 	if _file_dialog_mode == "save":
 		if not path.ends_with("." + WorkspaceFile.EXTENSION):
 			path += "." + WorkspaceFile.EXTENSION
-		if _file_dialog_project != null and is_instance_valid(_file_dialog_project):
-			_write_project(_file_dialog_project, path)
+		var proj := _file_dialog_project
 		_file_dialog_project = null
+		if proj != null and is_instance_valid(proj):
+			_write_project(proj, path)
+			# A Save triggered by the save-before-close prompt closes the tab now.
+			if _close_after_save == proj:
+				_close_tab(proj)
+		_close_after_save = null
 	elif _file_dialog_mode == "open":
 		_open_project_file(path)
+
+
+## The user dismissed the Save As dialog — cancel any pending close-after-save.
+func _on_file_dialog_canceled() -> void:
+	_file_dialog_project = null
+	_close_after_save = null
 
 
 ## Write a project to `path`, deriving a name from the filename when the project is
@@ -314,6 +351,8 @@ func _write_project(proj: ProjectTab, path: String) -> void:
 		return
 	Store.add_recent_workspace(path)
 	_update_project_tab_title(proj)
+	# The project now has a path (or a new one), so refresh the restore list.
+	_save_open_projects()
 	_status_label.text = "Saved %s" % doc.name
 
 
@@ -370,6 +409,93 @@ func _project_basename(doc: WorkspaceDoc) -> String:
 	return name.replace("·", "-").replace("/", "-").strip_edges()
 
 
+# Start screen / empty state --------------------------------------------------
+## Build the placeholder shown in the tab area while no project is open: a title
+## and New / Open buttons. It shares the tab area (toggled with MainTabs).
+func _build_start_screen() -> void:
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 10)
+	center.add_child(box)
+
+	var title := Label.new()
+	title.text = "Debris"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
+	box.add_child(title)
+
+	var hint := Label.new()
+	hint.text = "Create a new project or open an existing one to get started."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	box.add_child(hint)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+
+	var new_btn := Button.new()
+	new_btn.text = "New Project"
+	new_btn.focus_mode = Control.FOCUS_NONE
+	new_btn.pressed.connect(_new_project)
+	row.add_child(new_btn)
+
+	var open_btn := Button.new()
+	open_btn.text = "Open Project…"
+	open_btn.focus_mode = Control.FOCUS_NONE
+	open_btn.pressed.connect(_open_project_dialog)
+	row.add_child(open_btn)
+
+	_start_screen = center
+	var parent := _tabs.get_parent()
+	parent.add_child(_start_screen)
+	parent.move_child(_start_screen, _tabs.get_index() + 1)
+	_start_screen.visible = false
+
+
+## Toggle between the tab area and the start screen based on how many tabs are open.
+func _update_empty_state() -> void:
+	var empty := _tabs.get_tab_count() == 0
+	_tabs.visible = not empty
+	if _start_screen != null:
+		_start_screen.visible = empty
+
+
+## Run after any tab open/close: refresh the empty state and persist which saved
+## projects are open so they can be restored next launch.
+func _after_tabs_changed() -> void:
+	_update_empty_state()
+	_save_open_projects()
+
+
+## Persist the file paths of the currently-open (saved) projects.
+func _save_open_projects() -> void:
+	var paths: Array = []
+	for i in _tabs.get_tab_count():
+		var control := _tabs.get_tab_control(i)
+		if control is ProjectTab:
+			var path := (control as ProjectTab).doc().file_path
+			if not path.is_empty():
+				paths.append(path)
+	Store.save_open_workspaces(paths)
+
+
+## Reopen the projects that were open at last shutdown (skipping any whose files
+## have since gone), then settle the empty state.
+func _restore_open_projects() -> void:
+	for entry in Store.open_workspaces():
+		var path := String(entry)
+		if FileAccess.file_exists(path):
+			_open_project_file(path)
+	_update_empty_state()
+
+
 # Activity log tab ------------------------------------------------------------
 ## A logged action failed — surface a small error popup. The user can dismiss it
 ## or open the activity log from there; we never open the log on our own.
@@ -392,18 +518,59 @@ func _open_activity_log_tab() -> void:
 	var index := _tabs.get_tab_count() - 1
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.current_tab = index
+	_after_tabs_changed()
 	_status_label.text = "Opened activity log"
 
 
+# Closing tabs ----------------------------------------------------------------
+## A tab's close button was pressed. A project with unsaved changes prompts first;
+## everything else closes immediately.
 func _on_tab_close_pressed(tab_index: int) -> void:
 	var control := _tabs.get_tab_control(tab_index)
 	if control == null:
 		return
+	var proj := control as ProjectTab
+	if proj != null and proj.doc().dirty:
+		_closing_project = proj
+		_close_confirm.dialog_text = "Save changes to \"%s\" before closing?" % proj.tab_title()
+		_close_confirm.popup_centered()
+		return
+	_close_tab(control)
+
+
+## Remove a tab and settle the empty state / restore list.
+func _close_tab(control: Control) -> void:
+	if not is_instance_valid(control):
+		return
 	_tabs.remove_child(control)
 	control.queue_free()
-	# Back to an empty shell — reopen the picker so the user can choose again.
-	if _tabs.get_tab_count() == 0:
-		_open_picker.call_deferred()
+	_after_tabs_changed()
+
+
+## Save chosen in the close prompt: write the project (via Save As when it has no
+## path yet, closing once that lands) and then close it.
+func _on_close_save() -> void:
+	var proj := _closing_project
+	_closing_project = null
+	if proj == null:
+		return
+	if proj.doc().file_path.is_empty():
+		_close_after_save = proj
+		_save_project_as(proj)
+		return
+	_write_project(proj, proj.doc().file_path)
+	_close_tab(proj)
+
+
+## Discard chosen in the close prompt: close without saving.
+func _on_close_custom_action(action: StringName) -> void:
+	if action != &"discard":
+		return
+	_close_confirm.hide()
+	var proj := _closing_project
+	_closing_project = null
+	if proj != null:
+		_close_tab(proj)
 
 
 # Connection picker / dialog --------------------------------------------------
