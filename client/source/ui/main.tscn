@@ -45,23 +45,17 @@ unique_name_in_owner = true
 
 [node name="Toolbar" type="PanelContainer" parent="Box"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 
 [node name="Row" type="HBoxContainer" parent="Box/Toolbar"]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="ActivityLogBtn" type="Button" parent="Box/Toolbar/Row"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 0
-text = "Activity Log"
-
 [node name="MainTabs" type="TabContainer" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-tabs_position = 1
 tabs_rearrange_group = 0
 
 [node name="StatusBar" type="PanelContainer" parent="Box"]
@@ -79,7 +73,6 @@ text = "Ready"
 
 [node name="ErrorDialog" parent="." instance=ExtResource("7_errdg")]
 
-[connection signal="pressed" from="Box/Toolbar/Row/ActivityLogBtn" to="." method="_open_activity_log_tab"]
 [connection signal="id_pressed" from="Box/MenuBar/File" to="." method="_on_file_menu"]
 [connection signal="saved" from="ConnectionDialog" to="." method="_on_connection_saved"]
 [connection signal="updated" from="ConnectionDialog" to="." method="_on_connection_updated"]

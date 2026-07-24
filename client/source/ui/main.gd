@@ -463,11 +463,13 @@ func _build_start_screen() -> void:
 
 
 ## Toggle between the tab area and the start screen based on how many tabs are open.
+## The tab strip only appears once there's more than one tab to switch between.
 func _update_empty_state() -> void:
-	var empty := _tabs.get_tab_count() == 0
-	_tabs.visible = not empty
+	var count := _tabs.get_tab_count()
+	_tabs.visible = count > 0
+	_tabs.tabs_visible = count > 1
 	if _start_screen != null:
-		_start_screen.visible = empty
+		_start_screen.visible = count == 0
 
 
 ## Run after any tab open/close: refresh the empty state and persist which saved
