@@ -244,7 +244,9 @@ func _on_fetch_databases() -> void:
 	var result: Dictionary = await Backend.list_databases(_spec_from_fields())
 	_fetch_db_btn.disabled = false
 	if not result.get("ok", false):
-		_status.text = "Failed to list databases: %s" % result.get("error", "unknown error")
+		# The failure is already surfaced by the error popup (via the activity log);
+		# don't echo a (possibly long) message here, which would grow the window.
+		_status.text = ""
 		return
 	var names := _database_names(result.get("data"))
 	_populate_databases(names)
