@@ -35,9 +35,29 @@ through `backend` / `rocketchat` / `activity_log` (resolved at runtime — the
 bare global names aren't available to a `-s` main-loop script). See
 [`checks/mock_smoke_check.gd`](checks/mock_smoke_check.gd) for a worked example.
 
+## 3. Unit tests — `test/run.sh`
+
+The logic-layer unit tests live under [`test/`](../test/) and run on the same
+headless+mocks boot, without the GdUnit4 addon.
+
+```bash
+test/run.sh                          # every *_test.gd under test/
+test/run.sh test/data                # a folder
+test/run.sh test/data/lax_json_test.gd   # one suite
+```
+
+Suites extend [`test/test_suite.gd`](../test/test_suite.gd) — a small drop-in
+`GdUnitTestSuite` replacement offering the assertion API (`assert_str(x)
+.is_equal(y)`, `has_size`, `contains`, …), the `before_test`/`after_test`
+lifecycle, `auto_free`, `create_temp_dir`, and `monitor_signals` /
+`assert_signal`. [`test/runner.gd`](../test/runner.gd) discovers the suites,
+runs each `test_*` method, and exits non-zero if anything fails (a suite that
+fails to compile is reported and skipped rather than aborting the run).
+
 ## Mocks
 
-Both scripts export `DEBRIS_HEADLESS=1`. On boot with that set:
+The `dev/` scripts and `test/run.sh` all export `DEBRIS_HEADLESS=1`. On boot
+with that set:
 
 - `ServerManager` skips its startup entirely (no `/health`, no spawned server).
 - `Backend._mock` and `RocketChat._mock` are set, so every request is answered
