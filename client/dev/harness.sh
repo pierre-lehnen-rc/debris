@@ -21,4 +21,6 @@ case "$CHECK" in
 	*)       RES="res://$CHECK" ;;
 esac
 
-DEBRIS_HEADLESS=1 exec "$GODOT" --headless --path "$PROJECT" -s "$RES"
+DEBRIS_HEADLESS=1 "$GODOT" --headless --path "$PROJECT" -s "$RES" 2>&1 \
+	| sed 's/\x1b\[[0-9;]*m//g' | grep -vE '^Godot Engine v'
+exit "${PIPESTATUS[0]}"

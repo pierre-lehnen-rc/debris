@@ -16,4 +16,6 @@ GODOT="${GODOT:-/home/pierre/Apps/Godot_v4.7.1-stable_linux.x86_64}"
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 DEBRIS_HEADLESS=1 "$GODOT" --headless --path "$PROJECT" \
-	-s res://test/runner.gd -- "$@"
+	-s res://test/runner.gd -- "$@" 2>&1 \
+	| sed 's/\x1b\[[0-9;]*m//g' | grep -vE '^Godot Engine v'
+exit "${PIPESTATUS[0]}"

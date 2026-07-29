@@ -35,6 +35,19 @@ through `backend` / `rocketchat` / `activity_log` (resolved at runtime — the
 bare global names aren't available to a `-s` main-loop script). See
 [`checks/mock_smoke_check.gd`](checks/mock_smoke_check.gd) for a worked example.
 
+### Probing — `dev/probe.sh`
+
+For exploratory checks of real behavior before writing assertions (what does
+`_pluralize("Bus")` actually return? what shape does `build_structure` emit?),
+run a throwaway `extends SceneTree` script that prints and quits:
+
+```bash
+dev/probe.sh dev/checks/_scratch.gd
+```
+
+Same headless+mocks boot as everything else. For exploration only — capture the
+real output, then encode it as a `test/` assertion or a harness check.
+
 ## 3. Unit tests — `test/run.sh`
 
 The logic-layer unit tests live under [`test/`](../test/) and run on the same
