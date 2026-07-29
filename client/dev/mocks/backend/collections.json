@@ -1,0 +1,9 @@
+[
+  { "name": "users", "type": "collection" },
+  { "name": "rooms", "type": "collection" },
+  { "name": "subscriptions", "type": "collection" },
+  { "name": "rocketchat_message", "type": "collection" },
+  { "name": "rocketchat_settings", "type": "collection" },
+  { "name": "instances", "type": "collection" },
+  { "name": "migrations", "type": "collection" }
+]

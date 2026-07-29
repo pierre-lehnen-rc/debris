@@ -1,0 +1,4 @@
+[
+  { "_id": "genAa11bB22cC33", "key": "sample-1", "value": 42, "enabled": true, "createdAt": "2025-01-15T00:00:00.000Z" },
+  { "_id": "genDd44eE55fF66", "key": "sample-2", "value": "hello", "enabled": false, "tags": ["a", "b"] }
+]

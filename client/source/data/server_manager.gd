@@ -33,6 +33,10 @@ var _port := 4000
 
 
 func _ready() -> void:
+	# Under the headless test/validation runner (dev/ scripts set DEBRIS_HEADLESS),
+	# never touch the network or spawn the bundled server — tests run against mocks.
+	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
+		return
 	_parse_base_url(Backend.base_url)
 	_start()
 

@@ -1,0 +1,35 @@
+[
+  {
+    "_id": "GENERAL",
+    "name": "general",
+    "fname": "general",
+    "t": "c",
+    "msgs": 1428,
+    "usersCount": 57,
+    "default": true,
+    "ro": false,
+    "sysMes": true,
+    "ts": "2024-01-01T00:00:00.000Z",
+    "lm": "2026-07-29T07:41:03.000Z"
+  },
+  {
+    "_id": "rL88pQ99rS00tU11",
+    "name": "engineering",
+    "fname": "engineering",
+    "t": "p",
+    "msgs": 3910,
+    "usersCount": 12,
+    "ro": false,
+    "ts": "2024-03-12T14:20:00.000Z",
+    "lm": "2026-07-29T06:15:22.000Z"
+  },
+  {
+    "_id": "dM22eN33fO44gP55",
+    "t": "d",
+    "msgs": 84,
+    "usersCount": 2,
+    "usernames": ["admin", "jdoe"],
+    "ts": "2025-09-01T10:00:00.000Z",
+    "lm": "2026-07-27T21:03:47.000Z"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "users": [
+    { "_id": "aBcD1234efGh5678", "username": "admin", "name": "Administrator", "status": "online", "active": true, "roles": ["admin", "user"] },
+    { "_id": "xY9zAa11bBcC22dD", "username": "jdoe", "name": "Jane Doe", "status": "away", "active": true, "roles": ["user"] },
+    { "_id": "rocket.cat", "username": "rocket.cat", "name": "Rocket.Cat", "status": "online", "active": true, "roles": ["bot"] }
+  ],
+  "count": 3,
+  "offset": 0,
+  "total": 3,
+  "success": true
+}

@@ -13,6 +13,16 @@ const REQUEST_TIMEOUT_SECONDS := 20.0
 const OPENAPI_PATH := "/api/docs/json"
 const LOGIN_PATH := "/api/v1/login"
 
+## When set, requests are answered from local fixtures instead of the network.
+## Auto-enabled under the headless validation runner (DEBRIS_HEADLESS); the dev
+## harness may also assign it directly. See dev/mocks/rocketchat_mock.gd.
+var _mock = null
+
+
+func _ready() -> void:
+	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
+		_mock = load("res://dev/mocks/rocketchat_mock.gd").new()
+
 
 # Public API ------------------------------------------------------------------
 ## Fetch the workspace's OpenAPI document (the source of the endpoint catalog).
@@ -100,6 +110,9 @@ func _method_name(method: int) -> String:
 func _do_request(
 	workspace: Dictionary, method: int, path: String, query: Dictionary, body: Dictionary
 ) -> Dictionary:
+	if _mock != null:
+		return _mock.respond(method, path, query, body)
+
 	var base := _base_url(workspace)
 	if base.is_empty():
 		return _err("Workspace has no URL", 0)

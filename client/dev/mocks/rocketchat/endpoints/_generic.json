@@ -1,0 +1,10 @@
+{
+  "items": [
+    { "_id": "itemAa11bB22", "name": "sample item 1", "createdAt": "2025-01-15T00:00:00.000Z" },
+    { "_id": "itemCc33dD44", "name": "sample item 2", "createdAt": "2025-02-20T00:00:00.000Z" }
+  ],
+  "count": 2,
+  "offset": 0,
+  "total": 2,
+  "success": true
+}

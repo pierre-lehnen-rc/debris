@@ -1,0 +1,26 @@
+[
+  {
+    "_id": "sub1Aa22bB33cC44",
+    "rid": "GENERAL",
+    "name": "general",
+    "t": "c",
+    "u": { "_id": "aBcD1234efGh5678", "username": "admin" },
+    "open": true,
+    "alert": false,
+    "unread": 0,
+    "ts": "2024-02-14T09:31:00.000Z",
+    "ls": "2026-07-29T07:40:00.000Z"
+  },
+  {
+    "_id": "sub2Dd55eE66fF77",
+    "rid": "rL88pQ99rS00tU11",
+    "name": "engineering",
+    "t": "p",
+    "u": { "_id": "xY9zAa11bBcC22dD", "username": "jdoe" },
+    "open": true,
+    "alert": true,
+    "unread": 3,
+    "ts": "2025-06-03T12:20:00.000Z",
+    "ls": "2026-07-29T05:59:12.000Z"
+  }
+]

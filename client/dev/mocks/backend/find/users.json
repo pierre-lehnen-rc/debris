@@ -1,0 +1,47 @@
+[
+  {
+    "_id": "rocket.cat",
+    "username": "rocket.cat",
+    "name": "Rocket.Cat",
+    "status": "online",
+    "active": true,
+    "roles": ["bot"],
+    "type": "bot",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "emails": [{ "address": "rocket.cat@example.com", "verified": true }]
+  },
+  {
+    "_id": "aBcD1234efGh5678",
+    "username": "admin",
+    "name": "Administrator",
+    "status": "online",
+    "active": true,
+    "roles": ["admin", "user"],
+    "type": "user",
+    "createdAt": "2024-02-14T09:30:00.000Z",
+    "lastLogin": "2026-07-28T18:04:11.000Z",
+    "emails": [{ "address": "admin@example.com", "verified": true }]
+  },
+  {
+    "_id": "xY9zAa11bBcC22dD",
+    "username": "jdoe",
+    "name": "Jane Doe",
+    "status": "away",
+    "active": true,
+    "roles": ["user"],
+    "type": "user",
+    "createdAt": "2025-06-03T12:15:42.000Z",
+    "utcOffset": -3,
+    "emails": [{ "address": "jane.doe@example.com", "verified": false }]
+  },
+  {
+    "_id": "kL33mM44nN55oO66",
+    "username": "disabled.user",
+    "name": "Former Employee",
+    "status": "offline",
+    "active": false,
+    "roles": ["user"],
+    "type": "user",
+    "createdAt": "2023-11-20T08:00:00.000Z"
+  }
+]

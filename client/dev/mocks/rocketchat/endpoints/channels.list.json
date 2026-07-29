@@ -1,0 +1,10 @@
+{
+  "channels": [
+    { "_id": "GENERAL", "name": "general", "t": "c", "msgs": 1428, "usersCount": 57, "default": true },
+    { "_id": "rL88pQ99rS00tU11", "name": "engineering", "t": "p", "msgs": 3910, "usersCount": 12 }
+  ],
+  "count": 2,
+  "offset": 0,
+  "total": 2,
+  "success": true
+}

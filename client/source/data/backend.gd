@@ -11,12 +11,19 @@ const REQUEST_TIMEOUT_SECONDS := 15.0
 
 var base_url := DEFAULT_BASE_URL
 
+## When set, requests are answered from local fixtures instead of the network.
+## Auto-enabled under the headless validation runner (DEBRIS_HEADLESS); the dev
+## harness may also assign it directly. See dev/mocks/backend_mock.gd.
+var _mock = null
+
 
 func _ready() -> void:
 	# Allow pointing at a non-default server (e.g. a different PORT) for testing.
 	var env := OS.get_environment("DEBRIS_SERVER_URL")
 	if env != "":
 		base_url = env
+	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
+		_mock = load("res://dev/mocks/backend_mock.gd").new()
 
 
 # Public API ------------------------------------------------------------------
@@ -152,6 +159,9 @@ func _post(path: String, body: Dictionary) -> Dictionary:
 
 
 func _do_post(path: String, body: Dictionary) -> Dictionary:
+	if _mock != null:
+		return _mock.respond(path, body)
+
 	var http := HTTPRequest.new()
 	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)

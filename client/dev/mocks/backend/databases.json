@@ -1,0 +1,10 @@
+{
+  "databases": [
+    { "name": "rocketchat", "sizeOnDisk": 104857600, "empty": false },
+    { "name": "admin", "sizeOnDisk": 40960, "empty": false },
+    { "name": "config", "sizeOnDisk": 61440, "empty": false },
+    { "name": "local", "sizeOnDisk": 81920, "empty": false }
+  ],
+  "totalSize": 105041920,
+  "ok": 1
+}

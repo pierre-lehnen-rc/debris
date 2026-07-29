@@ -1,0 +1,13 @@
+{
+  "queryPlanner": {
+    "namespace": "rocketchat.users",
+    "winningPlan": { "stage": "COLLSCAN", "direction": "forward" },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 4,
+    "executionTimeMillis": 1,
+    "totalDocsExamined": 4
+  }
+}
