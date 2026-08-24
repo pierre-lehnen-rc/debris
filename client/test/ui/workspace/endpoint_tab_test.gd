@@ -99,3 +99,25 @@ func test_route_args_path_key_is_not_also_sent_as_query_or_body() -> void:
 	var out := EndpointTab.route_args("/api/v1/x/:id", {"id": "7", "n": 1}, {}, "query")
 	assert_str(out["path"]).is_equal("/api/v1/x/7")
 	assert_dict(out["query"]).is_equal({"n": 1})
+
+
+# display_rows ----------------------------------------------------------------
+func test_display_rows_passes_non_empty_extracted_through() -> void:
+	var rows := EndpointTab.display_rows({"users": [1]}, [1], false)
+	assert_array(rows).is_equal([1])
+
+
+func test_display_rows_empty_non_paginated_falls_back_to_whole_response() -> void:
+	# users.delete -> { deletedRooms: [], success: true }: the inferred payload key
+	# is empty, so the whole envelope is shown rather than a blank results area.
+	var raw := {"deletedRooms": [], "success": true}
+	assert_array(EndpointTab.display_rows(raw, [], false)).is_equal([raw])
+
+
+func test_display_rows_empty_paginated_stays_empty() -> void:
+	# A paginated list past its end legitimately has no rows — don't show the envelope.
+	assert_array(EndpointTab.display_rows({"users": [], "total": 0}, [], true)).is_empty()
+
+
+func test_display_rows_empty_non_dictionary_stays_empty() -> void:
+	assert_array(EndpointTab.display_rows(null, [], false)).is_empty()

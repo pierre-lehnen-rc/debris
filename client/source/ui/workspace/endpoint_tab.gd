@@ -489,13 +489,18 @@ func _fetch_page(offset: int, limit: int) -> void:
 		status_changed.emit("%s failed: %s" % [_endpoint.id, message])
 		return
 
-	var data := _extract(raw)
+	var extracted := _extract(raw)
+	var data := display_rows(raw, extracted, _endpoint.paginated)
 	_results.show_page(data)
 	var total := int(raw["total"]) if (raw is Dictionary and raw.has("total")) else data.size()
 	if _endpoint.paginated:
 		var first := (offset + 1) if data.size() > 0 else 0
 		var last := offset + data.size()
 		status_changed.emit("%s — %d–%d of %d" % [_endpoint.id, first, last, total])
+	elif extracted.is_empty() and raw is Dictionary:
+		# Fell back to the whole response (the inferred payload key was empty, e.g.
+		# users.delete -> { deletedRooms: [] }); report success rather than a count.
+		status_changed.emit("%s — success" % _endpoint.id)
 	else:
 		status_changed.emit("%s — %d %s%s" % [
 			_endpoint.id, data.size(), _endpoint.noun(), "" if data.size() == 1 else "s",
@@ -575,3 +580,15 @@ func _extract(raw: Variant) -> Array:
 			return [payload]
 		return [{key: payload}]
 	return [dict]
+
+
+## The rows to actually display for a successful response. Normally the extracted
+## payload, but when that comes back empty for a non-paginated call we fall back to
+## the whole response object so an action endpoint whose payload key is empty (e.g.
+## users.delete -> { deletedRooms: [], success: true }) still shows its result
+## instead of a blank area. Paginated endpoints keep an empty page (it legitimately
+## means "no more rows").
+static func display_rows(raw: Variant, extracted: Array, paginated: bool) -> Array:
+	if extracted.is_empty() and not paginated and raw is Dictionary:
+		return [raw]
+	return extracted
