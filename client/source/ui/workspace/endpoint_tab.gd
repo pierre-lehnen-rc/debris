@@ -17,11 +17,17 @@ signal open_query_requested(collection: String, filter: Dictionary, function: St
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _send_btn: Button = %SendBtn
+@onready var _json_toggle: Button = %JsonToggle
 @onready var _method_label: Label = %MethodLabel
 @onready var _path_label: Label = %PathLabel
 @onready var _summary_label: Label = %SummaryLabel
+@onready var _user_grid: GridContainer = %UserGrid
+@onready var _form_scroll: ScrollContainer = %FormScroll
 @onready var _params_grid: GridContainer = %ParamsGrid
 @onready var _no_params: Label = %NoParams
+@onready var _json_box: VBoxContainer = %JsonBox
+@onready var _json_hint: Label = %JsonHint
+@onready var _json_edit: TextEdit = %JsonEdit
 @onready var _results: ResultsView = %Results
 
 var _session: WorkspaceSession = null
@@ -29,6 +35,10 @@ var _endpoint: ApiEndpoint = null
 ## Form values captured at the last "Send"; page navigation reuses them so paging
 ## doesn't pick up half-typed edits.
 var _active_args: Dictionary = {}
+## True when the last "Send" came from the raw JSON editor. In that mode every
+## captured arg is sent as-is (routed to the body for mutating verbs, else the
+## query) rather than by each param's declared location.
+var _active_raw: bool = false
 ## param name -> input Control (LineEdit or CheckBox).
 var _inputs: Dictionary = {}
 ## Dropdown for choosing which session user to send as. Item metadata holds the
@@ -107,6 +117,7 @@ func _apply_style() -> void:
 	_toolbar.add_theme_stylebox_override("panel", sb)
 	_send_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
 	_send_btn.tooltip_text = "Send (F5)"
+	_json_hint.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	_method_label.add_theme_color_override("font_color", AppTheme.ACCENT)
 	_path_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	_summary_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
@@ -123,7 +134,7 @@ func _build_form() -> void:
 
 	var params := _endpoint.form_params()
 	_no_params.visible = params.is_empty()
-	_params_grid.visible = true  # always at least the User row
+	_params_grid.visible = true
 
 	_build_user_row()
 
@@ -147,17 +158,20 @@ func _build_form() -> void:
 ## followed by each session user. Defaults to the first user so opening a tab
 ## keeps the previous "always authenticated" behaviour.
 func _build_user_row() -> void:
+	for child in _user_grid.get_children():
+		child.queue_free()
+
 	var label := Label.new()
 	label.text = "User"
 	label.custom_minimum_size = Vector2(120, 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
-	_params_grid.add_child(label)
+	_user_grid.add_child(label)
 
 	var opt := OptionButton.new()
 	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_user_select = opt
-	_params_grid.add_child(opt)
+	_user_grid.add_child(opt)
 	_populate_user_options(-2)  # -2: no prior selection, so default to first user
 
 
@@ -235,12 +249,32 @@ func _make_input(param: Dictionary) -> Control:
 	if type == "int":
 		return _make_int(param)
 
+	if type == "array":
+		return _make_array(param)
+
 	var edit := LineEdit.new()
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	edit.placeholder_text = param.get("description", "")
 	if param.has("default"):
 		edit.text = str(param["default"])
 	# Pressing Enter in any field sends the request.
+	edit.text_submitted.connect(func(_t: String) -> void: _send())
+	return edit
+
+
+## A text field for an array param. The user types comma-separated values (or a
+## literal JSON array); _gather turns the text into a real array via coerce_array,
+## so it goes out as a JSON list rather than a bare string.
+func _make_array(param: Dictionary) -> LineEdit:
+	var edit := LineEdit.new()
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var hint: String = param.get("description", "")
+	edit.placeholder_text = hint if not hint.is_empty() else "comma-separated, or a JSON array"
+	if param.get("default") is Array:
+		var pieces := PackedStringArray()
+		for item in (param["default"] as Array):
+			pieces.append(str(item))
+		edit.text = ", ".join(pieces)
 	edit.text_submitted.connect(func(_t: String) -> void: _send())
 	return edit
 
@@ -292,8 +326,53 @@ func _gather() -> Dictionary:
 		var value: Variant = _value_of(input)
 		if value == null:
 			continue
+		if p.get("type", "") == "array" and value is String:
+			value = coerce_array(value, str(p.get("item_type", "string")))
+			if value == null:
+				continue
 		args[name] = value
 	return args
+
+
+## Turn the raw text of an array field into a real array. Text that looks like a
+## JSON array ("[...]") is parsed as-is for full control; otherwise it is split on
+## commas and each element is coerced to `item_type`. Returns null when nothing
+## usable remains so an optional array param is simply omitted.
+static func coerce_array(text: String, item_type: String) -> Variant:
+	var trimmed := text.strip_edges()
+	if trimmed.is_empty():
+		return null
+	if trimmed.begins_with("["):
+		# Use an instance parse so malformed input returns an error code instead of
+		# spamming the log; fall back to comma splitting when it isn't a JSON array.
+		var json := JSON.new()
+		if json.parse(trimmed) == OK and json.data is Array:
+			return json.data
+	var out: Array = []
+	for piece in trimmed.split(",", false):
+		var item := piece.strip_edges()
+		if item.is_empty():
+			continue
+		out.append(coerce_scalar(item, item_type))
+	return out if not out.is_empty() else null
+
+
+## Coerce a single array element string to its declared kind. Ints/numbers parse
+## as numbers when they look numeric, "true"/"false" become bools; everything else
+## (and anything that doesn't parse) stays a string.
+static func coerce_scalar(text: String, item_type: String) -> Variant:
+	match item_type:
+		"int":
+			return int(text) if text.is_valid_int() else (float(text) if text.is_valid_float() else text)
+		"bool":
+			var lower := text.to_lower()
+			if lower == "true":
+				return true
+			if lower == "false":
+				return false
+			return text
+		_:
+			return text
 
 
 ## Pull the current value from one input widget. Returns null when the field is
@@ -315,11 +394,61 @@ func _value_of(input: Control) -> Variant:
 	return null
 
 
+# JSON mode -------------------------------------------------------------------
+## Switch between the generated form and a raw JSON editor for the request payload.
+## Entering JSON mode seeds the editor from the current form values so editing
+## starts from real state; leaving it returns to the form untouched.
+func _on_json_toggled(pressed: bool) -> void:
+	if _endpoint == null:
+		return
+	if pressed:
+		_json_edit.text = JSON.stringify(_gather(), "\t")
+		_json_hint.text = _json_hint_text()
+	# The auth picker (UserGrid) sits above both and stays visible in either mode;
+	# only the scrollable form and the JSON box swap. The JSON box fills the panel,
+	# so the editor grows when the form/results splitter is dragged.
+	_form_scroll.visible = not pressed
+	_json_box.visible = pressed
+
+
+## Describe where the edited JSON object is sent, so the user knows what the
+## payload maps to for this endpoint's verb.
+func _json_hint_text() -> String:
+	var target := "request body" if _sends_body() else "query string"
+	return "Editing the raw %s %s as JSON. Path placeholders are filled from matching keys." % [
+		_endpoint.method, target,
+	]
+
+
+## True for verbs that carry a JSON body; GET/DELETE put their params in the query.
+func _sends_body() -> bool:
+	match _endpoint.method.to_upper():
+		"POST", "PUT", "PATCH":
+			return true
+		_:
+			return false
+
+
 # Requests --------------------------------------------------------------------
-## Capture form values and (re)load from the first page. The results view then
-## drives subsequent pages back through _fetch_page.
+## Capture the request args (from the form, or the raw JSON editor) and (re)load
+## from the first page. The results view then drives subsequent pages back through
+## _fetch_page. Invalid JSON aborts with a status message rather than sending.
 func _send() -> void:
-	_active_args = _gather()
+	if _json_toggle.button_pressed:
+		var json := JSON.new()
+		if json.parse(_json_edit.text) != OK:
+			status_changed.emit("%s — invalid JSON: %s (line %d)" % [
+				_endpoint.id, json.get_error_message(), json.get_error_line(),
+			])
+			return
+		if not (json.data is Dictionary):
+			status_changed.emit("%s — JSON must be an object" % _endpoint.id)
+			return
+		_active_args = json.data
+		_active_raw = true
+	else:
+		_active_args = _gather()
+		_active_raw = false
 	_results.request_first_page()
 
 
@@ -330,21 +459,15 @@ func _fetch_page(offset: int, limit: int) -> void:
 		_results.show_page([])
 		return
 
-	# Distribute the captured args across the path, query string and JSON body.
-	var path := _endpoint.path
-	var query: Dictionary = {}
-	var body: Dictionary = {}
-	var locations := _param_locations()
-	for name in _active_args:
-		var value: Variant = _active_args[name]
-		if path.contains(":" + name):
-			path = path.replace(":" + name, str(value).uri_encode())
-		elif path.contains("{" + name + "}"):
-			path = path.replace("{" + name + "}", str(value).uri_encode())
-		elif locations.get(name, "query") == "body":
-			body[name] = value
-		else:
-			query[name] = value
+	# Distribute the captured args across the path, query string and JSON body. In
+	# raw mode every non-path arg goes to the body (mutating verbs) or query,
+	# ignoring per-param locations so custom keys route as the verb expects.
+	var default_location := ("body" if _sends_body() else "query") if _active_raw else "query"
+	var locations := {} if _active_raw else _param_locations()
+	var routed := route_args(_endpoint.path, _active_args, locations, default_location)
+	var path: String = routed["path"]
+	var query: Dictionary = routed["query"]
+	var body: Dictionary = routed["body"]
 	if _endpoint.paginated:
 		query[_endpoint.offset_param] = offset
 		query[_endpoint.count_param] = limit
@@ -395,6 +518,28 @@ func _param_locations() -> Dictionary:
 	for p in _endpoint.params:
 		out[p.get("name", "")] = p.get("in", "query")
 	return out
+
+
+## Split args across the path, query and body. A name that matches a ":name" or
+## "{name}" placeholder in `path` fills it (URI-encoded); otherwise the name's
+## entry in `locations` decides body vs query, falling back to `default_location`
+## for names not listed there. Returns { path, query, body }.
+static func route_args(
+	path: String, args: Dictionary, locations: Dictionary, default_location: String
+) -> Dictionary:
+	var query: Dictionary = {}
+	var body: Dictionary = {}
+	for name in args:
+		var value: Variant = args[name]
+		if path.contains(":" + name):
+			path = path.replace(":" + name, str(value).uri_encode())
+		elif path.contains("{" + name + "}"):
+			path = path.replace("{" + name + "}", str(value).uri_encode())
+		elif locations.get(name, default_location) == "body":
+			body[name] = value
+		else:
+			query[name] = value
+	return {"path": path, "query": query, "body": body}
 
 
 func _http_method(method: String) -> int:

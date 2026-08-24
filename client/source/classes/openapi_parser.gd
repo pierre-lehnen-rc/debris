@@ -112,13 +112,19 @@ static func _flatten_object(schema: Dictionary, location: String) -> Array:
 
 static func _param(name: String, location: String, schema: Dictionary,
 		required: bool, description: String) -> Dictionary:
+	var type := _type(schema)
 	var p := {
 		"name": name,
 		"in": location,
-		"type": _type(schema),
+		"type": type,
 		"required": required,
 		"description": description,
 	}
+	# For arrays, carry the element type so the form can coerce entered values into
+	# a real array of the right scalar kind (e.g. roles -> ["admin"]).
+	if type == "array":
+		var items: Dictionary = schema["items"] if schema.get("items") is Dictionary else {}
+		p["item_type"] = _type(items)
 	# Carry through the extra schema hints the form uses to pick a richer input:
 	# `format` (date/date-time → date picker), `enum` (→ dropdown), numeric
 	# bounds and a default value.
@@ -136,14 +142,17 @@ static func _param(name: String, location: String, schema: Dictionary,
 	return p
 
 
-## Map a JSON-schema type to the form's input kinds. Nested objects/arrays fall
-## back to "string" so the user can type raw JSON.
+## Map a JSON-schema type to the form's input kinds. Arrays keep their own kind so
+## the form can send a real JSON array; nested objects fall back to "string" so the
+## user can type raw JSON.
 static func _type(schema: Dictionary) -> String:
 	match _type_name(schema):
 		"integer", "number":
 			return "int"
 		"boolean":
 			return "bool"
+		"array":
+			return "array"
 		_:
 			return "string"
 

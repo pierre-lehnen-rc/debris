@@ -6,7 +6,8 @@ extends RefCounted
 ## to build the sidebar tree, the per-tab parameter form and the results view.
 ##
 ## A param is a Dictionary: { name, in ("query"|"body"), type ("string"|"int"|
-## "bool"), required, default, description }. Pagination is expressed with
+## "bool"|"array"), required, default, description }. Array params also carry an
+## "item_type" naming the element kind. Pagination is expressed with
 ## `offset_param`/`count_param`, which name the params the pager drives directly
 ## (so they are excluded from the user-facing form).
 

@@ -69,6 +69,12 @@ func _check_rocketchat() -> void:
 	expect(endpoints.size() > 50, "OpenApiParser yields many endpoints (got %d)" % endpoints.size())
 	expect(not endpoints.is_empty() and endpoints[0] is ApiEndpoint, "parser returns ApiEndpoint instances")
 
+	# users.create's `roles` must parse as an array param (so the form sends a real
+	# JSON list, not a bare string) with a string element type.
+	var roles := _param_of(endpoints, "users.create", "roles")
+	expect_eq(roles.get("type"), "array", "users.create roles typed as array")
+	expect_eq(roles.get("item_type"), "string", "users.create roles has string item_type")
+
 	var creds: Dictionary = await rocketchat.login(ws, "admin", "secret")
 	expect(bool(creds.get("ok", false)), "login ok")
 	expect_eq(creds.get("user_id"), "mock-user-id", "login returns mocked user_id")
@@ -86,3 +92,13 @@ func _check_rocketchat() -> void:
 	var generic_data: Variant = generic.get("data")
 	expect(generic_data is Dictionary and (generic_data as Dictionary).has("items"),
 		"unknown path uses generic fixture")
+
+
+## Find a parsed param dict by endpoint id + param name (or {} if not present).
+func _param_of(endpoints: Array, endpoint_id: String, param_name: String) -> Dictionary:
+	for e in endpoints:
+		if e is ApiEndpoint and (e as ApiEndpoint).id == endpoint_id:
+			for p in (e as ApiEndpoint).params:
+				if p is Dictionary and p.get("name", "") == param_name:
+					return p
+	return {}

@@ -182,7 +182,9 @@ func _headers(workspace: Dictionary) -> PackedStringArray:
 	return headers
 
 
-## Build a "?a=1&b=2" string from a Dictionary, URL-encoding keys and values.
+## Build a "?a=1&b=2" string from a Dictionary, URL-encoding keys and values. An
+## array value is expanded into repeated "key[]=v" pairs (the convention the
+## Rocket.Chat REST API accepts for list-valued query params).
 func _query_string(query: Dictionary) -> String:
 	if query.is_empty():
 		return ""
@@ -191,9 +193,14 @@ func _query_string(query: Dictionary) -> String:
 		var value: Variant = query[key]
 		if value == null:
 			continue
-		parts.append("%s=%s" % [
-			String(key).uri_encode(), str(value).uri_encode(),
-		])
+		if value is Array:
+			var array_key := (String(key) + "[]").uri_encode()
+			for item in (value as Array):
+				parts.append("%s=%s" % [array_key, str(item).uri_encode()])
+		else:
+			parts.append("%s=%s" % [
+				String(key).uri_encode(), str(value).uri_encode(),
+			])
 	return "?" + "&".join(parts) if parts.size() > 0 else ""
 
 

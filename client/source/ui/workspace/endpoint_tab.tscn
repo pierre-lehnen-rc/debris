@@ -33,6 +33,14 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "/api/v1/"
 
+[node name="JsonToggle" type="Button" parent="Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Edit the full request payload as raw JSON"
+focus_mode = 0
+toggle_mode = true
+text = "JSON"
+
 [node name="Split" type="VSplitContainer" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
@@ -43,21 +51,11 @@ split_offset = 150
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
 
-[node name="FormScroll" type="ScrollContainer" parent="Split/FormPanel"]
+[node name="FormRoot" type="VBoxContainer" parent="Split/FormPanel"]
 layout_mode = 2
-
-[node name="FormBox" type="VBoxContainer" parent="Split/FormPanel/FormScroll"]
-layout_mode = 2
-size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="SummaryLabel" type="Label" parent="Split/FormPanel/FormScroll/FormBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = ""
-autowrap_mode = 2
-
-[node name="ParamsGrid" type="GridContainer" parent="Split/FormPanel/FormScroll/FormBox"]
+[node name="UserGrid" type="GridContainer" parent="Split/FormPanel/FormRoot"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -65,14 +63,62 @@ theme_override_constants/h_separation = 12
 theme_override_constants/v_separation = 8
 columns = 2
 
-[node name="NoParams" type="Label" parent="Split/FormPanel/FormScroll/FormBox"]
+[node name="FormScroll" type="ScrollContainer" parent="Split/FormPanel/FormRoot"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="FormBox" type="VBoxContainer" parent="Split/FormPanel/FormRoot/FormScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="SummaryLabel" type="Label" parent="Split/FormPanel/FormRoot/FormScroll/FormBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = ""
+autowrap_mode = 2
+
+[node name="ParamsGrid" type="GridContainer" parent="Split/FormPanel/FormRoot/FormScroll/FormBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 8
+columns = 2
+
+[node name="NoParams" type="Label" parent="Split/FormPanel/FormRoot/FormScroll/FormBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "No parameters — press Send to call this endpoint."
+
+[node name="JsonBox" type="VBoxContainer" parent="Split/FormPanel/FormRoot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="JsonHint" type="Label" parent="Split/FormPanel/FormRoot/JsonBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = ""
+autowrap_mode = 2
+
+[node name="JsonEdit" type="TextEdit" parent="Split/FormPanel/FormRoot/JsonBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+placeholder_text = "{ }"
 
 [node name="Results" parent="Split" instance=ExtResource("2_results")]
 unique_name_in_owner = true
 layout_mode = 2
 
 [connection signal="pressed" from="Toolbar/Row/SendBtn" to="." method="_send"]
+[connection signal="toggled" from="Toolbar/Row/JsonToggle" to="." method="_on_json_toggled"]
 [connection signal="page_requested" from="Split/Results" to="." method="_fetch_page"]

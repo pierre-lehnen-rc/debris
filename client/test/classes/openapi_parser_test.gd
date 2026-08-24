@@ -233,7 +233,7 @@ func _channels_create_op() -> Dictionary:
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "channel name"},
-				"members": {"type": "array"},
+				"members": {"type": "array", "items": {"type": "string"}},
 				"readOnly": {"type": "boolean", "default": false},
 			},
 			"required": ["name"],
@@ -253,9 +253,30 @@ func test_request_body_is_flattened_into_body_params() -> void:
 	})
 
 
-func test_array_property_falls_back_to_string_type() -> void:
+func test_array_property_is_typed_as_array_with_item_type() -> void:
 	var e := _parse_one("/api/v1/channels.create", "post", _channels_create_op())
-	assert_str(_param_named(e, "members")["type"]).is_equal("string")
+	assert_dict(_param_named(e, "members")).is_equal({
+		"name": "members", "in": "body", "type": "array",
+		"required": false, "description": "", "item_type": "string",
+	})
+
+
+func test_array_of_integers_carries_int_item_type() -> void:
+	var op := {"requestBody": {"content": {"application/json": {"schema": {
+		"type": "object",
+		"properties": {"ids": {"type": "array", "items": {"type": "integer"}}},
+	}}}}, "responses": _ok_json_response({})}
+	var e := _parse_one("/api/v1/x.create", "post", op)
+	assert_str(_param_named(e, "ids")["item_type"]).is_equal("int")
+
+
+func test_array_without_items_defaults_item_type_to_string() -> void:
+	var op := {"requestBody": {"content": {"application/json": {"schema": {
+		"type": "object",
+		"properties": {"tags": {"type": "array"}},
+	}}}}, "responses": _ok_json_response({})}
+	var e := _parse_one("/api/v1/x.create", "post", op)
+	assert_str(_param_named(e, "tags")["item_type"]).is_equal("string")
 
 
 func test_boolean_property_maps_to_bool() -> void:
