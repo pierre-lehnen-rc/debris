@@ -37,6 +37,35 @@ func test_from_dict_populates_all_fields() -> void:
 	assert_str(e.item_noun).is_equal("member")
 
 
+# to_dict round-trip ----------------------------------------------------------
+func test_to_dict_round_trips_through_from_dict() -> void:
+	# A cached endpoint (used by the .debris-workspace endpoint cache) must survive
+	# a to_dict → from_dict cycle unchanged, so an offline reload is faithful.
+	var original := ApiEndpoint.from_dict({
+		"id": "channels.members",
+		"tag": "Channels",
+		"summary": "List members",
+		"method": "GET",
+		"path": "/api/v1/channels.members",
+		"params": [{"name": "roomId", "in": "query", "type": "string"}],
+		"result_key": "members",
+		"single": false,
+		"paginated": true,
+		"offset_param": "offset",
+		"count_param": "count",
+		"item_noun": "member",
+	})
+	var round_tripped := ApiEndpoint.from_dict(original.to_dict())
+	assert_dict(round_tripped.to_dict()).is_equal(original.to_dict())
+
+
+func test_to_dict_survives_json_round_trip() -> void:
+	# The cache is stored as JSON, so a stringify/parse cycle must not change it.
+	var original := ApiEndpoint.from_dict({"id": "users.list", "paginated": true})
+	var json: Variant = JSON.parse_string(JSON.stringify(original.to_dict()))
+	assert_dict(ApiEndpoint.from_dict(json).to_dict()).is_equal(original.to_dict())
+
+
 # Defaults --------------------------------------------------------------------
 func test_from_dict_empty_uses_defaults() -> void:
 	var e := ApiEndpoint.from_dict({})

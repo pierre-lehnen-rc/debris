@@ -16,6 +16,9 @@ signal title_changed(title: String)
 ## Bubbled up from the results view when a custom type action wants to open a new
 ## query tab on another collection with a pre-defined filter.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Emitted when persistable state changes (a query was run, or the collection was
+## retargeted), so the project can save the .debris-workspace sidecar.
+signal state_changed()
 
 ## Collection operations offered by the function dropdown. Only "find" paginates
 ## and yields a stream of documents; the rest return a single/bounded result.
@@ -35,6 +38,10 @@ var _initial_function := "find"
 ## Filter to seed the editor with when the tab first opens (set via configure()),
 ## e.g. from a custom type action. Empty means a blank "{}" filter.
 var _initial_filter: Dictionary = {}
+## Set by configure_restore() to reopen a saved tab: the editors are seeded from
+## the persisted text verbatim and the query is NOT auto-run (results aren't
+## saved, and restoring shouldn't fire requests). "" leaves the normal path.
+var _restore_state: Dictionary = {}
 ## Schema driving custom types/actions in the results view.
 var _schema: DatabaseSchema = null
 var connection_name := ""
@@ -68,6 +75,33 @@ func configure(
 	collection_name = collection
 	_initial_function = function
 	_initial_filter = initial_filter
+
+
+## Reopen a saved query tab (from the .debris-workspace sidecar). Binds the
+## project's connection/database and stashes the persisted target + editor text
+## for _ready to seed; the query is seeded but not run. `state` is a dict from
+## to_state(). Call before the node enters the tree.
+func configure_restore(connection: Dictionary, database: String, state: Dictionary) -> void:
+	connection_config = connection
+	connection_name = connection.get("name", "")
+	database_name = database
+	collection_name = String(state.get("collection", ""))
+	_initial_function = String(state.get("function", "find"))
+	_restore_state = state
+
+
+## Snapshot this tab for the sidecar: its target and the current editor text, but
+## never the results. Restored verbatim by configure_restore().
+func to_state() -> Dictionary:
+	return {
+		"kind": "query",
+		"database": database_name,
+		"collection": _collection_edit.text,
+		"function": FUNCTIONS[_func_option.selected] if _func_option.selected >= 0 else "find",
+		"filter": _query_edit.text,
+		"options": _options_edit.text,
+		"options_visible": _options_btn.button_pressed,
+	}
 
 
 ## Set the schema used to resolve custom types/actions and push it to the results
@@ -128,6 +162,18 @@ func _ready() -> void:
 
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name
+
+	# Reopened from the sidecar: seed the editors from the persisted text verbatim
+	# and stop — restoring must not re-run the query (results aren't saved, and a
+	# restore shouldn't fire a request). The user re-runs with Run/F5.
+	if not _restore_state.is_empty():
+		_query_edit.text = String(_restore_state.get("filter", ""))
+		_options_edit.text = String(_restore_state.get("options", ""))
+		if bool(_restore_state.get("options_visible", false)):
+			_options_btn.button_pressed = true
+			_options_edit.visible = true
+		return
+
 	# Seed the filter editor whenever a filter was supplied — including a cross-tab
 	# handoff that opens a blank-collection tab (a schema search action without a
 	# target collection), so the filter survives until the user names the collection.
@@ -193,6 +239,8 @@ func _run() -> void:
 	# types/actions match the collection now being queried.
 	_results.set_type_context(_schema, collection_name)
 	_results.request_first_page()
+	# A run captures a persistable query/params snapshot for the sidecar.
+	state_changed.emit()
 
 
 ## Parse the options editor (projection/sort) into a Dictionary. Returns an empty
@@ -222,6 +270,7 @@ func _retarget_collection() -> void:
 		return
 	collection_name = entered
 	title_changed.emit(tab_title())
+	state_changed.emit()
 
 
 ## Fetch a single page (or bounded result) from the backend, dispatching to the

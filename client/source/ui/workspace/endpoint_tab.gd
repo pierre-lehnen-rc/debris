@@ -14,6 +14,9 @@ signal status_changed(text: String)
 ## Bubbled up from the results view when a cross-query search action (the schema's
 ## "Unknown Type" menu on a result value) asks to open a query tab on the DB.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Emitted when persistable state changes (a request was sent, capturing the
+## current params), so the project can save the .debris-workspace sidecar.
+signal state_changed()
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _send_btn: Button = %SendBtn
@@ -44,12 +47,37 @@ var _inputs: Dictionary = {}
 ## Dropdown for choosing which session user to send as. Item metadata holds the
 ## session user id, or -1 for the anonymous "(none)" entry.
 var _user_select: OptionButton = null
+## Set by configure_restore() to reopen a saved tab: the picked user, form values
+## and any raw-JSON body are re-applied after the form is built. {} = normal open.
+var _restore_state: Dictionary = {}
 
 
 ## Bind this tab to a session + endpoint. Call before the node enters the tree.
 func configure(session: WorkspaceSession, endpoint: ApiEndpoint) -> void:
 	_session = session
 	_endpoint = endpoint
+
+
+## Reopen a saved endpoint tab (from the .debris-workspace sidecar): bind as usual,
+## then stash the persisted user/params for _ready to re-apply once the form is
+## built. `state` is a dict from to_state(). Call before the node enters the tree.
+func configure_restore(session: WorkspaceSession, endpoint: ApiEndpoint, state: Dictionary) -> void:
+	configure(session, endpoint)
+	_restore_state = state
+
+
+## Snapshot this tab for the sidecar: the endpoint id, the chosen user, and the
+## current params (raw per-widget values, and the raw-JSON body when in that
+## mode) — never the results. Restored by configure_restore().
+func to_state() -> Dictionary:
+	return {
+		"kind": "endpoint",
+		"endpoint_id": _endpoint.id if _endpoint != null else "",
+		"user_id": _selected_user_id(),
+		"raw": _json_toggle.button_pressed,
+		"form": _snapshot_inputs(),
+		"json_text": _json_edit.text,
+	}
 
 
 func endpoint() -> ApiEndpoint:
@@ -100,6 +128,11 @@ func _ready() -> void:
 	_results.set_pagination_enabled(_endpoint.paginated)
 	_results.set_item_noun(_endpoint.noun())
 	_build_form()
+	# Reopened from the sidecar: re-apply the saved user pick and params now that
+	# the form widgets exist. Done before wiring the session refresh so it doesn't
+	# clobber the restored user selection.
+	if not _restore_state.is_empty():
+		_apply_restore_state()
 	# Keep the user picker in step with the session's live user/token list.
 	if _session != null:
 		_session.changed.connect(_refresh_user_options)
@@ -394,6 +427,80 @@ func _value_of(input: Control) -> Variant:
 	return null
 
 
+# Persistence (sidecar) -------------------------------------------------------
+## Capture each form input's raw widget value (not the coerced/omitted _gather
+## form) so a reopened tab restores exactly what was typed, including blanks and
+## uncoerced array text. Keyed by param name.
+func _snapshot_inputs() -> Dictionary:
+	var out: Dictionary = {}
+	for name in _inputs:
+		out[name] = _raw_value_of(_inputs[name])
+	return out
+
+
+## The raw, JSON-round-trippable value of one input widget: enums/spins persist
+## by their selected index/number, everything else by its literal contents.
+func _raw_value_of(input: Control) -> Variant:
+	if input is CheckBox:
+		return (input as CheckBox).button_pressed
+	if input is OptionButton:
+		return (input as OptionButton).selected
+	if input is SpinBox:
+		return (input as SpinBox).value
+	if input is DatePicker:
+		return (input as DatePicker).get_value()
+	if input is LineEdit:
+		return (input as LineEdit).text
+	return null
+
+
+## Re-apply a saved snapshot to the freshly built form: user pick, each input's
+## value, then the raw-JSON body/mode. Missing params (endpoint changed) are
+## skipped. The JSON toggle is set without its signal so the restored body text
+## isn't overwritten by a re-seed from the form.
+func _apply_restore_state() -> void:
+	_select_user(int(_restore_state.get("user_id", -1)))
+	var form: Dictionary = _restore_state.get("form", {}) if _restore_state.get("form") is Dictionary else {}
+	for name in form:
+		var input: Control = _inputs.get(name)
+		if input != null:
+			_set_input_value(input, form[name])
+	if bool(_restore_state.get("raw", false)):
+		_json_toggle.set_pressed_no_signal(true)
+		_form_scroll.visible = false
+		_json_box.visible = true
+		_json_hint.text = _json_hint_text()
+		_json_edit.text = String(_restore_state.get("json_text", ""))
+
+
+## Set one input widget from a restored raw value (the inverse of _raw_value_of).
+func _set_input_value(input: Control, value: Variant) -> void:
+	if input is CheckBox:
+		(input as CheckBox).button_pressed = bool(value)
+	elif input is OptionButton:
+		var opt := input as OptionButton
+		var idx := int(value)
+		if idx >= 0 and idx < opt.item_count:
+			opt.select(idx)
+	elif input is SpinBox:
+		(input as SpinBox).value = float(value)
+	elif input is DatePicker:
+		(input as DatePicker).set_value(str(value))
+	elif input is LineEdit:
+		(input as LineEdit).text = str(value)
+
+
+## Select the picker entry for `user_id` (-1 = the anonymous "(none)" entry),
+## leaving the current selection when no entry matches.
+func _select_user(user_id: int) -> void:
+	if _user_select == null:
+		return
+	for i in _user_select.item_count:
+		if int(_user_select.get_item_metadata(i)) == user_id:
+			_user_select.select(i)
+			return
+
+
 # JSON mode -------------------------------------------------------------------
 ## Switch between the generated form and a raw JSON editor for the request payload.
 ## Entering JSON mode seeds the editor from the current form values so editing
@@ -449,6 +556,8 @@ func _send() -> void:
 	else:
 		_active_args = _gather()
 		_active_raw = false
+	# A send captures a persistable params snapshot for the sidecar.
+	state_changed.emit()
 	_results.request_first_page()
 
 

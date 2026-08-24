@@ -5,4 +5,7 @@
 
 *.sublime-workspace
 
+# Per-user session sidecar next to a .debris-project (open tabs + endpoint cache).
+*.debris-workspace
+
 debris-server.cjs

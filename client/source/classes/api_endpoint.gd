@@ -45,6 +45,25 @@ static func from_dict(d: Dictionary) -> ApiEndpoint:
 	return e
 
 
+## The persisted form, inverse of from_dict: every field is written so a cached
+## endpoint round-trips losslessly (used by the .debris-workspace endpoint cache).
+func to_dict() -> Dictionary:
+	return {
+		"id": id,
+		"tag": tag,
+		"summary": summary,
+		"method": method,
+		"path": path,
+		"params": params,
+		"result_key": result_key,
+		"single": single,
+		"paginated": paginated,
+		"offset_param": offset_param,
+		"count_param": count_param,
+		"item_noun": item_noun,
+	}
+
+
 ## The params the user fills in: everything except the pagination params, which
 ## the results pager controls on its own.
 func form_params() -> Array:

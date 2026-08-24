@@ -41,6 +41,14 @@ const SIDEBAR_SPLIT_OFFSET := 360
 var _doc: WorkspaceDoc = null
 var _session: WorkspaceSession = null
 
+# The .debris-workspace sidecar: open tabs + the offline endpoint cache. Loaded
+# on setup, rewritten automatically whenever the tabs/params change (see
+# persist_state). Its tab list is re-captured from the center at each save; the
+# endpoint cache is maintained here as live fetches land. _restored guards against
+# overwriting the sidecar before its saved tabs have been reopened.
+var _state: WorkspaceState = null
+var _restored := false
+
 var _activity: ActivityBar
 var _stack: MarginContainer
 var _center: WorkspaceCenter
@@ -138,16 +146,24 @@ func _build_layout() -> void:
 	_center = CENTER_SCENE.instantiate()
 	_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_center.status_changed.connect(_on_status_changed)
+	# Any tab/param change auto-saves the sidecar (guarded until restore is done).
+	_center.state_changed.connect(persist_state)
 	split.add_child(_center)
 
 
 # Setup -----------------------------------------------------------------------
 func _setup() -> void:
+	_load_sidecar()
 	_build_collections_view()
 	_build_endpoints_view()
 	if _doc.has_rocketchat():
 		_build_users_view()
 	_refresh_activity()
+	# With an API attached, tab restore waits for the endpoint list (cache or live)
+	# so endpoint tabs can be matched to their definitions; _on_endpoints_loaded
+	# drives it. Without one, there are no endpoint tabs to wait on — restore now.
+	if not _doc.has_rocketchat():
+		_restore_tabs_once()
 
 
 func has_mongo() -> bool:
@@ -211,6 +227,9 @@ func update_rocketchat(config: Dictionary) -> void:
 	_doc.set_rocketchat(String(config.get("url", "")), users)
 	_set_session(_doc.rocketchat_config())
 	if _endpoint_sidebar != null:
+		# Re-seed the cache for the (possibly new) URL — cached_endpoints returns []
+		# when the URL changed, so a stale catalog isn't shown for a different server.
+		_endpoint_sidebar.set_cache(_state.cached_endpoints(_rocketchat_url()))
 		_endpoint_sidebar.configure(_doc.rocketchat_config())
 	if _users_panel != null:
 		_users_panel.configure(_session)
@@ -253,6 +272,10 @@ func _build_endpoints_view() -> void:
 	_endpoint_sidebar.endpoint_activated.connect(_on_endpoint_activated)
 	_endpoint_sidebar.status_changed.connect(_on_status_changed)
 	_endpoint_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
+	# Seed the offline cache and listen for load results before configuring, so the
+	# synchronous "cache" emit (when a cache exists) is caught and drives restore.
+	_endpoint_sidebar.endpoints_loaded.connect(_on_endpoints_loaded)
+	_endpoint_sidebar.set_cache(_state.cached_endpoints(_rocketchat_url()))
 	_endpoint_sidebar.configure(_doc.rocketchat_config())
 
 
@@ -380,3 +403,63 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 
 func _on_status_changed(text: String) -> void:
 	status_changed.emit(text)
+
+
+# Sidecar (.debris-workspace) persistence -------------------------------------
+## Load the project's session sidecar (open tabs + endpoint cache), if one exists
+## next to the project file. A missing sidecar is normal (Untitled, or a project
+## saved before this feature); a present-but-unreadable one is reported but
+## non-fatal. Always leaves _state non-null.
+func _load_sidecar() -> void:
+	_state = WorkspaceState.new()
+	if _doc == null or _doc.file_path.is_empty():
+		return
+	var result := WorkspaceStateFile.load(WorkspaceStateFile.path_for(_doc.file_path))
+	if result.get("ok", false):
+		_state = result["state"]
+	elif String(result.get("error", "")) != "absent":
+		status_changed.emit("Couldn't read workspace state: %s" % result.get("error", ""))
+
+
+## The endpoint list is available (from cache, live, or the built-in catalog):
+## restore the saved tabs the first time, and refresh the offline cache whenever a
+## live fetch lands (never caching the built-in fallback).
+func _on_endpoints_loaded(endpoints: Array, source: String) -> void:
+	_restore_tabs_once()
+	if source == "live":
+		_state.set_endpoint_cache(
+			_rocketchat_url(), endpoints, Time.get_datetime_string_from_system(true)
+		)
+		persist_state()
+
+
+## Reopen the saved tabs exactly once per project open. Endpoint tabs are matched
+## to their definitions by id from the current endpoint list.
+func _restore_tabs_once() -> void:
+	if _restored:
+		return
+	_restored = true
+	var by_id: Dictionary = {}
+	if _endpoint_sidebar != null:
+		for e in _endpoint_sidebar.endpoints():
+			by_id[(e as ApiEndpoint).id] = e
+	_center.restore_tabs(_state.tabs, _state.active_tab, by_id)
+
+
+## Write the sidecar: the current open tabs (captured fresh from the center) plus
+## the maintained endpoint cache. No-op for an unsaved project (no path to write
+## next to) or before the saved tabs have been restored (so we never clobber them).
+## Called on every tab/param change and after the project is saved.
+func persist_state() -> void:
+	if _doc == null or _doc.file_path.is_empty() or not _restored:
+		return
+	_state.tabs = _center.capture_tabs()
+	_state.active_tab = _center.active_tab_index()
+	var result := WorkspaceStateFile.save(_state, WorkspaceStateFile.path_for(_doc.file_path))
+	if not result.get("ok", false):
+		status_changed.emit("Couldn't save workspace state: %s" % result.get("error", ""))
+
+
+## The project's Rocket.Chat URL, or "" when no API is attached.
+func _rocketchat_url() -> String:
+	return String(_doc.rocketchat.get("url", "")) if _doc != null else ""

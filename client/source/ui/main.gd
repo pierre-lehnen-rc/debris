@@ -443,8 +443,10 @@ func _write_project(proj: ProjectTab, path: String) -> void:
 		return
 	Store.add_recent_workspace(path)
 	_update_project_tab_title(proj)
-	# The project now has a path (or a new one), so refresh the restore list.
+	# The project now has a path (or a new one), so refresh the restore list and
+	# write the session sidecar (open tabs + endpoint cache) next to the project.
 	_save_open_projects()
+	proj.persist_state()
 	_status_label.text = "Saved %s" % doc.name
 
 

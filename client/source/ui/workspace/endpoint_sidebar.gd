@@ -12,6 +12,11 @@ signal status_changed(text: String)
 ## The header's edit button was pressed — the host should open the API/workspace
 ## editor for this workspace.
 signal edit_requested()
+## Emitted whenever the effective endpoint list changes, with the ApiEndpoint list
+## and its source ("cache" | "live" | "builtin"). The project uses it to refresh
+## the .debris-workspace endpoint cache (only "live") and to restore endpoint tabs
+## once endpoints are available.
+signal endpoints_loaded(endpoints: Array, source: String)
 
 const META_TYPE := "type"  # "endpoint" | "group" | "placeholder"
 const META_ENDPOINT := "endpoint"
@@ -30,6 +35,9 @@ enum Action { OPEN, COPY_PATH }
 
 var _workspace: Dictionary = {}
 var _endpoints: Array = []
+## Endpoints restored from the .debris-workspace cache (ApiEndpoint list), shown
+## immediately so the list works offline while the live spec is (re)fetched.
+var _cache: Array = []
 var _menu_target: ApiEndpoint = null
 var _loading := false
 
@@ -37,6 +45,12 @@ var _loading := false
 func _ready() -> void:
 	_apply_style()
 	_render_message("(no workspace)")
+
+
+## Seed the cached endpoint catalog (ApiEndpoint list) to show before/without a
+## live fetch. Call before configure() so _load can render it immediately.
+func set_cache(endpoint_list: Array) -> void:
+	_cache = endpoint_list
 
 
 ## Point this sidebar at a workspace and load its endpoint catalog from the
@@ -47,43 +61,72 @@ func configure(workspace: Dictionary) -> void:
 		_load()
 
 
+## The current effective endpoint list (ApiEndpoint objects), for endpoint-tab
+## restore lookups by id.
+func endpoints() -> Array:
+	return _endpoints
+
+
 func _on_edit_pressed() -> void:
 	edit_requested.emit()
 
 
 # Loading ---------------------------------------------------------------------
-## Fetch and parse the workspace's OpenAPI spec, falling back to the curated
-## catalog if the server can't be reached or returns something unusable.
+## Load the endpoint catalog: render the cached list immediately (so it works
+## offline), then refresh from the live OpenAPI spec. On a failed fetch the cache
+## is kept when present, otherwise the shipped catalog is shown so the list is
+## never empty. Effective-list changes are announced via endpoints_loaded.
 func _load() -> void:
 	if _loading or _workspace.is_empty():
 		return
-	_loading = true
-	status_changed.emit("Loading endpoints from %s…" % _workspace.get("url", ""))
-	_render_message("(loading…)")
 
+	# 1. Show the cache right away so the list is usable before the network
+	#    answers — and, when the server is down, instead of it.
+	if not _cache.is_empty():
+		_endpoints = _cache.duplicate()
+		_endpoints.sort_custom(_compare_endpoints)
+		_render()
+		endpoints_loaded.emit(_endpoints, "cache")
+	else:
+		_render_message("(loading…)")
+	status_changed.emit("Loading endpoints from %s…" % _workspace.get("url", ""))
+
+	# 2. Refresh from the live spec.
+	_loading = true
 	var result: Dictionary = await RocketChat.fetch_openapi(_workspace)
 	_loading = false
 
 	if result.get("ok", false) and result.get("data") is Dictionary:
-		_endpoints = OpenApiParser.parse(result["data"])
-		_endpoints.sort_custom(_compare_endpoints)
+		var parsed := OpenApiParser.parse(result["data"])
+		parsed.sort_custom(_compare_endpoints)
+		if not parsed.is_empty():
+			_endpoints = parsed
+			_render()
+			status_changed.emit("Loaded %d endpoints from %s" % [
+				_endpoints.size(), _workspace.get("url", ""),
+			])
+			endpoints_loaded.emit(_endpoints, "live")
+			return
+		# The spec parsed to nothing: keep the cache if we have one.
 		if _endpoints.is_empty():
 			_render_message("(no endpoints in spec)")
 			status_changed.emit("OpenAPI spec contained no endpoints")
-			return
-		_render()
-		status_changed.emit("Loaded %d endpoints from %s" % [
-			_endpoints.size(), _workspace.get("url", ""),
-		])
 		return
 
-	# Couldn't load the live spec — fall back to the shipped catalog.
+	# 3. Couldn't load the live spec. Keep the cached list when we have one;
+	#    otherwise fall back to the shipped catalog.
+	if not _endpoints.is_empty():
+		status_changed.emit("Couldn't reach %s (%s) — showing cached endpoints" % [
+			_workspace.get("url", ""), result.get("error", "unknown error"),
+		])
+		return
 	_endpoints = ApiCatalog.builtin()
 	_endpoints.sort_custom(_compare_endpoints)
 	_render()
 	status_changed.emit("Couldn't load endpoints (%s) — showing built-in catalog" % result.get(
 		"error", "unknown error",
 	))
+	endpoints_loaded.emit(_endpoints, "builtin")
 
 
 ## Sort by full path segments, then method, so the nested folders and their
