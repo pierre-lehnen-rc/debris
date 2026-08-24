@@ -97,5 +97,6 @@ change needed.
 
 ## Engine path
 
-The scripts default to `/home/pierre/Apps/Godot_v4.7.1-stable_linux.x86_64`.
-Override with `GODOT=/path/to/godot dev/harness.sh …`.
+The scripts invoke `godot` from your `PATH`. Override with
+`GODOT=/path/to/godot dev/harness.sh …` if your binary is named or located
+differently.

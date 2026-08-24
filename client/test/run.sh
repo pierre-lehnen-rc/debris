@@ -12,7 +12,7 @@
 # Override the engine with:  GODOT=/path/to/godot test/run.sh
 set -u
 
-GODOT="${GODOT:-/home/pierre/Apps/Godot_v4.7.1-stable_linux.x86_64}"
+GODOT="${GODOT:-godot}"
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 DEBRIS_HEADLESS=1 "$GODOT" --headless --path "$PROJECT" \

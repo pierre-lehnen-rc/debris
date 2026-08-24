@@ -12,7 +12,7 @@
 # Override the engine with:  GODOT=/path/to/godot dev/probe.sh <script>
 set -u
 
-GODOT="${GODOT:-/home/pierre/Apps/Godot_v4.7.1-stable_linux.x86_64}"
+GODOT="${GODOT:-godot}"
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CHECK="${1:?usage: dev/probe.sh <script.gd>}"

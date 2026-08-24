@@ -11,7 +11,7 @@
 # Override the engine with:  GODOT=/path/to/godot dev/harness.sh <check>
 set -euo pipefail
 
-GODOT="${GODOT:-/home/pierre/Apps/Godot_v4.7.1-stable_linux.x86_64}"
+GODOT="${GODOT:-godot}"
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CHECK="${1:?usage: dev/harness.sh <check-script.gd>}"
