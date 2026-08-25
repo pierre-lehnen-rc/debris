@@ -16,6 +16,9 @@ extends Node
 ## server themselves; a status message explains what happened.
 
 signal status_changed(text: String)
+## Emitted once startup concludes, carrying whether the server is answering. Used
+## by await_ready() to unblock callers that started waiting before it resolved.
+signal ready_resolved(available: bool)
 
 ## Path (inside res://) of the bundled server produced by `yarn bundle`.
 const BUNDLE_RES_PATH := "res://server/debris-server.cjs"
@@ -31,14 +34,44 @@ const STARTUP_POLL_INTERVAL := 0.25
 var _host := "127.0.0.1"
 var _port := 4000
 
+# Startup readiness, consumed by await_ready(). `_startup_resolved` flips true the
+# moment startup concludes (server answering, or given up on); `_server_available`
+# is the outcome. Callers that ask before it resolves await `ready_resolved`.
+var _startup_resolved := false
+var _server_available := false
+
 
 func _ready() -> void:
 	# Under the headless test/validation runner (dev/ scripts set DEBRIS_HEADLESS),
 	# never touch the network or spawn the bundled server — tests run against mocks.
+	# Resolve readiness immediately so anything that does await_ready() (nothing does
+	# under mocks, but be safe) returns at once instead of hanging.
 	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
+		_finish_startup(false)
 		return
 	_parse_base_url(Backend.base_url)
 	_start()
+
+
+## Await the bundled server's startup. Returns immediately once startup has
+## concluded — true when the server is answering, false when it couldn't be
+## started (the caller's request then fails with a clear error, as before) —
+## otherwise blocks until the in-progress startup resolves. Lets the first
+## requests after a cold launch wait for the server instead of racing it.
+func await_ready() -> bool:
+	if _startup_resolved:
+		return _server_available
+	return await ready_resolved
+
+
+## Record the startup outcome and wake any waiters. Idempotent: only the first
+## call takes effect, so late failure paths can't override an earlier success.
+func _finish_startup(available: bool) -> void:
+	if _startup_resolved:
+		return
+	_server_available = available
+	_startup_resolved = true
+	ready_resolved.emit(available)
 
 
 ## Latest status line, also emitted via status_changed for the UI.
@@ -61,18 +94,21 @@ func _parse_base_url(url: String) -> void:
 func _start() -> void:
 	if await _healthy():
 		_set_status("Using server already running at %s" % Backend.base_url)
+		_finish_startup(true)
 		return
 
 	var node := _find_node()
 	if node.is_empty():
 		_set_status("Node.js not found — start the server manually (set DEBRIS_NODE to override)")
 		push_warning("ServerManager: no usable `node` binary found; server not started")
+		_finish_startup(false)
 		return
 
 	var script := _extract_bundle()
 	if script.is_empty():
 		_set_status("Bundled server is missing (run `yarn bundle`)")
 		push_warning("ServerManager: could not read " + BUNDLE_RES_PATH)
+		_finish_startup(false)
 		return
 
 	var windowed := _launch_in_terminal(node, script)
@@ -90,6 +126,7 @@ func _start() -> void:
 		if pid <= 0:
 			_set_status("Failed to launch the bundled server")
 			push_warning("ServerManager: OS.create_process failed for " + node)
+			_finish_startup(false)
 			return
 		_set_status("Started bundled server in the background (pid %d)" % pid)
 	else:
@@ -102,8 +139,10 @@ func _start() -> void:
 				_set_status("Bundled server ready at %s (running in its own terminal)" % Backend.base_url)
 			else:
 				_set_status("Bundled server ready at %s" % Backend.base_url)
+			_finish_startup(true)
 			return
 	_set_status("Bundled server launched but not yet responding")
+	_finish_startup(false)
 
 
 ## GET /health once; true when the server answers 200.

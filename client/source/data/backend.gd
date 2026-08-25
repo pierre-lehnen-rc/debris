@@ -162,6 +162,12 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 	if _mock != null:
 		return _mock.respond(path, body)
 
+	# On a cold launch the bundled server may still be starting; wait for it so the
+	# first requests (e.g. restoring a project's collections) don't race startup and
+	# fail. Resolves instantly once startup has concluded — and if the server never
+	# came up, the request below still runs and fails with a clear error, as before.
+	await ServerManager.await_ready()
+
 	var http := HTTPRequest.new()
 	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)
