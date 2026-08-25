@@ -41,9 +41,14 @@ var highlighted_collections: Array = []
 # actions each type offers. Both are plain data (JSON-serialisable) so they can
 # later be loaded from a user-editable file; subclasses populate them in _init().
 #
-# type_rules: Array of { "collection": String, "field": String, "type": String }.
+# type_rules: Array of { "collection": String, "field": String, "type": String,
+#   "when"?: Dictionary }.
 #   field == "" (or absent) matches the whole document; otherwise it's a dotted
-#   field path within the document ("u._id").
+#   field path within the document ("u._id"). An optional `when` makes the rule
+#   value-dependent: it's a Dictionary of dotted-path -> required value, all
+#   resolved against the document; the rule only applies when every path holds
+#   its value (see type_for / _when_matches). Rules are tried in order, so list a
+#   conditional rule before any unconditional fallback for the same field.
 # type_actions: Dictionary of type name -> Array of extra action Dictionaries,
 #   each { "id", "label", "target_collection", "filter": Dictionary, "function" }.
 #   In `filter`, a String value shaped like "$dotted.path" is replaced at trigger
@@ -53,8 +58,18 @@ var highlighted_collections: Array = []
 #   Most actions don't need to be listed here: actions_for_type() also derives one
 #   "list" action per field-level rule that references the type (see there), so a
 #   type used as a filterable field anywhere is listable everywhere it appears.
+# type_defs: Dictionary of object-type name -> { sub_field: Array of candidates },
+#   each candidate a { "type": String, "when"?: Dictionary }. It describes the
+#   internal shape of a composite value once, so a "{type, id}" reference can be
+#   named (e.g. MediaCallActor) and reused wherever it appears. Bind an object
+#   type to a field with an ordinary type_rules entry ({collection, field, type});
+#   _compile_type_defs() then expands each binding into flat per-sub-field rules,
+#   rebasing each candidate's `when` (whose keys are paths RELATIVE to the object
+#   instance) onto absolute document paths. Subclasses call _compile_type_defs()
+#   at the end of their _init() once type_rules and type_defs are populated.
 var type_rules: Array = []
 var type_actions: Dictionary = {}
+var type_defs: Dictionary = {}
 
 
 # Public API ------------------------------------------------------------------
@@ -96,16 +111,80 @@ func is_highlighted(collection_name: String) -> bool:
 
 
 # Custom types & actions ------------------------------------------------------
+## Expand every object-typed field binding into flat per-sub-field rules. For each
+## type_rules entry whose `type` names an entry in type_defs, and for each
+## sub-field that entry defines, append one flat rule per candidate: its field is
+## "<binding>.<sub>", it carries the candidate's `type`, and its `when` is the
+## candidate's condition rebased from the object instance onto the document (each
+## key prefixed with the binding field). The original binding rule is kept, so the
+## object row still shows the object type (e.g. MediaCallActor) in the Type
+## column. Call once at the end of a subclass _init(), after populating type_rules
+## and type_defs.
+func _compile_type_defs() -> void:
+	var generated: Array = []
+	for rule in type_rules:
+		var type_name := str(rule.get("type", ""))
+		if not type_defs.has(type_name):
+			continue
+		var base := str(rule.get("field", ""))
+		if base.is_empty():
+			continue  # An object type must bind to a field, not the whole document.
+		var collection := str(rule.get("collection", ""))
+		var fields: Dictionary = type_defs[type_name]
+		for sub in fields:
+			for candidate in fields[sub]:
+				generated.append({
+					"collection": collection,
+					"field": "%s.%s" % [base, str(sub)],
+					"type": str(candidate.get("type", "")),
+					"when": _rebase_when(candidate.get("when", {}), base),
+				})
+	type_rules.append_array(generated)
+
+
+## Rebase an object-relative `when` (keys are paths within the object instance)
+## onto absolute document paths by prefixing each key with the binding field.
+func _rebase_when(when: Variant, base: String) -> Dictionary:
+	var out: Dictionary = {}
+	if when is Dictionary:
+		for key in when:
+			out["%s.%s" % [base, str(key)]] = when[key]
+	return out
+
+
+
 ## Resolve the custom "type" name for a value at `field_path` within a document
 ## of `collection`. field_path == "" means the whole document. Returns "" when no
-## rule matches. `_value` is available for future value-dependent rules.
-func type_for(collection: String, field_path: String, _value: Variant = null) -> String:
+## rule matches. `doc` is the whole document the value lives in; it's needed to
+## evaluate a rule's `when` condition (a value-dependent rule matches only when
+## every `when` path holds its value). Pass null for context-free lookups: any
+## unconditional rule still matches, but conditional ones won't.
+func type_for(collection: String, field_path: String, doc: Variant = null) -> String:
 	for rule in type_rules:
 		if str(rule.get("collection", "")) != collection:
 			continue
-		if str(rule.get("field", "")) == field_path:
-			return str(rule.get("type", ""))
+		if str(rule.get("field", "")) != field_path:
+			continue
+		if not _when_matches(rule.get("when", {}), doc):
+			continue
+		return str(rule.get("type", ""))
 	return ""
+
+
+## Whether every condition in `when` holds for `doc`. Each key is a dotted path
+## resolved against the document; the condition passes when the value at that path
+## equals the required value. An empty or absent `when` always matches. When `doc`
+## is null, only an empty `when` matches (a value-dependent rule can't be judged
+## without the document).
+func _when_matches(when: Variant, doc: Variant) -> bool:
+	if not (when is Dictionary) or (when as Dictionary).is_empty():
+		return true
+	if doc == null:
+		return false
+	for key in when:
+		if _value_at_path(doc, str(key)) != when[key]:
+			return false
+	return true
 
 
 ## The context-menu actions offered by a custom type. Beyond any actions listed
@@ -129,14 +208,30 @@ func actions_for_type(type_name: String) -> Array:
 		if field.is_empty():
 			continue  # Whole-document types can't be used as a filter value.
 		var collection := str(rule.get("collection", ""))
-		var label := "List %s" % _pluralize(_collection_label(collection))
+		# group_label names the collection ("List Messages"); when a collection has
+		# several fields of this type the flat label disambiguates ("… by u._id").
+		# The UI can group by target_collection using group_label + field.
+		var group_label := "List %s" % _pluralize(_collection_label(collection))
+		var label := group_label
 		if _type_field_count(type_name, collection) > 1:
 			label += " by %s" % field
+		# Filter by the clicked value, and fold in the rule's `when` condition so a
+		# value-dependent field also constrains its sibling — e.g. listing media
+		# calls by caller.id adds {"caller.type": "user"}, matching only the rows
+		# where that id really is a user. The `when` values are literals, so
+		# resolve_filter passes them through untouched (only "$" is substituted).
+		var filter := {field: "$"}
+		var when: Variant = rule.get("when", {})
+		if when is Dictionary:
+			for key in when:
+				filter[key] = when[key]
 		actions.append({
 			"id": "list_%s_by_%s" % [collection, field],
 			"label": label,
+			"group_label": group_label,
+			"field": field,
 			"target_collection": collection,
-			"filter": {field: "$"},
+			"filter": filter,
 			"function": "find",
 		})
 	return actions
@@ -182,22 +277,26 @@ func _is_vowel(c: String) -> bool:
 	return c.to_lower() in ["a", "e", "i", "o", "u"]
 
 
-## The custom types that are NOT whole-document (collection) types — i.e. types
-## that only ever appear as field-level rules (UserId, RoomId, …), in first-seen
-## order. Used to let an untyped value be treated as any of these id types and
-## searched for across collections.
+## The custom types that are NOT whole-document or object types — i.e. scalar id
+## types that only ever appear as field-level rules (UserId, RoomId, …), in
+## first-seen order. Used to let an untyped value be treated as any of these id
+## types and searched for across collections. Whole-document types (field == "")
+## and composite object types (those with a type_defs entry, e.g. MediaCallActor)
+## are excluded: neither is a value the user would reinterpret a loose string as.
 func scalar_types() -> Array:
-	var doc_types: Dictionary = {}  # types used as a whole-document type (field == "").
+	var excluded: Dictionary = {}  # object/document types, not scalar ids.
 	for rule in type_rules:
 		if str(rule.get("field", "")).is_empty():
-			doc_types[str(rule.get("type", ""))] = true
+			excluded[str(rule.get("type", ""))] = true
+	for type_name in type_defs:
+		excluded[str(type_name)] = true
 	var out: Array = []
 	var seen: Dictionary = {}
 	for rule in type_rules:
 		if str(rule.get("field", "")).is_empty():
 			continue
 		var type_name := str(rule.get("type", ""))
-		if type_name.is_empty() or seen.has(type_name) or doc_types.has(type_name):
+		if type_name.is_empty() or seen.has(type_name) or excluded.has(type_name):
 			continue
 		seen[type_name] = true
 		out.append(type_name)

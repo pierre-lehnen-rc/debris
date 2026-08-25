@@ -49,6 +49,9 @@ func _init() -> void:
 		{"collection": "rocketchat_read_receipts", "field": "", "type": "ReadReceipt"},
 		{"collection": "rocketchat_roles", "field": "", "type": "Role"},
 
+		# A user's SIP extension.
+		{"collection": "users", "field": "freeSwitchExtension", "type": "SipExtension"},
+
 		# Fields that hold a user's id, wherever they appear across collections.
 		{"collection": "users", "field": "_id", "type": "UserId"},
 		{"collection": "rocketchat_room", "field": "u._id", "type": "UserId"},
@@ -123,14 +126,47 @@ func _init() -> void:
 
 		# Media call ids.
 		{"collection": "rocketchat_media_calls", "field": "_id", "type": "MediaCallId"},
+		{"collection": "rocketchat_media_calls", "field": "uids", "type": "UserId"},  # array
 		{"collection": "rocketchat_media_call_negotiations", "field": "callId", "type": "MediaCallId"},
 		{"collection": "rocketchat_media_call_negotiations", "field": "_id", "type": "MediaCallNegotiationId"},
+
+		# Media call actor references: each is a {type, id} object whose id is a
+		# UserId or a SIP extension depending on the sibling type. They're all the
+		# same MediaCallActor object type (see type_defs below); _compile_type_defs()
+		# expands each into the conditional `.id` sub-rules, so the condition is
+		# written once and reused across every actor field.
+		{"collection": "rocketchat_media_calls", "field": "createdBy", "type": "MediaCallActor"},
+		{"collection": "rocketchat_media_calls", "field": "endedBy", "type": "MediaCallActor"},
+		{"collection": "rocketchat_media_calls", "field": "transferredBy", "type": "MediaCallActor"},
+		{"collection": "rocketchat_media_calls", "field": "divertedBy", "type": "MediaCallActor"},
+		{"collection": "rocketchat_media_calls", "field": "caller", "type": "MediaCallActor"},
+		{"collection": "rocketchat_media_calls", "field": "callee", "type": "MediaCallActor"},
 
 		# Fields that hold a role's id.
 		{"collection": "rocketchat_roles", "field": "_id", "type": "RoleId"},
 		{"collection": "users", "field": "roles", "type": "RoleId"},  # array
 		{"collection": "rocketchat_subscription", "field": "roles", "type": "RoleId"},  # array
 	]
+	# Object types: composite {type, id} shapes defined once and reused wherever a
+	# type_rules entry binds them to a field (see the media-call actor fields above).
+	type_defs = {
+		# A media-call participant reference. `id` is a UserId when the actor is a
+		# user, or a SIP extension number when it's a SIP endpoint — the `when`
+		# paths are relative to the actor object, so the same rule works for every
+		# actor field it's bound to.
+		"MediaCallActor": {
+			"id": [
+				{"type": "UserId", "when": {"type": "user"}},
+				{"type": "SipExtension", "when": {"type": "sip"}},
+			],
+			# Always a SIP extension, regardless of the actor's type (no `when`).
+			"sipExtension": [
+				{"type": "SipExtension"},
+			],
+		},
+	}
+	# Expand object-typed field bindings (MediaCallActor -> per-field `.id` rules).
+	_compile_type_defs()
 	# No explicit type_actions: actions_for_type() auto-generates a "List <X>"
 	# action for every collection/field where a type is used, so e.g. a UserId
 	# value can list users, messages, subscriptions, rooms and video conferences

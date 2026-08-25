@@ -204,10 +204,71 @@ func test_type_for_unknown_returns_empty() -> void:
 	assert_str(_typed_schema().type_for("other", "")).is_equal("")
 
 
+# Object types (type_defs / _compile_type_defs / conditional type_for) ---------
+## A schema with a composite "Actor" object type ({type, id}) bound to two fields.
+## The id sub-field is a UserId or a SIP extension depending on the sibling type.
+func _object_typed_schema() -> DatabaseSchema:
+	var s := DatabaseSchema.new()
+	s.type_rules = [
+		{"collection": "calls", "field": "", "type": "Call"},
+		{"collection": "calls", "field": "caller", "type": "Actor"},
+		{"collection": "calls", "field": "callee", "type": "Actor"},
+	]
+	s.type_defs = {
+		"Actor": {
+			"id": [
+				{"type": "UserId", "when": {"type": "user"}},
+				{"type": "SipExtension", "when": {"type": "sip"}},
+			],
+		},
+	}
+	s._compile_type_defs()
+	return s
+
+
+func test_compile_keeps_object_binding_and_expands_sub_rules() -> void:
+	var s := _object_typed_schema()
+	# The object row still resolves to the object type...
+	assert_str(s.type_for("calls", "caller")).is_equal("Actor")
+	# ...and the id sub-field resolves per the sibling type, for every bound field.
+	assert_str(s.type_for("calls", "caller.id", {"caller": {"type": "user", "id": "u1"}})) \
+		.is_equal("UserId")
+	assert_str(s.type_for("calls", "caller.id", {"caller": {"type": "sip", "id": "1001"}})) \
+		.is_equal("SipExtension")
+	assert_str(s.type_for("calls", "callee.id", {"callee": {"type": "user", "id": "u2"}})) \
+		.is_equal("UserId")
+
+
+func test_conditional_type_for_no_matching_candidate() -> void:
+	var s := _object_typed_schema()
+	# A type outside the candidate set matches nothing.
+	assert_str(s.type_for("calls", "caller.id", {"caller": {"type": "bot", "id": "b1"}})) \
+		.is_equal("")
+
+
+func test_conditional_type_for_without_document_is_empty() -> void:
+	# A value-dependent rule can't be judged without the document.
+	assert_str(_object_typed_schema().type_for("calls", "caller.id")).is_equal("")
+
+
 # scalar_types ----------------------------------------------------------------
 func test_scalar_types_are_field_only_types() -> void:
 	# UserId is only ever a field type; Room/VideoConference/User are document types.
 	assert_array(_typed_schema().scalar_types()).is_equal(["UserId"])
+
+
+func test_scalar_types_excludes_object_types() -> void:
+	# UserId/SipExtension are scalar id types; Actor (object) and Call (doc) aren't.
+	assert_array(_object_typed_schema().scalar_types()).is_equal(["UserId", "SipExtension"])
+
+
+func test_actions_for_conditional_type_fold_when_into_filter() -> void:
+	var actions := _object_typed_schema().actions_for_type("UserId")
+	# One action per bound field (caller.id, callee.id), each carrying its condition
+	# so the generated filter also constrains the sibling type.
+	assert_array(actions).has_size(2)
+	assert_dict(actions[0]["filter"]).is_equal({"caller.id": "$", "caller.type": "user"})
+	assert_dict(actions[1]["filter"]).is_equal({"callee.id": "$", "callee.type": "user"})
 
 
 # typed_fields ----------------------------------------------------------------
@@ -249,6 +310,18 @@ func test_actions_for_type_label_adds_field_when_ambiguous() -> void:
 	# video_conference has two UserId fields, so each label carries its field.
 	assert_str(actions[1]["label"]).is_equal("List Video Conferences by createdBy._id")
 	assert_str(actions[2]["label"]).is_equal("List Video Conferences by endedBy._id")
+
+
+func test_actions_carry_group_label_and_field_for_grouping() -> void:
+	var actions := _typed_schema().actions_for_type("UserId")
+	# rooms has a single UserId field.
+	assert_str(actions[0]["group_label"]).is_equal("List Rooms")
+	assert_str(actions[0]["field"]).is_equal("u._id")
+	# video_conference has two -> same group_label, distinct fields (grouped in the UI).
+	assert_str(actions[1]["group_label"]).is_equal("List Video Conferences")
+	assert_str(actions[1]["field"]).is_equal("createdBy._id")
+	assert_str(actions[2]["group_label"]).is_equal("List Video Conferences")
+	assert_str(actions[2]["field"]).is_equal("endedBy._id")
 
 
 func test_actions_for_type_includes_manual_actions() -> void:

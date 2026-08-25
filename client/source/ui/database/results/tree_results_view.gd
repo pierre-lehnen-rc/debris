@@ -9,6 +9,11 @@ extends DocResultsView
 ## column shows the result or error, and failed actions get an error background.
 ## Nested field rows are unaffected.
 
+# The document currently being rendered, so nested field rows can resolve a
+# value-dependent (`when`) type against their siblings. Set per document in
+# display() before its subtree is built.
+var _current_doc: Variant = null
+
 
 func _ready_view() -> void:
 	set_column_title(0, "Key")
@@ -27,6 +32,7 @@ func display(documents: Array, start_index: int) -> void:
 	for i in documents.size():
 		var doc_index := start_index + i
 		var doc: Dictionary = documents[i]
+		_current_doc = doc
 		var item := create_item(root)
 		var label: String = str(doc.get("_id", "(document)"))
 		if _log_mode:
@@ -89,7 +95,7 @@ func _add_value_item(parent: TreeItem, key: String, value: Variant, path: String
 	var item := create_item(parent)
 	item.set_text(0, key)
 	item.set_custom_color(0, AppTheme.TEXT)
-	var field_type := _resolve_type(path, value)
+	var field_type := _resolve_type(path, _current_doc)
 	if field_type.is_empty():
 		item.set_text(2, _type_name(value))
 		item.set_custom_color(2, AppTheme.TEXT_DIM)

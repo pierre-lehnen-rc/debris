@@ -59,6 +59,55 @@ func test_type_for_unknown_returns_empty() -> void:
 	assert_str(schema.type_for("users", "nosuchfield")).is_equal("")
 
 
+# Media-call actor object type (conditional id) -------------------------------
+func test_media_call_actor_is_object_type() -> void:
+	# Each actor field resolves to the MediaCallActor object type.
+	for field in ["createdBy", "endedBy", "transferredBy", "divertedBy", "caller", "callee"]:
+		assert_str(schema.type_for("rocketchat_media_calls", field)).is_equal("MediaCallActor")
+
+
+func test_media_call_actor_id_follows_sibling_type() -> void:
+	var user_call := {"caller": {"type": "user", "id": "u1"}, "callee": {"type": "sip", "id": "1001"}}
+	# The caller is a user -> its id is a UserId; the callee is SIP -> a SIP extension.
+	assert_str(schema.type_for("rocketchat_media_calls", "caller.id", user_call)).is_equal("UserId")
+	assert_str(schema.type_for("rocketchat_media_calls", "callee.id", user_call)) \
+		.is_equal("SipExtension")
+
+
+func test_media_call_actor_type_excluded_from_scalar_types() -> void:
+	# The object type isn't offered as an "unknown type" reinterpretation, but the
+	# scalar id types it introduces are.
+	assert_bool(schema.scalar_types().has("MediaCallActor")).is_false()
+	assert_array(schema.scalar_types()).contains(["UserId", "SipExtension"])
+
+
+func test_media_call_actor_sip_extension_is_unconditional() -> void:
+	# sipExtension is always a SIP extension, no document/sibling needed.
+	assert_str(schema.type_for("rocketchat_media_calls", "caller.sipExtension")).is_equal("SipExtension")
+	assert_str(schema.type_for("rocketchat_media_calls", "callee.sipExtension")).is_equal("SipExtension")
+
+
+func test_media_call_uids_is_user_id() -> void:
+	assert_str(schema.type_for("rocketchat_media_calls", "uids")).is_equal("UserId")
+
+
+func test_user_free_switch_extension_is_sip_extension() -> void:
+	assert_str(schema.type_for("users", "freeSwitchExtension")).is_equal("SipExtension")
+
+
+func test_media_call_user_action_carries_type_condition() -> void:
+	# The "List MediaCalls by caller.id" UserId action folds in the sibling
+	# condition, so resolving it against a clicked id yields both constraints.
+	var action := {}
+	for a in schema.actions_for_type("UserId"):
+		if a.get("target_collection") == "rocketchat_media_calls" and a["filter"].has("caller.id"):
+			action = a
+			break
+	assert_dict(action).is_not_empty()
+	assert_dict(DatabaseSchema.resolve_filter(action["filter"], "RWWhjYadQicPFPQfq")) \
+		.is_equal({"caller.id": "RWWhjYadQicPFPQfq", "caller.type": "user"})
+
+
 # mutate_collection_name ------------------------------------------------------
 func test_mutate_name_leaves_plain_core_collection_unchanged() -> void:
 	# "rocketchat_room" -> drop prefix -> "room" -> re-add prefix -> "rocketchat_room".

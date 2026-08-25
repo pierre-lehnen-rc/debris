@@ -112,12 +112,31 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	_cross_query = enabled
 
 
-## The custom type name for a value at `field_path` in the current collection, or
+## The custom type name for the value at `field_path` in the current collection, or
 ## "" when no schema/collection/rule applies. field_path == "" is the document.
-func _resolve_type(field_path: String, value: Variant) -> String:
+## `doc` is the whole document the field lives in — the schema needs it to judge a
+## value-dependent (`when`) rule, e.g. a media-call actor's id whose type follows
+## its sibling `type`. Pass the document itself when resolving the document type.
+func _resolve_type(field_path: String, doc: Variant) -> String:
 	if _schema == null or _collection.is_empty():
 		return ""
-	return _schema.type_for(_collection, field_path, value)
+	return _schema.type_for(_collection, field_path, doc)
+
+
+## The whole document a `TreeItem` belongs to: climb to its top-level ancestor
+## (whose parent is the hidden root) and read the `value` its metadata carries.
+## Returns null when there is no such ancestor or metadata.
+func _doc_from_item(item: TreeItem) -> Variant:
+	var root := get_root()
+	var cur := item
+	while cur != null and cur.get_parent() != root:
+		cur = cur.get_parent()
+	if cur == null:
+		return null
+	var meta: Variant = cur.get_metadata(0)
+	if meta is Dictionary:
+		return (meta as Dictionary).get("value")
+	return null
 
 
 ## Override: render a page of documents. `start_index` is the absolute index of
@@ -201,7 +220,7 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 		var field_path: String = str((meta as Dictionary).get("path", ""))
 		if field_path.is_empty():
 			field_path = _meta_path(item)
-		var type_name := _resolve_type(field_path, value)
+		var type_name := _resolve_type(field_path, _doc_from_item(item))
 		if not type_name.is_empty():
 			_add_inline_actions(type_name, value)
 		elif value is String:
@@ -224,7 +243,13 @@ func _add_document_type_menus(doc: Variant) -> void:
 		# values to search by, so skip the attribute entirely.
 		if field_value is Array and (field_value as Array).is_empty():
 			continue
-		var actions := _schema.actions_for_type(entry["type"])
+		# Re-resolve against this document rather than trusting the rule's static
+		# type: a value-dependent field (e.g. an actor's id) resolves to the type
+		# matching this document's siblings, so a SIP id offers SIP actions.
+		var field_type := _resolve_type(field_path, doc)
+		if field_type.is_empty():
+			continue
+		var actions := _schema.actions_for_type(field_type)
 		if not actions.is_empty():
 			_add_actions_submenu(field_path, actions, field_value)
 
@@ -237,16 +262,47 @@ func _add_inline_actions(type_name: String, source: Variant) -> void:
 	if actions.is_empty():
 		return
 	_doc_menu.add_separator()
-	for action in actions:
-		_doc_menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+	_add_grouped_actions(_doc_menu, actions, source)
 
 
 ## Add a `label` sub-menu to the main menu holding `actions`, each acting on `source`.
 func _add_actions_submenu(label: String, actions: Array, source: Variant) -> void:
 	var submenu := _make_submenu()
-	for action in actions:
-		submenu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+	_add_grouped_actions(submenu, actions, source)
 	_doc_menu.add_submenu_node_item(label, submenu)
+
+
+## Add `actions` into `menu`, grouping the auto-generated cross-collection
+## "List <collection>" actions by their target collection: a collection reached
+## through several typed fields collapses into one "List <collection>" sub-menu
+## with a "by <field>" item each, while a collection with a single field stays a
+## flat item. Manual actions (those without a target collection/field) render flat
+## in place. `source` is the value every action resolves its filter against.
+func _add_grouped_actions(menu: PopupMenu, actions: Array, source: Variant) -> void:
+	var order: Array = []  # target collections in first-seen order.
+	var groups: Dictionary = {}
+	for action in actions:
+		var collection := str(action.get("target_collection", ""))
+		var field := str(action.get("field", ""))
+		if collection.is_empty() or field.is_empty():
+			menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+			continue
+		if not groups.has(collection):
+			groups[collection] = []
+			order.append(collection)
+		(groups[collection] as Array).append(action)
+	for collection in order:
+		var group: Array = groups[collection]
+		if group.size() == 1:
+			var action: Dictionary = group[0]
+			menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+			continue
+		var submenu := _make_submenu()
+		for action in group:
+			var item_label := "by %s" % str((action as Dictionary).get("field", ""))
+			submenu.add_item(item_label, CUSTOM_ACTION_BASE + _register_entry(action, source))
+		var title := str((group[0] as Dictionary).get("group_label", _action_label(group[0])))
+		menu.add_submenu_node_item(title, submenu)
 
 
 ## Offer an "Unknown Type" sub-menu on an untyped string: one sub-menu per known
@@ -261,8 +317,7 @@ func _add_unknown_type_menu(value: Variant) -> void:
 		if actions.is_empty():
 			continue
 		var type_menu := _make_submenu()
-		for action in actions:
-			type_menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, value))
+		_add_grouped_actions(type_menu, actions, value)
 		root.add_submenu_node_item(type_name, type_menu)
 	if root.get_item_count() == 0:
 		return  # No usable scalar types; leave the menu unchanged (root is freed on next open).
