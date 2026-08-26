@@ -262,14 +262,16 @@ func test_scalar_types_excludes_object_types() -> void:
 	assert_array(_object_typed_schema().scalar_types()).is_equal(["UserId", "SipExtension"])
 
 
-func test_actions_for_object_type_query_by_key_fields() -> void:
-	# An object (composite) type lists by its identifying sub-fields (type + id)
-	# with dot notation, not the whole embedded object.
+func test_actions_for_object_type_are_pickers_keyed_by_identity() -> void:
+	# An object (composite) type is listed via an attribute picker: flagged
+	# pick_fields, with its identity (type + id) as the default-checked key_fields.
 	var actions := _object_typed_schema().actions_for_type("Actor")
 	assert_array(actions).has_size(2)  # caller + callee bindings
+	assert_bool(actions[0]["pick_fields"]).is_true()
+	assert_array(actions[0]["key_fields"]).is_equal(["type", "id"])
+	# The fallback filter still matches by identity with dot notation, resolving
+	# against an actor object.
 	assert_dict(actions[0]["filter"]).is_equal({"caller.type": "$type", "caller.id": "$id"})
-	# Resolving against an actor object yields a dot-notation type+id query, dropping
-	# the noise fields.
 	var actor := {"type": "user", "id": "u1", "displayName": "User 1", "username": "u1"}
 	assert_dict(DatabaseSchema.resolve_filter(actions[0]["filter"], actor)) \
 		.is_equal({"caller.type": "user", "caller.id": "u1"})

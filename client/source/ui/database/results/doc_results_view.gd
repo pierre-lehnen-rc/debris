@@ -374,15 +374,86 @@ func _add_grouped_actions(menu: PopupMenu, actions: Array, source: Variant) -> v
 	for collection in order:
 		var group: Array = groups[collection]
 		if group.size() == 1:
-			var action: Dictionary = group[0]
-			menu.add_item(_action_label(action), CUSTOM_ACTION_BASE + _register_entry(action, source))
+			_add_grouped_leaf(menu, group[0], _action_label(group[0]), source)
 			continue
 		var submenu := _make_submenu()
 		for action in group:
-			var item_label := "by %s" % str((action as Dictionary).get("field", ""))
-			submenu.add_item(item_label, CUSTOM_ACTION_BASE + _register_entry(action, source))
+			_add_grouped_leaf(submenu, action, "by %s" % str((action as Dictionary).get("field", "")), source)
 		var title := str((group[0] as Dictionary).get("group_label", _action_label(group[0])))
 		menu.add_submenu_node_item(title, submenu)
+
+
+## Add one action leaf into `menu` under `label`. An object-type "List by" action
+## (pick_fields) becomes a checkable attribute-picker sub-menu; any other action is
+## a plain item that runs immediately.
+func _add_grouped_leaf(menu: PopupMenu, action: Dictionary, label: String, source: Variant) -> void:
+	if action.get("pick_fields", false):
+		_add_object_list_picker(menu, label, action, source)
+	else:
+		menu.add_item(label, CUSTOM_ACTION_BASE + _register_entry(action, source))
+
+
+## A checkable sub-menu letting the user choose which of the object's attributes to
+## query by. Each scalar attribute is a toggle (the type's identity, key_fields, is
+## checked by default), and a final "List <collection>" item runs a find on the
+## chosen attributes as dot-notation equality (order-insensitive, unlike matching
+## the whole embedded object). The menu stays open while toggling.
+func _add_object_list_picker(menu: PopupMenu, label: String, action: Dictionary, source: Variant) -> void:
+	if not (source is Dictionary):
+		return
+	var keys := _scalar_keys(source)
+	if keys.is_empty():
+		return
+	var defaults: Dictionary = {}
+	for k in action.get("key_fields", []):
+		defaults[str(k)] = true
+	var picker := PopupMenu.new()
+	picker.theme = AppTheme.shared()
+	picker.hide_on_checkable_item_selection = false
+	_custom_submenus.append(picker)
+	for i in keys.size():
+		picker.add_check_item(str(keys[i]), i + 1)
+		picker.set_item_checked(i, defaults.has(str(keys[i])))
+	picker.add_separator()
+	picker.add_item(str(action.get("group_label", "List")), 0)  # id 0 = run
+	picker.id_pressed.connect(_on_picker_pressed.bind(
+		picker, keys, str(action.get("field", "")),
+		source, str(action.get("target_collection", _collection)),
+		str(action.get("function", "find")),
+	))
+	menu.add_submenu_node_item(label, picker)
+
+
+## Handle a click in an attribute picker (id 0 runs the query; any other id toggles
+## that attribute's checkbox and keeps the menu open).
+func _on_picker_pressed(
+	id: int, picker: PopupMenu, keys: Array, field: String,
+	source: Variant, target: String, function: String
+) -> void:
+	if id != 0:
+		var idx := picker.get_item_index(id)
+		picker.set_item_checked(idx, not picker.is_item_checked(idx))
+		return
+	var filter: Dictionary = {}
+	for i in keys.size():
+		if picker.is_item_checked(picker.get_item_index(i + 1)):
+			filter["%s.%s" % [field, str(keys[i])]] = (source as Dictionary)[keys[i]]
+	open_query_requested.emit(target, filter, function)
+
+
+## An object's scalar attribute names (in the object's own order) — the candidates
+## for an attribute-picker query. Nested objects and arrays are skipped: matching
+## them reintroduces the order-sensitive whole-object equality this avoids.
+func _scalar_keys(obj: Variant) -> Array:
+	var out: Array = []
+	if not (obj is Dictionary):
+		return out
+	for k in obj:
+		var v: Variant = (obj as Dictionary)[k]
+		if (v is Dictionary and _ejson_scalar(v).is_empty()) or v is Array:
+			continue
+		out.append(k)
+	return out
 
 
 ## Offer an "Unknown Type" sub-menu on an untyped string: one sub-menu per known

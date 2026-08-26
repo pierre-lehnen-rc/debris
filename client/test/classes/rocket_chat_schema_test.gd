@@ -124,15 +124,17 @@ func test_collection_for_endpoint_unmapped_is_empty() -> void:
 	assert_str(schema.collection_for_endpoint("bananas", "bananas.list")).is_equal("")
 
 
-func test_media_call_actor_action_queries_by_type_and_id() -> void:
-	# "List Media Calls by <actor>" matches the actor by type + id (dot notation),
-	# not by the whole embedded object.
+func test_media_call_actor_action_is_picker_keyed_by_type_and_id() -> void:
+	# "List Media Calls by <actor>" is an attribute picker defaulting to type + id;
+	# its fallback filter matches by those two with dot notation, not the whole object.
 	var action := {}
 	for a in schema.actions_for_type("MediaCallActor"):
 		if a["filter"].has("callee.id"):
 			action = a
 			break
 	assert_dict(action).is_not_empty()
+	assert_bool(action["pick_fields"]).is_true()
+	assert_array(action["key_fields"]).is_equal(["type", "id"])
 	assert_dict(action["filter"]).is_equal({"callee.type": "$type", "callee.id": "$id"})
 	var actor := {"type": "user", "id": "RWWhjYadQicPFPQfq", "sipExtension": "2002", "username": "u2"}
 	assert_dict(DatabaseSchema.resolve_filter(action["filter"], actor)) \

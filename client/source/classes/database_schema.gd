@@ -227,7 +227,7 @@ func actions_for_type(type_name: String) -> Array:
 		if _type_field_count(type_name, collection) > 1:
 			label += " by %s" % field
 		var filter := _list_filter(type_name, field, rule)
-		actions.append({
+		var action := {
 			"id": "list_%s_by_%s" % [collection, field],
 			"label": label,
 			"group_label": group_label,
@@ -235,7 +235,15 @@ func actions_for_type(type_name: String) -> Array:
 			"target_collection": collection,
 			"filter": filter,
 			"function": "find",
-		})
+		}
+		# An object (composite) type is listed via an attribute picker (the UI offers
+		# a checkable sub-menu of the object's attributes): pick_fields flags it, and
+		# key_fields are the attributes checked by default (its identity). `filter`
+		# stays as a sensible fallback if the picker is unavailable.
+		if type_defs.has(type_name):
+			action["pick_fields"] = true
+			action["key_fields"] = _object_key_fields(type_name)
+		actions.append(action)
 	return actions
 
 
