@@ -32,6 +32,14 @@ var _item_noun := "document"
 ## Schema + collection driving custom types/actions in the tree/table views.
 var _schema: DatabaseSchema = null
 var _collection := ""
+## Raw-response mode (endpoint results): the Tree/Text render `_raw` verbatim and
+## the Table is hidden (it needs a document array). `_raw_entities` are the entity
+## objects within `_raw` to type; `_row_count` is how many rows the page holds (for
+## the count label and pager, since `_documents` isn't used in this mode).
+var _raw_mode := false
+var _raw: Variant = null
+var _raw_entities: Array = []
+var _row_count := 0
 
 @onready var _header: PanelContainer = %Header
 @onready var _pager: HBoxContainer = %Pager
@@ -96,12 +104,14 @@ func set_item_noun(noun: String) -> void:
 
 
 ## Set the schema + collection used to resolve custom types/actions, forwarding
-## them to the tree and table views, then re-render so Type columns update.
-func set_type_context(schema: DatabaseSchema, collection: String) -> void:
+## them to the tree and table views, then re-render so Type columns update. `owns`
+## is false when `collection` is borrowed only to type endpoint rows (the API
+## side) rather than being this view's own queryable collection.
+func set_type_context(schema: DatabaseSchema, collection: String, owns := true) -> void:
 	_schema = schema
 	_collection = collection
-	_tree_view.set_type_context(schema, collection)
-	_table_view.set_type_context(schema, collection)
+	_tree_view.set_type_context(schema, collection, owns)
+	_table_view.set_type_context(schema, collection, owns)
 	_rebuild()
 
 
@@ -128,6 +138,30 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	_table_view.set_cross_query_enabled(enabled)
 
 
+## Switch to raw-response rendering (endpoint tabs): the Tree/Text show the raw
+## body via show_raw(), and the Table mode is hidden since it needs a document
+## array. Called once when the tab is set up. DB tabs leave this off.
+func set_raw_mode(enabled: bool) -> void:
+	_raw_mode = enabled
+	_mode_buttons[ViewMode.TABLE].visible = not enabled
+	_tree_view.set_raw_mode(enabled)
+	_table_view.set_raw_mode(enabled)
+	if enabled and _mode == ViewMode.TABLE:
+		_set_mode(ViewMode.TREE)
+
+
+## Display a raw response body (endpoint results). `entity_roots` are the objects
+## within `raw` to type as the endpoint's collection; `row_count` is the number of
+## result rows for the count label and pager. Requires set_raw_mode(true).
+func show_raw(raw: Variant, entity_roots: Array, row_count: int) -> void:
+	_raw = raw
+	_raw_entities = entity_roots
+	_row_count = row_count
+	_update_count()
+	_update_pager()
+	_rebuild()
+
+
 ## Opens the document editor in insert mode (used by the sidebar's
 ## "Insert Document…" action via the database workspace, and the views' context menus).
 func request_insert() -> void:
@@ -150,8 +184,22 @@ func show_page(documents: Array) -> void:
 	_rebuild()
 
 
+## Rows currently shown: the raw page's row count in raw mode, else the document
+## page size.
+func _shown_count() -> int:
+	return _row_count if _raw_mode else _documents.size()
+
+
 func _update_count() -> void:
-	var n := _documents.size()
+	# The count is only meaningful for a flat list of rows: a document page, or a
+	# raw response that is itself an array. When a raw response is an object, its
+	# array attributes already show their own "[N elements]" counts inline, so the
+	# top-level total is redundant (and meaningless for a single object) — hide it.
+	var show_count := not _raw_mode or _raw is Array
+	_count_label.visible = show_count
+	if not show_count:
+		return
+	var n := _shown_count()
 	_count_label.text = "%d %s%s" % [n, _item_noun, "" if n == 1 else "s"]
 
 
@@ -167,14 +215,21 @@ func _set_mode(mode: ViewMode) -> void:
 
 func _rebuild() -> void:
 	# The sub-views number rows by absolute index, so the page's first document
-	# sits at _offset.
+	# sits at _offset. In raw mode the Tree/Text render the raw body instead (the
+	# Table is hidden), so nothing is coerced into a document array.
 	match _mode:
 		ViewMode.TREE:
-			_tree_view.display(_documents, _offset)
+			if _raw_mode:
+				_tree_view.display_raw(_raw, _raw_entities)
+			else:
+				_tree_view.display(_documents, _offset)
 		ViewMode.TABLE:
 			_table_view.display(_documents, _offset)
 		ViewMode.TEXT:
-			_text_view.display(_documents)
+			if _raw_mode:
+				_text_view.display_value(_raw)
+			else:
+				_text_view.display(_documents)
 
 
 # Pagination (server-side) ----------------------------------------------------
@@ -205,7 +260,7 @@ func _apply_limit_field(_text: String = "") -> void:
 
 
 func _update_pager() -> void:
-	var n := _documents.size()
+	var n := _shown_count()
 	_page_label.text = "0-0" if n == 0 else "%d-%d" % [_offset + 1, _offset + n]
 	_offset_field.text = str(_offset)
 	_limit_field.text = str(_limit)

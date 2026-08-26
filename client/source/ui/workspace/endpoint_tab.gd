@@ -100,12 +100,20 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	_results.set_cross_query_enabled(enabled)
 
 
-## Apply the attached database's schema so result string values can be searched via
-## the schema's "Unknown Type" actions. Endpoint results have no collection of their
-## own, so an empty collection is passed.
+## Apply the attached database's schema. Rocket.Chat REST payloads mirror the
+## stored documents, so the schema maps this endpoint (by its payload key, falling
+## back to its namespace) to the DB collection whose rules type the rows (e.g. a
+## users endpoint -> the `users` collection, so ids show as UserId). The collection
+## is borrowed only for typing (owns = false): the Type column lights up
+## regardless, while the schema's DB-targeting actions stay gated on a database
+## being attached (cross-query). An unmapped endpoint gets "", falling back to the
+## plain "Unknown Type" handoff.
 func set_schema(schema: DatabaseSchema) -> void:
 	if is_node_ready():
-		_results.set_type_context(schema, "")
+		var collection := ""
+		if schema != null and _endpoint != null:
+			collection = schema.collection_for_endpoint(_endpoint.result_key, _endpoint.id)
+		_results.set_type_context(schema, collection, false)
 
 
 func tab_title() -> String:
@@ -125,6 +133,9 @@ func _ready() -> void:
 	_method_label.text = _endpoint.method
 	_path_label.text = _endpoint.path
 	_summary_label.text = _endpoint.summary
+	# Endpoint results show the raw response body (Tree/Text), not editable document
+	# pages, so the Table mode is hidden and nothing is coerced into an array.
+	_results.set_raw_mode(true)
 	_results.set_pagination_enabled(_endpoint.paginated)
 	_results.set_item_noun(_endpoint.noun())
 	_build_form()
@@ -594,25 +605,27 @@ func _fetch_page(offset: int, limit: int) -> void:
 		var message: String = result.get("error", "request failed")
 		if raw is Dictionary and raw.get("error") is String:
 			message = raw["error"]
-		_results.show_page([raw] if raw is Dictionary else [])
+		# Still show the raw error body so the response is inspectable.
+		_results.show_raw(raw, [], 0)
 		status_changed.emit("%s failed: %s" % [_endpoint.id, message])
 		return
 
-	var extracted := _extract(raw)
-	var data := display_rows(raw, extracted, _endpoint.paginated)
-	_results.show_page(data)
-	var total := int(raw["total"]) if (raw is Dictionary and raw.has("total")) else data.size()
+	# Show the raw response verbatim; the entity objects within it drive typing and
+	# the row count.
+	var entities := collect_entities(raw)
+	_results.show_raw(raw, entities, entities.size())
+	var total := int(raw["total"]) if (raw is Dictionary and raw.has("total")) else entities.size()
 	if _endpoint.paginated:
-		var first := (offset + 1) if data.size() > 0 else 0
-		var last := offset + data.size()
+		var first := (offset + 1) if entities.size() > 0 else 0
+		var last := offset + entities.size()
 		status_changed.emit("%s — %d–%d of %d" % [_endpoint.id, first, last, total])
-	elif extracted.is_empty() and raw is Dictionary:
-		# Fell back to the whole response (the inferred payload key was empty, e.g.
-		# users.delete -> { deletedRooms: [] }); report success rather than a count.
+	elif entities.is_empty():
+		# No entity rows (an action response, or an empty payload); report success
+		# rather than a count.
 		status_changed.emit("%s — success" % _endpoint.id)
 	else:
 		status_changed.emit("%s — %d %s%s" % [
-			_endpoint.id, data.size(), _endpoint.noun(), "" if data.size() == 1 else "s",
+			_endpoint.id, entities.size(), _endpoint.noun(), "" if entities.size() == 1 else "s",
 		])
 
 
@@ -670,34 +683,36 @@ func _http_method(method: String) -> int:
 			return HTTPClient.METHOD_GET
 
 
-## Pull the rows to display out of a response body. Uses the endpoint's inferred
-## result_key: an array becomes the rows, a single object becomes one row. With no
-## usable key, the whole response object is shown as a single row.
-func _extract(raw: Variant) -> Array:
+## The entity objects within a response body — every object carrying an "_id",
+## which for Rocket.Chat identifies a stored document. These are both the rows the
+## count/pager report and the typing roots for the raw tree. The rule:
+##   - The whole body, when it is itself an entity (a single-object response like
+##     …getRoom): its own array fields (uids, …) are not mistaken for entities.
+##   - Otherwise the entities among the body's direct non-meta children: dict
+##     children (channels.info -> { channel: {…} }) and the elements of array
+##     children (users.list -> { users: [ … ] }, rooms.get -> { update, remove }).
+## Nested field arrays (a message's mentions) sit deeper than one level, so they
+## stay fields of their entity rather than becoming entities themselves.
+static func collect_entities(raw: Variant) -> Array:
+	if raw is Dictionary:
+		if (raw as Dictionary).has("_id"):
+			return [raw]
+		var out: Array = []
+		for key in raw:
+			if key in OpenApiParser.META_KEYS:
+				continue
+			var v: Variant = (raw as Dictionary)[key]
+			if v is Dictionary and (v as Dictionary).has("_id"):
+				out.append(v)
+			elif v is Array:
+				for e in v:
+					if e is Dictionary and (e as Dictionary).has("_id"):
+						out.append(e)
+		return out
 	if raw is Array:
-		return raw
-	if not (raw is Dictionary):
-		return [] if raw == null else [{"value": raw}]
-
-	var dict: Dictionary = raw
-	var key := _endpoint.result_key
-	if key != "" and dict.has(key):
-		var payload: Variant = dict[key]
-		if payload is Array:
-			return payload
-		if payload is Dictionary:
-			return [payload]
-		return [{key: payload}]
-	return [dict]
-
-
-## The rows to actually display for a successful response. Normally the extracted
-## payload, but when that comes back empty for a non-paginated call we fall back to
-## the whole response object so an action endpoint whose payload key is empty (e.g.
-## users.delete -> { deletedRooms: [], success: true }) still shows its result
-## instead of a blank area. Paginated endpoints keep an empty page (it legitimately
-## means "no more rows").
-static func display_rows(raw: Variant, extracted: Array, paginated: bool) -> Array:
-	if extracted.is_empty() and not paginated and raw is Dictionary:
-		return [raw]
-	return extracted
+		var out: Array = []
+		for e in raw:
+			if e is Dictionary and (e as Dictionary).has("_id"):
+				out.append(e)
+		return out
+	return []

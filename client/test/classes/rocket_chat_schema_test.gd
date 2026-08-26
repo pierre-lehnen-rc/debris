@@ -95,6 +95,35 @@ func test_user_free_switch_extension_is_sip_extension() -> void:
 	assert_str(schema.type_for("users", "freeSwitchExtension")).is_equal("SipExtension")
 
 
+# collection_for_endpoint (endpoint response typing) --------------------------
+func test_collection_for_endpoint_maps_by_result_key() -> void:
+	assert_str(schema.collection_for_endpoint("user", "users.info")).is_equal("users")
+	assert_str(schema.collection_for_endpoint("users", "users.list")).is_equal("users")
+	# A sub-entity list types by its payload key, not its namespace.
+	assert_str(schema.collection_for_endpoint("members", "channels.members")).is_equal("users")
+	assert_str(schema.collection_for_endpoint("message", "chat.getMessage")).is_equal("rocketchat_message")
+
+
+func test_collection_for_endpoint_falls_back_to_namespace() -> void:
+	# Generic payload keys ("update"/"remove") or bare objects fall back to the
+	# operationId namespace so the entity is still recognised.
+	assert_str(schema.collection_for_endpoint("update", "rooms.get")).is_equal("rocketchat_room")
+	assert_str(schema.collection_for_endpoint("", "rooms.adminRooms.getRoom")).is_equal("rocketchat_room")
+	assert_str(schema.collection_for_endpoint("update", "subscriptions.get")) \
+		.is_equal("rocketchat_subscription")
+	assert_str(schema.collection_for_endpoint("", "chat.getMessage")).is_equal("rocketchat_message")
+
+
+func test_collection_for_endpoint_is_case_insensitive() -> void:
+	assert_str(schema.collection_for_endpoint("User", "")).is_equal("users")
+	assert_str(schema.collection_for_endpoint("", "Rooms.Get")).is_equal("rocketchat_room")
+
+
+func test_collection_for_endpoint_unmapped_is_empty() -> void:
+	assert_str(schema.collection_for_endpoint("", "")).is_equal("")
+	assert_str(schema.collection_for_endpoint("bananas", "bananas.list")).is_equal("")
+
+
 func test_media_call_user_action_carries_type_condition() -> void:
 	# The "List MediaCalls by caller.id" UserId action folds in the sibling
 	# condition, so resolving it against a clicked id yields both constraints.

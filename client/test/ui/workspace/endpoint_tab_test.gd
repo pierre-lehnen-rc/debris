@@ -101,23 +101,35 @@ func test_route_args_path_key_is_not_also_sent_as_query_or_body() -> void:
 	assert_dict(out["query"]).is_equal({"n": 1})
 
 
-# display_rows ----------------------------------------------------------------
-func test_display_rows_passes_non_empty_extracted_through() -> void:
-	var rows := EndpointTab.display_rows({"users": [1]}, [1], false)
-	assert_array(rows).is_equal([1])
+# collect_entities ------------------------------------------------------------
+func test_collect_entities_list_response() -> void:
+	# users.list -> { users: [ … ] }: the array's entities are the rows.
+	var raw := {"users": [{"_id": "a"}, {"_id": "b"}], "count": 2, "total": 2, "success": true}
+	assert_array(EndpointTab.collect_entities(raw)).is_equal([{"_id": "a"}, {"_id": "b"}])
 
 
-func test_display_rows_empty_non_paginated_falls_back_to_whole_response() -> void:
-	# users.delete -> { deletedRooms: [], success: true }: the inferred payload key
-	# is empty, so the whole envelope is shown rather than a blank results area.
-	var raw := {"deletedRooms": [], "success": true}
-	assert_array(EndpointTab.display_rows(raw, [], false)).is_equal([raw])
+func test_collect_entities_wrapped_single_object() -> void:
+	# channels.info -> { channel: {…} }: the wrapped entity is the single row.
+	var raw := {"channel": {"_id": "r1"}, "success": true}
+	assert_array(EndpointTab.collect_entities(raw)).is_equal([{"_id": "r1"}])
 
 
-func test_display_rows_empty_paginated_stays_empty() -> void:
-	# A paginated list past its end legitimately has no rows — don't show the envelope.
-	assert_array(EndpointTab.display_rows({"users": [], "total": 0}, [], true)).is_empty()
+func test_collect_entities_bare_single_object() -> void:
+	# …getRoom returns the entity itself; its own array fields (uids) aren't entities.
+	var raw := {"_id": "r1", "name": "general", "uids": ["u1", "u2"], "success": true}
+	assert_array(EndpointTab.collect_entities(raw)).is_equal([raw])
 
 
-func test_display_rows_empty_non_dictionary_stays_empty() -> void:
-	assert_array(EndpointTab.display_rows(null, [], false)).is_empty()
+func test_collect_entities_multiple_sections() -> void:
+	# rooms.get -> { update: [...], remove: [...] }: entities from both sections.
+	var raw := {"update": [{"_id": "r1"}], "remove": [{"_id": "r2"}], "success": true}
+	assert_array(EndpointTab.collect_entities(raw)).is_equal([{"_id": "r1"}, {"_id": "r2"}])
+
+
+func test_collect_entities_array_response() -> void:
+	assert_array(EndpointTab.collect_entities([{"_id": "a"}, {"nope": 1}])).is_equal([{"_id": "a"}])
+
+
+func test_collect_entities_none_for_action_response() -> void:
+	# An action response with no _id-bearing objects yields no entity rows.
+	assert_array(EndpointTab.collect_entities({"success": true, "deletedRooms": []})).is_empty()

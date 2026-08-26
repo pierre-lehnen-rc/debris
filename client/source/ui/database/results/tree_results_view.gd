@@ -14,6 +14,12 @@ extends DocResultsView
 # display() before its subtree is built.
 var _current_doc: Variant = null
 
+# Entity object references within a raw response that act as typing roots (see
+# display_raw): each is typed as _collection, and its descendant fields resolve
+# relative to it. Matched by identity so nested field arrays aren't mistaken for
+# entities.
+var _raw_entity_roots: Array = []
+
 
 func _ready_view() -> void:
 	set_column_title(0, "Key")
@@ -52,6 +58,92 @@ func display(documents: Array, start_index: int) -> void:
 		item.set_metadata(0, {"doc_index": doc_index, "key": "", "name": label, "value": doc})
 		_add_dict_children(item, doc, "")
 		item.set_collapsed(i != 0)  # expand the first document on the page
+
+
+## Render an endpoint's raw response body verbatim (no array coercion), so the
+## Text/Tree show exactly what came back. `entity_roots` are the objects within
+## `raw` to type as _collection (see DocResultsView._collection); each is a typing
+## root whose descendant fields resolve relative to it, while envelope-level rows
+## (the wrapper, pagination meta) stay untyped. The top level is expanded so the
+## response's shape is visible at a glance.
+func display_raw(raw: Variant, entity_roots: Array) -> void:
+	clear()
+	_raw_entity_roots = entity_roots
+	var root := create_item()
+	if raw is Dictionary:
+		# A body that is itself an entity types its own fields; an envelope doesn't.
+		var type_doc: Variant = raw if _is_entity_root(raw) else null
+		for key in raw:
+			var base := str(key) if type_doc != null else ""
+			_render_raw(root, str(key), (raw as Dictionary)[key], type_doc, base)
+	elif raw is Array:
+		for i in (raw as Array).size():
+			_render_raw(root, "[%d]" % i, (raw as Array)[i], null, "")
+	elif raw != null:
+		var item := create_item(root)
+		item.set_text(0, "(value)")
+		item.set_text(1, _preview(raw))
+		item.set_custom_color(1, _value_color(raw))
+		item.set_text(2, _type_name(raw))
+		item.set_custom_color(2, AppTheme.TEXT_DIM)
+		item.set_metadata(0, {"key": "", "name": "", "value": raw, "path": "", "type_doc": null})
+	var child := root.get_first_child()
+	while child != null:
+		child.set_collapsed(false)
+		child = child.get_next()
+
+
+## Render one value of a raw response. `type_doc` is the entity object this value
+## lives in (null at envelope level) and `type_path` the value's dotted path within
+## it, so its custom type resolves via the schema. Entering an entity object (one of
+## _raw_entity_roots) restarts the typing root; nested containers keep it, matching
+## how the DB rules address fields relative to their document.
+func _render_raw(
+	parent: TreeItem, key: String, value: Variant, type_doc: Variant, type_path: String
+) -> void:
+	if value is Dictionary and _is_entity_root(value):
+		type_doc = value
+		type_path = ""
+	var item := create_item(parent)
+	item.set_text(0, key)
+	item.set_custom_color(0, AppTheme.TEXT)
+	var field_type := _resolve_type(type_path, type_doc) if type_doc != null else ""
+	if field_type.is_empty():
+		item.set_text(2, _type_name(value))
+		item.set_custom_color(2, AppTheme.TEXT_DIM)
+	else:
+		item.set_text(2, field_type)
+		item.set_custom_color(2, AppTheme.ACCENT)
+	item.set_metadata(0, {"key": key, "name": key, "value": value, "path": type_path, "type_doc": type_doc})
+
+	if value is Dictionary and _ejson_scalar(value).is_empty():
+		item.set_text(1, "{%d fields}" % (value as Dictionary).size())
+		item.set_custom_color(1, AppTheme.TEXT_DIM)
+		for k in value:
+			var child_path := str(k) if type_path.is_empty() else type_path + "." + str(k)
+			_render_raw(item, str(k), (value as Dictionary)[k], type_doc, child_path)
+		item.set_collapsed(true)
+	elif value is Array:
+		item.set_text(1, "[%d elements]" % (value as Array).size())
+		item.set_custom_color(1, AppTheme.TEXT_DIM)
+		for i in (value as Array).size():
+			# Array elements share their array's field path (rules address arrays
+			# whole, e.g. "mentions._id"), but an element that is itself an entity
+			# restarts its own typing root at the top of this function.
+			_render_raw(item, "[%d]" % i, (value as Array)[i], type_doc, type_path)
+		item.set_collapsed(true)
+	else:
+		item.set_text(1, _preview(value))
+		item.set_custom_color(1, _value_color(value))
+
+
+## Whether `value` is one of the raw response's entity typing roots (by identity,
+## so a field that merely equals an entity isn't confused for one).
+func _is_entity_root(value: Variant) -> bool:
+	for root in _raw_entity_roots:
+		if is_same(root, value):
+			return true
+	return false
 
 
 ## Render a top-level row as an activity-log entry: Key shows source/action/target,

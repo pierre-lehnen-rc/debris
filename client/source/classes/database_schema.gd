@@ -187,6 +187,17 @@ func _when_matches(when: Variant, doc: Variant) -> bool:
 	return true
 
 
+## The DB collection whose type rules should type an API endpoint's response rows.
+## Rocket.Chat REST payloads mirror the stored documents, so an endpoint that
+## returns users/rooms/messages can borrow that collection's rules to type its
+## fields (ids as UserId, etc.). `result_key` is the payload envelope key (see
+## ApiEndpoint.result_key) and `endpoint_id` the operationId (e.g. "rooms.get");
+## a subclass uses whichever identifies the entity. The base schema knows no
+## endpoints and returns ""; subclasses map their own. "" means "don't type".
+func collection_for_endpoint(_result_key: String, _endpoint_id: String) -> String:
+	return ""
+
+
 ## The context-menu actions offered by a custom type. Beyond any actions listed
 ## explicitly in type_actions, one "list" action is auto-generated per field-level
 ## rule that references this type: it opens that rule's collection filtered by the

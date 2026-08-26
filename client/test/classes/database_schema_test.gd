@@ -335,6 +335,12 @@ func test_actions_for_type_unknown_is_empty() -> void:
 	assert_array(_typed_schema().actions_for_type("Nope")).is_empty()
 
 
+# collection_for_endpoint ------------------------------------------------------
+func test_collection_for_endpoint_base_is_empty() -> void:
+	# The base schema knows no endpoints; only subclasses map their entities.
+	assert_str(_schema().collection_for_endpoint("users", "users.list")).is_equal("")
+
+
 # is_highlighted --------------------------------------------------------------
 func test_is_highlighted() -> void:
 	var s := _schema()

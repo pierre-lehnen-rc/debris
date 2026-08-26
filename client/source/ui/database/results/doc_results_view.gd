@@ -41,6 +41,12 @@ var _menu_item: TreeItem
 ## editable documents. Delete stays available.
 var _log_mode := false
 
+## When set (endpoint results), the view renders a raw response body rather than a
+## page of documents: rows aren't editable documents, so the context menu drops
+## Edit/Insert/Delete, and typed actions resolve against the per-row entity object
+## carried in metadata ("type_doc") instead of climbing to a top-level document.
+var _raw_mode := false
+
 ## When set (endpoint results in a project that also has a database attached),
 ## string values offer the schema's "Unknown Type" search actions even though this
 ## view has no collection of its own — the cross-browser handoff.
@@ -51,6 +57,11 @@ var _cross_query := false
 ## collection name itself. Set via set_type_context(); null/"" disables the feature.
 var _schema: DatabaseSchema = null
 var _collection := ""
+## Whether this view owns `_collection` as its own queryable collection (the DB
+## side) versus borrowing it only to type endpoint response rows (the API side).
+## Type display works either way; a borrowed collection offers the schema's
+## DB-targeting actions only when cross-querying is enabled (a database is bound).
+var _owns_collection := true
 ## Flat registry of the custom actions currently offered by the open context menu.
 ## Each entry is { "action": Dictionary, "source": Variant }; a menu item's id is
 ## CUSTOM_ACTION_BASE + its index here, so items in the main menu and any dynamic
@@ -93,9 +104,13 @@ func _ready_view() -> void:
 
 ## Set the schema + collection used to resolve custom types/actions. Subclasses
 ## may read _schema/_collection (e.g. the tree's Type column) after this is set.
-func set_type_context(schema: DatabaseSchema, collection: String) -> void:
+## `owns` is false when `collection` is borrowed only to type endpoint rows (the
+## API side), which keeps type display on but gates the DB-targeting actions on
+## cross-querying being enabled.
+func set_type_context(schema: DatabaseSchema, collection: String, owns := true) -> void:
 	_schema = schema
 	_collection = collection
+	_owns_collection = owns
 
 
 ## Toggle activity-log rendering. The Activity Log tab enables it via ResultsView;
@@ -103,6 +118,12 @@ func set_type_context(schema: DatabaseSchema, collection: String) -> void:
 ## Insert/Edit context-menu actions.
 func set_log_mode(enabled: bool) -> void:
 	_log_mode = enabled
+
+
+## Toggle raw-response rendering (endpoint results). Drives the context menu to
+## drop document mutations and resolve typed actions per row (see _raw_mode).
+func set_raw_mode(enabled: bool) -> void:
+	_raw_mode = enabled
 
 
 ## Allow the schema's cross-query search actions on this view's string values even
@@ -153,8 +174,10 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if item == null:
 		return
 	_menu_item = item
-	_menu_doc_index = _doc_index_from_item(item)
-	if _menu_doc_index < 0:
+	# Raw responses (endpoints) have no editable documents, so there's no doc index
+	# to resolve or require; document mutations are dropped from the menu below.
+	_menu_doc_index = -1 if _raw_mode else _doc_index_from_item(item)
+	if not _raw_mode and _menu_doc_index < 0:
 		return
 
 	var is_document := item.get_parent() == get_root()
@@ -171,19 +194,23 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 			_doc_menu.get_item_index(DocAction.COLLAPSE_RECURSIVE), KEY_MASK_ALT | KEY_LEFT
 		)
 		_doc_menu.add_separator()
-	if not _log_mode:
-		_doc_menu.add_item("Edit Document…", DocAction.EDIT)
-	_doc_menu.add_item("View Document", DocAction.VIEW)
-	if not _log_mode:
-		_doc_menu.add_item("Insert Document…", DocAction.INSERT)
-	_doc_menu.add_separator()
+	# Document mutations only apply to editable document pages, not raw responses
+	# or activity-log entries.
+	if not _raw_mode:
+		if not _log_mode:
+			_doc_menu.add_item("Edit Document…", DocAction.EDIT)
+		_doc_menu.add_item("View Document", DocAction.VIEW)
+		if not _log_mode:
+			_doc_menu.add_item("Insert Document…", DocAction.INSERT)
+		_doc_menu.add_separator()
 	if not is_document:
 		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)
 		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
 	# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
 	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
-	_doc_menu.add_separator()
-	_doc_menu.add_item("Delete Document", DocAction.DELETE)
+	if not _raw_mode:
+		_doc_menu.add_separator()
+		_doc_menu.add_item("Delete Document", DocAction.DELETE)
 	_add_custom_actions(item, is_document)
 	UiScale.prepare(_doc_menu)
 	# Native pop-ups position in absolute screen coordinates.
@@ -201,32 +228,39 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	_clear_custom_menus()
 	if _schema == null:
 		return
-	# A results view with a collection resolves typed fields normally. Endpoint
-	# results have no collection of their own, but when a database is attached
-	# (_cross_query) their string values still offer the schema's "Unknown Type"
-	# search actions — the cross-browser handoff.
-	if _collection.is_empty() and not _cross_query:
+	# The DB side owns its collection, so its rows always offer the schema's
+	# actions. Endpoint results only borrow a collection to type their fields, so
+	# their DB-targeting actions (and the "Unknown Type" handoff on plain strings)
+	# appear only when a database is attached (_cross_query) — the type display in
+	# the Type column, driven separately by _resolve_type, is unaffected either way.
+	if not _cross_query and not (_owns_collection and not _collection.is_empty()):
 		return
 	var meta: Variant = item.get_metadata(0)
 	if not (meta is Dictionary):
 		return
 	var value: Variant = (meta as Dictionary).get("value")
-	if is_document:
+	# A document row (DB page) expands into a sub-menu per typed attribute. Raw rows
+	# have no such document concept, so they always resolve as a single field.
+	if is_document and not _raw_mode:
 		_add_document_type_menus(value)
-	else:
-		# Prefer the index-free path stored in metadata (so array elements resolve to
-		# their parent's field path, e.g. "mentions._id"); fall back to the bracketed
-		# path only if it's absent.
-		var field_path: String = str((meta as Dictionary).get("path", ""))
-		if field_path.is_empty():
-			field_path = _meta_path(item)
-		var type_name := _resolve_type(field_path, _doc_from_item(item))
-		if not type_name.is_empty():
-			_add_inline_actions(type_name, value)
-		elif value is String:
-			# An untyped string: let the user reinterpret it as any known id type
-			# and search other collections by that value.
-			_add_unknown_type_menu(value)
+		return
+	# The document the field's type resolves against: in raw mode the entity object
+	# carried per-row ("type_doc", null for envelope-level rows); otherwise the
+	# whole document reached by climbing to the top-level row.
+	var doc: Variant = (meta as Dictionary).get("type_doc") if _raw_mode else _doc_from_item(item)
+	# Prefer the index-free path stored in metadata (so array elements resolve to
+	# their parent's field path, e.g. "mentions._id"); fall back to the bracketed
+	# path only if it's absent (DB rows only).
+	var field_path: String = str((meta as Dictionary).get("path", ""))
+	if field_path.is_empty() and not _raw_mode:
+		field_path = _meta_path(item)
+	var type_name := _resolve_type(field_path, doc) if doc != null else ""
+	if not type_name.is_empty():
+		_add_inline_actions(type_name, value)
+	elif value is String:
+		# An untyped string: let the user reinterpret it as any known id type
+		# and search other collections by that value.
+		_add_unknown_type_menu(value)
 
 
 ## Whole-document type actions inline, then a sub-menu per typed attribute.
@@ -355,10 +389,12 @@ func _clear_custom_menus() -> void:
 
 
 func _on_doc_action(id: int) -> void:
-	if _menu_doc_index < 0:
-		return
+	# Custom type actions, expand/collapse and copy don't need a document index (and
+	# raw responses have none); only the document mutations below require one.
 	if id >= CUSTOM_ACTION_BASE:
 		_trigger_custom_action(id - CUSTOM_ACTION_BASE)
+		return
+	if _menu_doc_index < 0 and id in [DocAction.EDIT, DocAction.VIEW, DocAction.DELETE]:
 		return
 	match id:
 		DocAction.EXPAND_RECURSIVE:

@@ -11,6 +11,33 @@ const MEDIA_COLLECTIONS := ["call_history", "video_conference"]
 const OMNICHANNEL_COLLECTIONS := ["canned_response"]
 const SKIPPED_LABEL_PREFIXES := ["rocketchat_", "omnichannel_", "livechat_", "meteor_"]
 
+# Maps an entity name to the DB collection whose type rules should type an
+# endpoint's response rows. Rocket.Chat's REST payloads mirror the stored
+# documents, so an endpoint dealing in users/rooms/messages can reuse the matching
+# collection's rules (ids as UserId/RoomId/…). Looked up two ways (see
+# collection_for_endpoint): by the payload envelope key (e.g. "user", "members")
+# and by the operationId's namespace (e.g. "rooms", "chat"). Keys are lowercased,
+# so singular/plural and case variants resolve; unlisted names stay untyped.
+const RESULT_KEY_COLLECTIONS := {
+	"user": "users", "users": "users", "member": "users", "members": "users",
+	"channel": "rocketchat_room", "channels": "rocketchat_room",
+	"group": "rocketchat_room", "groups": "rocketchat_room",
+	"room": "rocketchat_room", "rooms": "rocketchat_room",
+	"im": "rocketchat_room", "ims": "rocketchat_room",
+	"dm": "rocketchat_room", "dms": "rocketchat_room",
+	"message": "rocketchat_message", "messages": "rocketchat_message",
+	"chat": "rocketchat_message",  # the chat.* namespace deals in messages
+	"subscription": "rocketchat_subscription", "subscriptions": "rocketchat_subscription",
+	"role": "rocketchat_roles", "roles": "rocketchat_roles",
+	"team": "rocketchat_team", "teams": "rocketchat_team",
+	"upload": "rocketchat_uploads", "uploads": "rocketchat_uploads",
+	"file": "rocketchat_uploads", "files": "rocketchat_uploads",
+	"visitor": "rocketchat_livechat_visitor", "visitors": "rocketchat_livechat_visitor",
+	"department": "rocketchat_livechat_department", "departments": "rocketchat_livechat_department",
+	"inquiry": "rocketchat_livechat_inquiry", "inquiries": "rocketchat_livechat_inquiry",
+	"app": "rocketchat_apps", "apps": "rocketchat_apps",
+}
+
 # The core collections worth spotting at a glance, by real collection name.
 const HIGHLIGHTED_COLLECTIONS := [
 	"users",
@@ -204,6 +231,28 @@ func _sort_key(path: Array) -> Array:
 			rank = 0 if i > 0 and path[i] == path[i - 1] else 2
 		key.append([rank, path[i]])
 	return key
+
+
+## The collection whose rules type an endpoint's rows (see RESULT_KEY_COLLECTIONS).
+## The payload key names the entity directly for many endpoints (e.g. "user",
+## "members"), so it's tried first — that also lets a sub-entity list type
+## correctly (channels.members -> users). When the key is generic ("update",
+## "remove") or the object is returned bare, it falls back to the operationId's
+## namespace, so rooms.get / rooms.adminRooms.getRoom / subscriptions.get still
+## type as their entity. Case-insensitive; "" when neither resolves.
+func collection_for_endpoint(result_key: String, endpoint_id: String) -> String:
+	var by_key := str(RESULT_KEY_COLLECTIONS.get(result_key.to_lower(), ""))
+	if not by_key.is_empty():
+		return by_key
+	return str(RESULT_KEY_COLLECTIONS.get(_endpoint_namespace(endpoint_id), ""))
+
+
+## The entity namespace of an operationId: the leading dotted token of its last
+## path segment, lowercased. "rooms.adminRooms.getRoom" -> "rooms",
+## "livechat/rooms.delete" -> "rooms", "users.list" -> "users".
+func _endpoint_namespace(endpoint_id: String) -> String:
+	var last := endpoint_id.get_slice("/", endpoint_id.get_slice_count("/") - 1)
+	return last.get_slice(".", 0).to_lower()
 
 
 func mutate_collection_name(collection_name: String) -> String:
