@@ -144,6 +144,52 @@ func _on_results_open_query_requested(
 	open_query_requested.emit(collection, filter, function)
 
 
+## "Sort by this field" was chosen on a result attribute: fold `field` into the
+## options JSON's sort (compound — existing sort keys are preserved, and re-sorting
+## a field just updates its direction). Does nothing if the current options JSON
+## can't be parsed, so a broken editor is never silently rewritten. The options
+## editor is revealed with the change but the query is NOT re-run (press Run/F5).
+func _on_sort_requested(field: String, direction: int) -> void:
+	if field.is_empty():
+		return
+	var text := _options_edit.text.strip_edges()
+	var options: Dictionary = {}
+	if not text.is_empty():
+		var parsed: Dictionary = LaxJson.parse_string(text)
+		if not parsed.get("ok", false) or not (parsed.get("value") is Dictionary):
+			status_changed.emit("Can't sort: the options JSON is invalid")
+			return
+		options = parsed["value"]
+	_merge_sort(options, field, direction)
+	_options_btn.button_pressed = true
+	_options_edit.visible = true
+	_options_edit.text = JSON.stringify(options, "  ")
+	status_changed.emit(
+		"Sort by %s %s added to options — press Run to apply"
+		% [field, "ascending" if direction == 1 else "descending"]
+	)
+	state_changed.emit()
+
+
+## Fold a sort key into an options dict in place. A dict-form sort gets the field
+## set/updated; a Mongo array-form sort ([[field, dir], …]) has any prior entry for
+## the field replaced and the new one appended; anything else starts a fresh dict.
+func _merge_sort(options: Dictionary, field: String, direction: int) -> void:
+	var existing: Variant = options.get("sort")
+	if existing is Array:
+		var out: Array = []
+		for pair in (existing as Array):
+			if pair is Array and (pair as Array).size() >= 1 and str((pair as Array)[0]) == field:
+				continue  # drop a prior sort on the same field
+			out.append(pair)
+		out.append([field, direction])
+		options["sort"] = out
+	else:
+		var sort_dict: Dictionary = existing if existing is Dictionary else {}
+		sort_dict[field] = direction
+		options["sort"] = sort_dict
+
+
 func tab_title() -> String:
 	if collection_name.is_empty():
 		return "Query"
@@ -172,6 +218,7 @@ func _ready() -> void:
 	_on_function_selected(initial_index)  # Sync pager visibility to the operation.
 
 	_results.open_query_requested.connect(_on_results_open_query_requested)
+	_results.sort_requested.connect(_on_sort_requested)
 
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name

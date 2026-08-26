@@ -15,6 +15,10 @@ signal delete_requested(doc_index: int)
 ## Emitted when a schema-defined custom type action is triggered, asking the owner
 ## to open a new query tab on `collection` filtered by `filter`.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Emitted when the "Sort by this field" action is chosen on a scalar attribute,
+## asking the owner (QueryTab) to fold `field` into the query's sort options with
+## `direction` (1 ascending, -1 descending).
+signal sort_requested(field: String, direction: int)
 
 enum DocAction {
 	EXPAND_RECURSIVE,
@@ -31,6 +35,8 @@ enum DocAction {
 	COPY_DATE_UNIX,  # milliseconds since the Unix epoch
 	COPY_DATE_EJSON,  # canonical Extended JSON, for pasting into a date query
 	DELETE,
+	SORT_ASC,  # fold this attribute into the query's sort options, ascending
+	SORT_DESC,  # …descending
 }
 
 ## Custom type actions are added to the context menu with ids offset by this base
@@ -240,6 +246,15 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 			"Copy %s" % id_key,
 			COPY_ENTRY_BASE + _register_copy(_copy_text_for((value as Dictionary)[id_key])),
 		)
+	# Scalar attributes of this view's own DB collection can be folded into the
+	# query's sort options (ascending/descending). Objects, arrays, whole documents
+	# and borrowed/raw rows don't qualify.
+	if _can_sort(is_document, value):
+		var sort_menu := _make_submenu()
+		sort_menu.add_item("Ascending", DocAction.SORT_ASC)
+		sort_menu.add_item("Descending", DocAction.SORT_DESC)
+		_doc_menu.add_separator()
+		_doc_menu.add_submenu_node_item("Sort by this field", sort_menu)
 	if not _raw_mode:
 		_doc_menu.add_separator()
 		_doc_menu.add_item("Delete Document", DocAction.DELETE)
@@ -545,6 +560,10 @@ func _on_doc_action(id: int) -> void:
 			DisplayServer.clipboard_set(JSON.stringify(_menu_value(), "  "))
 		DocAction.DELETE:
 			delete_requested.emit(_menu_doc_index)
+		DocAction.SORT_ASC:
+			_emit_sort(1)
+		DocAction.SORT_DESC:
+			_emit_sort(-1)
 
 
 ## Resolve a registered action's filter template against its recorded source value
@@ -562,6 +581,58 @@ func _trigger_custom_action(index: int) -> void:
 		resolved,
 		str(action.get("function", "find")),
 	)
+
+
+# Sort by attribute -----------------------------------------------------------
+## Whether the "Sort by this field" action applies to the selected row: only a
+## scalar attribute (not an object, array, or whole document) of this view's own DB
+## collection. Borrowed (endpoint) and raw rows have no query options to sort.
+func _can_sort(is_document: bool, value: Variant) -> bool:
+	if is_document or _raw_mode or not _owns_collection or _collection.is_empty():
+		return false
+	if value is Array:
+		return false
+	# A real nested object isn't sortable; an EJSON scalar wrapper (ObjectId, date,
+	# number) is a scalar and is.
+	if value is Dictionary and _ejson_scalar(value).is_empty():
+		return false
+	return true
+
+
+## Ask the owner to fold the selected attribute into the sort, at `direction`
+## (1 ascending, -1 descending).
+func _emit_sort(direction: int) -> void:
+	if _menu_item == null:
+		return
+	var field := _sort_field_for(_menu_item)
+	if not field.is_empty():
+		sort_requested.emit(field, direction)
+
+
+## The dotted, index-free field path of `item` for use as a Mongo sort key. Prefers
+## the metadata "path" (already index-free); falls back to the built path with any
+## array-index segments stripped ("roles[0]" -> "roles").
+func _sort_field_for(item: TreeItem) -> String:
+	var meta: Variant = item.get_metadata(0)
+	var path := str((meta as Dictionary).get("path", "")) if meta is Dictionary else ""
+	if path.is_empty():
+		path = _meta_path(item)
+	return _strip_indices(path)
+
+
+## Remove any "[…]" segments from a dotted path, so an array-element path collapses
+## to its field ("a[0].b" -> "a.b").
+func _strip_indices(path: String) -> String:
+	var out := ""
+	var depth := 0
+	for c in path:
+		if c == "[":
+			depth += 1
+		elif c == "]":
+			depth = maxi(0, depth - 1)
+		elif depth == 0:
+			out += c
+	return out
 
 
 # Input handling --------------------------------------------------------------

@@ -17,6 +17,9 @@ signal page_requested(offset: int, limit: int)
 ## Bubbled up from a sub-view when a custom type action wants to open a new query
 ## tab on another collection with a pre-defined filter.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Bubbled up from a sub-view's "Sort by this field" action, asking the owning
+## QueryTab to fold `field` into its sort options (1 ascending, -1 descending).
+signal sort_requested(field: String, direction: int)
 
 enum ViewMode { TREE, TABLE, TEXT }
 
@@ -119,6 +122,12 @@ func set_type_context(schema: DatabaseSchema, collection: String, owns := true) 
 ## from the tree/table views in results_view.tscn.
 func _on_open_query_requested(collection: String, filter: Dictionary, function: String) -> void:
 	open_query_requested.emit(collection, filter, function)
+
+
+## Relay a sub-view's "Sort by this field" request. Wired from the tree/table views
+## in results_view.tscn.
+func _on_sort_requested(field: String, direction: int) -> void:
+	sort_requested.emit(field, direction)
 
 
 ## Render the tree view's top-level rows as activity-log entries (Key =
