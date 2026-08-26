@@ -272,10 +272,9 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	if not (meta is Dictionary):
 		return
 	var value: Variant = (meta as Dictionary).get("value")
-	# A document row (DB page) expands into a sub-menu per typed attribute. Raw rows
-	# have no such document concept, so they always resolve as a single field.
+	# A document row (DB page) expands into a sub-menu per typed attribute.
 	if is_document and not _raw_mode:
-		_add_document_type_menus(value)
+		_add_object_type_menus(value, "")
 		return
 	# The document the field's type resolves against: in raw mode the entity object
 	# carried per-row ("type_doc", null for envelope-level rows); otherwise the
@@ -287,6 +286,11 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 	var field_path: String = str((meta as Dictionary).get("path", ""))
 	if field_path.is_empty() and not _raw_mode:
 		field_path = _meta_path(item)
+	# A nested object lists its own typed attributes too (plus its own type's inline
+	# actions), so queries can be built from them just like on a top-level document.
+	if doc != null and value is Dictionary and _ejson_scalar(value).is_empty():
+		_add_object_type_menus(doc, field_path)
+		return
 	var type_name := _resolve_type(field_path, doc) if doc != null else ""
 	if not type_name.is_empty():
 		_add_inline_actions(type_name, value)
@@ -296,13 +300,22 @@ func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
 		_add_unknown_type_menu(value)
 
 
-## Whole-document type actions inline, then a sub-menu per typed attribute.
-func _add_document_type_menus(doc: Variant) -> void:
+## An object's type actions: its own type inline, then a sub-menu per typed
+## attribute. `doc` is the document the object lives in and `base` its dotted path
+## within it ("" when the object is the whole document). Only attributes at or under
+## `base` are listed, each labelled relative to the object (so a nested "u" object
+## shows "_id ›", not "u._id ›"). Types resolve against `doc`, so a value-dependent
+## field (e.g. an actor's id) offers the actions matching this document's data.
+func _add_object_type_menus(doc: Variant, base: String) -> void:
 	if not (doc is Dictionary):
 		return
-	_add_inline_actions(_resolve_type("", doc), doc)
+	var own_value: Variant = doc if base.is_empty() else DatabaseSchema.value_at_path(doc, base)
+	_add_inline_actions(_resolve_type(base, doc), own_value)
+	var prefix := "" if base.is_empty() else base + "."
 	for entry in _schema.typed_fields(_collection):
 		var field_path: String = entry["field"]
+		if not prefix.is_empty() and not field_path.begins_with(prefix):
+			continue
 		var field_value: Variant = DatabaseSchema.value_at_path(doc, field_path)
 		if field_value == null:
 			continue
@@ -310,15 +323,12 @@ func _add_document_type_menus(doc: Variant) -> void:
 		# values to search by, so skip the attribute entirely.
 		if field_value is Array and (field_value as Array).is_empty():
 			continue
-		# Re-resolve against this document rather than trusting the rule's static
-		# type: a value-dependent field (e.g. an actor's id) resolves to the type
-		# matching this document's siblings, so a SIP id offers SIP actions.
 		var field_type := _resolve_type(field_path, doc)
 		if field_type.is_empty():
 			continue
 		var actions := _schema.actions_for_type(field_type)
 		if not actions.is_empty():
-			_add_actions_submenu(field_path, actions, field_value)
+			_add_actions_submenu(field_path.substr(prefix.length()), actions, field_value)
 
 
 ## Add a type's actions straight into the main menu, acting on `source`.
