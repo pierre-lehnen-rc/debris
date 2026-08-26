@@ -175,3 +175,45 @@ func test_trailing_text_errors() -> void:
 
 func test_unexpected_token_errors() -> void:
 	assert_str(_error("{a: bogus}")).contains("Unexpected token 'bogus'")
+
+
+# Date() / ISODate() shorthand ------------------------------------------------
+func test_date_number_expands_to_ext_json() -> void:
+	var v: Dictionary = _value("{ createdAt: Date(1787677893670) }")
+	assert_dict(v).is_equal({"createdAt": {"$date": {"$numberLong": "1787677893670"}}})
+
+
+func test_isodate_alias_and_string_arg() -> void:
+	# ISODate is accepted too; a string argument stays a string ($date the server
+	# Date.parses).
+	var v: Dictionary = _value('{ createdAt: ISODate("2026-08-25T12:00:00Z") }')
+	assert_dict(v).is_equal({"createdAt": {"$date": "2026-08-25T12:00:00Z"}})
+
+
+func test_date_works_nested_under_operator() -> void:
+	var v: Dictionary = _value("{ createdAt: { $gte: Date(1000), $lt: Date(2000) } }")
+	assert_dict(v).is_equal({"createdAt": {
+		"$gte": {"$date": {"$numberLong": "1000"}},
+		"$lt": {"$date": {"$numberLong": "2000"}},
+	}})
+
+
+func test_date_no_arg_is_current_time() -> void:
+	# Value isn't asserted (it's "now"), only the shape.
+	var v: Dictionary = _value("{ t: Date() }")
+	var inner: Dictionary = v["t"]
+	assert_bool(inner.has("$date")).is_true()
+	assert_bool((inner["$date"] as Dictionary).has("$numberLong")).is_true()
+
+
+func test_date_float_arg_truncates_to_integer_string() -> void:
+	var v: Dictionary = _value("{ t: Date(1000.0) }")
+	assert_dict(v).is_equal({"t": {"$date": {"$numberLong": "1000"}}})
+
+
+func test_date_missing_paren_is_unexpected_token() -> void:
+	assert_str(_error("{ t: Date }")).contains("Unexpected token 'Date'")
+
+
+func test_date_bad_arg_errors() -> void:
+	assert_str(_error("{ t: Date(true) }")).contains("Date() expects")

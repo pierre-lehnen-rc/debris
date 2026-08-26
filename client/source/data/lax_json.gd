@@ -7,6 +7,10 @@ extends RefCounted
 ##   - unquoted identifier keys, including operators like $gt
 ##   - trailing commas in objects and arrays
 ##   - // line and /* block */ comments
+##   - Date(...) / ISODate(...) shorthands for dates (see _build_date), expanded to
+##     the Extended JSON the server expects, so a date filter is easy to type:
+##       { createdAt: Date(1787677893670) }
+##     becomes { "createdAt": { "$date": { "$numberLong": "1787677893670" } } }.
 ## parse_string() returns { ok: bool, value: Variant, error: String }. An empty
 ## input parses to an empty object so a blank filter means "match everything".
 
@@ -206,10 +210,58 @@ func _parse_keyword() -> Variant:
 			return false
 		"null":
 			return null
+	# Constructor shorthands: an identifier immediately followed by '(' (whitespace
+	# allowed), e.g. Date(...) / ISODate(...).
+	if word == "Date" or word == "ISODate":
+		var save := _pos
+		_skip_ws()
+		if _peek() == "(":
+			return _parse_date_call(word)
+		_pos = save
 	if word.is_empty():
 		_set_error("Unexpected character '%s' at %d" % [_peek(), _pos])
 	else:
 		_set_error("Unexpected token '%s' at %d" % [word, _pos])
+	return null
+
+
+## Parse a Date(...) / ISODate(...) call (the opening '(' is the next char) and
+## return its Extended JSON form. `name` is the constructor name for error text.
+func _parse_date_call(name: String) -> Variant:
+	_pos += 1  # consume '('
+	_skip_ws()
+	var arg: Variant = null
+	var has_arg := false
+	if _peek() != ")":
+		arg = _parse_value()
+		if not _error.is_empty():
+			return null
+		has_arg = true
+		_skip_ws()
+	if _peek() != ")":
+		_set_error("Expected ')' to close %s() at %d" % [name, _pos])
+		return null
+	_pos += 1  # consume ')'
+	return _build_date(arg, has_arg)
+
+
+## Build the Extended JSON for a date from a Date()/ISODate() argument:
+##   - no argument           -> the current time
+##   - a number (ms)         -> { "$date": { "$numberLong": "<ms>" } }
+##   - a string (ISO-8601)   -> { "$date": "<string>" }  (the server Date.parses it)
+## The numeric form uses $numberLong (not a bare number), since the server rejects
+## a bare number under $date in canonical mode.
+func _build_date(arg: Variant, has_arg: bool) -> Variant:
+	if not has_arg:
+		var now_ms := int(Time.get_unix_time_from_system() * 1000.0)
+		return {"$date": {"$numberLong": str(now_ms)}}
+	if arg is int:
+		return {"$date": {"$numberLong": str(arg)}}
+	if arg is float:
+		return {"$date": {"$numberLong": str(int(arg))}}
+	if arg is String:
+		return {"$date": arg}
+	_set_error("Date() expects a number (milliseconds) or an ISO date string")
 	return null
 
 

@@ -25,12 +25,20 @@ enum DocAction {
 	COPY_NAME,
 	COPY_PATH,
 	COPY_JSON,
+	# Date values offer a "Copy Value" sub-menu with these three formats instead of
+	# a single Copy Value.
+	COPY_DATE_STRING,  # the rendered UTC string
+	COPY_DATE_UNIX,  # milliseconds since the Unix epoch
+	COPY_DATE_EJSON,  # canonical Extended JSON, for pasting into a date query
 	DELETE,
 }
 
 ## Custom type actions are added to the context menu with ids offset by this base
 ## so they never collide with the fixed DocAction ids.
 const CUSTOM_ACTION_BASE := 1000
+## Copy-value menu items (Copy _id, and the per-attribute Copy) are offset by this
+## larger base, above any custom-action id, into a separate copy-text registry.
+const COPY_ENTRY_BASE := 100000
 
 var _doc_menu: PopupMenu
 var _menu_doc_index := -1
@@ -70,6 +78,9 @@ var _menu_action_entries: Array = []
 ## Sub-menu PopupMenus built for the current open (one per typed attribute), freed
 ## before the next open.
 var _custom_submenus: Array = []
+## Precomputed clipboard text for the open menu's copy items (Copy _id, per-attribute
+## Copy); a menu item's id is COPY_ENTRY_BASE + its index here. Cleared each open.
+var _menu_copy_entries: Array = []
 
 # Column resizing -------------------------------------------------------------
 ## Godot's Tree has no built-in interactive column resize, so we implement it by
@@ -174,6 +185,9 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if item == null:
 		return
 	_menu_item = item
+	# Free the previous open's dynamic sub-menus up front, so any built below (a
+	# date's Copy Value sub-menu, the custom-action sub-menus) survive this open.
+	_clear_custom_menus()
 	# Raw responses (endpoints) have no editable documents, so there's no doc index
 	# to resolve or require; document mutations are dropped from the menu below.
 	_menu_doc_index = -1 if _raw_mode else _doc_index_from_item(item)
@@ -206,8 +220,26 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	if not is_document:
 		_doc_menu.add_item("Copy Name", DocAction.COPY_NAME)
 		_doc_menu.add_item("Copy Path", DocAction.COPY_PATH)
-	# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
-	_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
+	var value: Variant = (item.get_metadata(0) as Dictionary).get("value") if item.get_metadata(0) is Dictionary else null
+	if _ejson_date_ms(value) != null:
+		# A date offers three copy formats: the rendered string, the raw Unix
+		# milliseconds, and canonical Extended JSON for pasting into a date query.
+		var submenu := _make_submenu()
+		submenu.add_item("Date String", DocAction.COPY_DATE_STRING)
+		submenu.add_item("Unix Timestamp (ms)", DocAction.COPY_DATE_UNIX)
+		submenu.add_item("Extended JSON (for queries)", DocAction.COPY_DATE_EJSON)
+		_doc_menu.add_submenu_node_item("Copy Value", submenu)
+	else:
+		# "Copy JSON" for containers (objects/arrays); "Copy Value" for scalars.
+		_doc_menu.add_item("Copy JSON" if has_children else "Copy Value", DocAction.COPY_JSON)
+	# Any object carrying an id (a document or a nested object attribute) offers a
+	# quick "Copy _id" right next to Copy JSON.
+	var id_key := _id_key_of(value)
+	if not id_key.is_empty():
+		_doc_menu.add_item(
+			"Copy %s" % id_key,
+			COPY_ENTRY_BASE + _register_copy(_copy_text_for((value as Dictionary)[id_key])),
+		)
 	if not _raw_mode:
 		_doc_menu.add_separator()
 		_doc_menu.add_item("Delete Document", DocAction.DELETE)
@@ -225,7 +257,8 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 ## actions are still added inline. For a field row, that field's type actions are
 ## added inline (right-clicking the attribute directly).
 func _add_custom_actions(item: TreeItem, is_document: bool) -> void:
-	_clear_custom_menus()
+	# The dynamic sub-menu registry is already cleared per open in
+	# _on_doc_mouse_selected, so this only appends.
 	if _schema == null:
 		return
 	# The DB side owns its collection, so its rows always offer the schema's
@@ -300,8 +333,11 @@ func _add_inline_actions(type_name: String, source: Variant) -> void:
 
 
 ## Add a `label` sub-menu to the main menu holding `actions`, each acting on `source`.
+## The attribute's own value can also be copied straight from the sub-menu.
 func _add_actions_submenu(label: String, actions: Array, source: Variant) -> void:
 	var submenu := _make_submenu()
+	submenu.add_item("Copy", COPY_ENTRY_BASE + _register_copy(_copy_text_for(source)))
+	submenu.add_separator()
 	_add_grouped_actions(submenu, actions, source)
 	_doc_menu.add_submenu_node_item(label, submenu)
 
@@ -382,6 +418,7 @@ func _action_label(action: Dictionary) -> String:
 ## Drop the previous open's action registry and free its dynamic sub-menus.
 func _clear_custom_menus() -> void:
 	_menu_action_entries.clear()
+	_menu_copy_entries.clear()
 	for submenu in _custom_submenus:
 		if is_instance_valid(submenu):
 			submenu.queue_free()
@@ -391,6 +428,11 @@ func _clear_custom_menus() -> void:
 func _on_doc_action(id: int) -> void:
 	# Custom type actions, expand/collapse and copy don't need a document index (and
 	# raw responses have none); only the document mutations below require one.
+	if id >= COPY_ENTRY_BASE:
+		var ci := id - COPY_ENTRY_BASE
+		if ci >= 0 and ci < _menu_copy_entries.size():
+			DisplayServer.clipboard_set(str(_menu_copy_entries[ci]))
+		return
 	if id >= CUSTOM_ACTION_BASE:
 		_trigger_custom_action(id - CUSTOM_ACTION_BASE)
 		return
@@ -412,7 +454,14 @@ func _on_doc_action(id: int) -> void:
 		DocAction.COPY_PATH:
 			DisplayServer.clipboard_set(_meta_path(_menu_item))
 		DocAction.COPY_JSON:
-			DisplayServer.clipboard_set(_meta_json(_menu_item))
+			DisplayServer.clipboard_set(_meta_copy_text(_menu_item))
+		DocAction.COPY_DATE_STRING:
+			DisplayServer.clipboard_set(_scalar_text(_menu_value()))
+		DocAction.COPY_DATE_UNIX:
+			var ms: Variant = _ejson_date_ms(_menu_value())
+			DisplayServer.clipboard_set(str(ms) if ms != null else "")
+		DocAction.COPY_DATE_EJSON:
+			DisplayServer.clipboard_set(JSON.stringify(_menu_value(), "  "))
 		DocAction.DELETE:
 			delete_requested.emit(_menu_doc_index)
 
@@ -567,6 +616,14 @@ func _doc_index_from_item(item: TreeItem) -> int:
 	return -1
 
 
+## The value carried by the row whose context menu is open (for the copy actions).
+func _menu_value() -> Variant:
+	if _menu_item == null:
+		return null
+	var meta: Variant = _menu_item.get_metadata(0)
+	return (meta as Dictionary).get("value") if meta is Dictionary else null
+
+
 func _meta_name(item: TreeItem) -> String:
 	var meta: Variant = item.get_metadata(0)
 	if meta is Dictionary:
@@ -574,10 +631,42 @@ func _meta_name(item: TreeItem) -> String:
 	return ""
 
 
-func _meta_json(item: TreeItem) -> String:
+## Clipboard text for the Copy JSON / Copy Value action. Containers (objects and
+## arrays) copy as pretty JSON; a scalar copies its plain value with no surrounding
+## quotes — a string as its raw text, an EJSON wrapper as its underlying scalar
+## (e.g. an ObjectId's hex) — matching what the Value column shows.
+func _meta_copy_text(item: TreeItem) -> String:
 	var meta: Variant = item.get_metadata(0)
-	if meta is Dictionary and meta.has("value"):
-		return JSON.stringify(meta["value"], "  ")
+	if not (meta is Dictionary) or not (meta as Dictionary).has("value"):
+		return ""
+	return _copy_text_for((meta as Dictionary)["value"])
+
+
+## Clipboard text for a value: containers (objects/arrays) as pretty JSON, scalars
+## as their plain value with no surrounding quotes (an EJSON wrapper as its
+## underlying scalar, e.g. an ObjectId's hex or a date's rendered string).
+func _copy_text_for(value: Variant) -> String:
+	if (value is Dictionary and _ejson_scalar(value).is_empty()) or value is Array:
+		return JSON.stringify(value, "  ")
+	return _scalar_text(value)
+
+
+## Record clipboard text for a copy menu item, returning its index in the registry
+## (a menu item's id is COPY_ENTRY_BASE + this).
+func _register_copy(text: String) -> int:
+	_menu_copy_entries.append(text)
+	return _menu_copy_entries.size() - 1
+
+
+## The id attribute of an object value ("_id" preferred, else "id"), or "" when the
+## value isn't a plain object or has neither. EJSON wrappers (e.g. an ObjectId) are
+## scalars, not objects, so they don't qualify.
+func _id_key_of(value: Variant) -> String:
+	if value is Dictionary and _ejson_scalar(value).is_empty():
+		if (value as Dictionary).has("_id"):
+			return "_id"
+		if (value as Dictionary).has("id"):
+			return "id"
 	return ""
 
 
