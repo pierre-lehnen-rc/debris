@@ -35,6 +35,8 @@ var _bound_database := ""
 var _schema: DatabaseSchema = null
 # The Rocket.Chat session endpoint tabs run against (set when an API is attached).
 var _session: WorkspaceSession = null
+# Shared per-project recent/favorite query store, handed to every query tab.
+var _history: QueryHistory = null
 
 
 func _ready() -> void:
@@ -56,6 +58,12 @@ func bind_mongo(connection: Dictionary, database: String) -> void:
 ## Bind the Rocket.Chat session that endpoint tabs run against.
 func bind_session(session: WorkspaceSession) -> void:
 	_session = session
+
+
+## Bind the shared query-history store handed to every query tab (recents +
+## favorites). Set before tabs are opened/restored so each tab records into it.
+func bind_history(history: QueryHistory) -> void:
+	_history = history
 
 
 ## Toggle the cross-query search actions on every open endpoint tab. Called when a
@@ -88,6 +96,7 @@ func open_collection(
 	var tab: QueryTab = QUERY_TAB_SCENE.instantiate()
 	tab.configure(connection, database, collection, function, initial_filter)
 	tab.set_schema(_schema)
+	tab.set_history(_history)
 	# Connect before add_child so the tab's initial _run() status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
@@ -272,6 +281,7 @@ func _restore_query_tab(state: Dictionary) -> void:
 	var database := String(state.get("database", _bound_database))
 	tab.configure_restore(_bound_connection, database, state)
 	tab.set_schema(_schema)
+	tab.set_history(_history)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_query_requested.connect(_on_open_query_requested)

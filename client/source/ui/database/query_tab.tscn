@@ -47,6 +47,13 @@ tooltip_text = "Show a second JSON input for driver find options (projection, so
 focus_mode = 0
 text = "Options"
 
+[node name="HistoryBtn" type="Button" parent="Toolbar/Row" unique_id=1949800041]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Recent and saved queries for this collection"
+focus_mode = 0
+text = "History"
+
 [node name="Split" type="VSplitContainer" parent="." unique_id=664523523]
 unique_name_in_owner = true
 layout_mode = 2
@@ -84,4 +91,5 @@ layout_mode = 2
 [connection signal="text_submitted" from="Toolbar/Row/CollectionEdit" to="." method="_run"]
 [connection signal="item_selected" from="Toolbar/Row/FuncOption" to="." method="_on_function_selected"]
 [connection signal="toggled" from="Toolbar/Row/OptionsBtn" to="." method="_on_options_toggled"]
+[connection signal="pressed" from="Toolbar/Row/HistoryBtn" to="." method="_on_history_pressed"]
 [connection signal="page_requested" from="Split/Results" to="." method="_fetch_page"]

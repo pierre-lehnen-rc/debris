@@ -18,6 +18,10 @@ extends RefCounted
 
 const VERSION := 1
 
+## How many recent queries are kept per collection; older ones are evicted. Queries
+## flagged as favorites live in the project file instead and are never capped here.
+const RECENT_LIMIT := 20
+
 # Persisted -------------------------------------------------------------------
 ## One entry per open source tab, in tab order. Each is a self-describing dict
 ## tagged by "kind" ("query" | "endpoint"); see QueryTab.to_state /
@@ -29,6 +33,9 @@ var active_tab: int = 0
 ## "endpoints": Array[Dictionary] }, or {} when nothing has been cached. Keyed by
 ## URL so a stale cache is ignored after the API's URL is changed.
 var endpoints: Dictionary = {}
+## Recent queries per collection: { collection: Array[query-entry] }, newest first,
+## capped at RECENT_LIMIT. Each entry is a QueryHistory saved-query dict.
+var query_history: Dictionary = {}
 
 
 ## Replace the endpoint cache with the given parsed endpoints (ApiEndpoint list)
@@ -53,6 +60,42 @@ func cached_endpoints(url: String) -> Array:
 	return out
 
 
+# Recent queries --------------------------------------------------------------
+## Record `entry` as the newest recent for `collection`. Any earlier identical query
+## (same operation/filter/options) is dropped first so the repeat resurfaces at the
+## top, then the list is capped to RECENT_LIMIT.
+func record_query(collection: String, entry: Dictionary) -> void:
+	if collection.is_empty():
+		return
+	var kept: Array = []
+	for e in recent_queries(collection):
+		if not (e is Dictionary and QueryHistory.same_query(e, entry)):
+			kept.append(e)
+	kept.push_front(entry)
+	while kept.size() > RECENT_LIMIT:
+		kept.pop_back()
+	query_history[collection] = kept
+
+
+## The recent queries for `collection`, newest first, or [] when there are none.
+func recent_queries(collection: String) -> Array:
+	var list: Variant = query_history.get(collection, [])
+	return list if list is Array else []
+
+
+## Forget the recent at `index` for `collection`. Returns true when one was removed.
+func remove_recent(collection: String, index: int) -> bool:
+	var list := recent_queries(collection)
+	if index < 0 or index >= list.size():
+		return false
+	list.remove_at(index)
+	if list.is_empty():
+		query_history.erase(collection)
+	else:
+		query_history[collection] = list
+	return true
+
+
 # Serialization ---------------------------------------------------------------
 func to_dict() -> Dictionary:
 	return {
@@ -60,6 +103,7 @@ func to_dict() -> Dictionary:
 		"tabs": tabs,
 		"active_tab": active_tab,
 		"endpoints": endpoints,
+		"query_history": query_history,
 	}
 
 
@@ -70,4 +114,6 @@ static func from_dict(data: Dictionary) -> WorkspaceState:
 	s.active_tab = int(data.get("active_tab", 0))
 	var e: Variant = data.get("endpoints", {})
 	s.endpoints = e if e is Dictionary else {}
+	var h: Variant = data.get("query_history", {})
+	s.query_history = h if h is Dictionary else {}
 	return s

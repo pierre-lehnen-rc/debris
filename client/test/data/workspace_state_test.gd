@@ -75,3 +75,96 @@ func test_endpoint_cache_survives_json_round_trip() -> void:
 	assert_int(cached.size()).is_equal(1)
 	assert_str((cached[0] as ApiEndpoint).id).is_equal("channels.list")
 	assert_bool((cached[0] as ApiEndpoint).paginated).is_true()
+
+
+# recent query history --------------------------------------------------------
+func _entry(filter: String, function := "find", options := "") -> Dictionary:
+	return {"function": function, "filter": filter, "options": options}
+
+
+func test_record_query_newest_first() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	s.record_query("users", _entry("{\"b\": 2}"))
+	var recents := s.recent_queries("users")
+	assert_int(recents.size()).is_equal(2)
+	assert_str(recents[0]["filter"]).is_equal("{\"b\": 2}")
+	assert_str(recents[1]["filter"]).is_equal("{\"a\": 1}")
+
+
+func test_record_query_is_per_collection() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	s.record_query("rooms", _entry("{\"b\": 2}"))
+	assert_int(s.recent_queries("users").size()).is_equal(1)
+	assert_int(s.recent_queries("rooms").size()).is_equal(1)
+
+
+func test_record_query_dedupes_identical_to_top() -> void:
+	# Re-running an identical query resurfaces the existing recent instead of stacking.
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	s.record_query("users", _entry("{\"b\": 2}"))
+	s.record_query("users", _entry("{\"a\": 1}"))
+	var recents := s.recent_queries("users")
+	assert_int(recents.size()).is_equal(2)
+	assert_str(recents[0]["filter"]).is_equal("{\"a\": 1}")
+
+
+func test_record_query_dedupe_ignores_whitespace() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	s.record_query("users", _entry("  {\"a\": 1}\n"))
+	assert_int(s.recent_queries("users").size()).is_equal(1)
+
+
+func test_record_query_differs_by_options() -> void:
+	# Same filter but different options is a distinct query, so both are kept.
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{}", "find", ""))
+	s.record_query("users", _entry("{}", "find", "{\"sort\": {\"_id\": -1}}"))
+	assert_int(s.recent_queries("users").size()).is_equal(2)
+
+
+func test_record_query_caps_at_limit() -> void:
+	var s := WorkspaceState.new()
+	for i in WorkspaceState.RECENT_LIMIT + 5:
+		s.record_query("users", _entry("{\"i\": %d}" % i))
+	var recents := s.recent_queries("users")
+	assert_int(recents.size()).is_equal(WorkspaceState.RECENT_LIMIT)
+	# The oldest entries were evicted; the newest is on top.
+	assert_str(recents[0]["filter"]).is_equal("{\"i\": %d}" % (WorkspaceState.RECENT_LIMIT + 4))
+
+
+func test_remove_recent() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	s.record_query("users", _entry("{\"b\": 2}"))
+	assert_bool(s.remove_recent("users", 0)).is_true()
+	var recents := s.recent_queries("users")
+	assert_int(recents.size()).is_equal(1)
+	assert_str(recents[0]["filter"]).is_equal("{\"a\": 1}")
+
+
+func test_remove_recent_out_of_range() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	assert_bool(s.remove_recent("users", 5)).is_false()
+	assert_bool(s.remove_recent("missing", 0)).is_false()
+
+
+func test_remove_last_recent_clears_collection_key() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"a\": 1}"))
+	assert_bool(s.remove_recent("users", 0)).is_true()
+	assert_bool(s.query_history.has("users")).is_false()
+
+
+func test_query_history_survives_round_trip() -> void:
+	var s := WorkspaceState.new()
+	s.record_query("users", _entry("{\"active\": true}", "findOne", "{\"limit\": 1}"))
+	var loaded := WorkspaceState.from_dict(JSON.parse_string(JSON.stringify(s.to_dict())))
+	var recents := loaded.recent_queries("users")
+	assert_int(recents.size()).is_equal(1)
+	assert_str(recents[0]["function"]).is_equal("findOne")
+	assert_str(recents[0]["options"]).is_equal("{\"limit\": 1}")

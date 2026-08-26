@@ -19,6 +19,10 @@ signal edit_source_requested(source: String)
 ## Emitted when the project's document became dirty on its own (e.g. a user was
 ## added/removed in the Users panel), so the host can refresh the tab's title.
 signal dirty_changed()
+## Emitted when a change to the project document should be saved to its file right
+## away (a query was favorited/unfavorited). Only fired for a project that already
+## has a file — the host saves it in place without prompting.
+signal save_requested()
 
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
@@ -48,6 +52,11 @@ var _session: WorkspaceSession = null
 # overwriting the sidecar before its saved tabs have been reopened.
 var _state: WorkspaceState = null
 var _restored := false
+
+# Shared recent/favorite query store: recents live in the sidecar (_state),
+# favorites in the project document (_doc). Handed to the center so every query tab
+# records into it and can browse it. Built in _setup once both stores exist.
+var _history: QueryHistory = null
 
 var _activity: ActivityBar
 var _stack: MarginContainer
@@ -154,6 +163,7 @@ func _build_layout() -> void:
 # Setup -----------------------------------------------------------------------
 func _setup() -> void:
 	_load_sidecar()
+	_setup_history()
 	_build_collections_view()
 	_build_endpoints_view()
 	if _doc.has_rocketchat():
@@ -164,6 +174,27 @@ func _setup() -> void:
 	# drives it. Without one, there are no endpoint tabs to wait on — restore now.
 	if not _doc.has_rocketchat():
 		_restore_tabs_once()
+
+
+## Build the shared query-history store over the two backing stores and hand it to
+## the center (before any tabs are opened/restored). A recents change rewrites the
+## sidecar; a favorites change is routed through _on_favorites_changed.
+func _setup_history() -> void:
+	_history = QueryHistory.new()
+	_history.setup(_state, _doc)
+	_history.recents_changed.connect(persist_state)
+	_history.favorites_changed.connect(_on_favorites_changed)
+	_center.bind_history(_history)
+
+
+## A favorite query was added/removed, so the project document is now dirty. Save it
+## in place when it has a file (silent auto-save); otherwise just reflect the unsaved
+## state in the tab title — it'll be written on the next explicit Save.
+func _on_favorites_changed() -> void:
+	if _doc != null and not _doc.file_path.is_empty():
+		save_requested.emit()
+	else:
+		dirty_changed.emit()
 
 
 func has_mongo() -> bool:

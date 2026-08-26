@@ -15,6 +15,11 @@ var name: String = ""
 var mongo: Dictionary = {}
 ## { "url": String, "users": Array }, or {} when no API is attached.
 var rocketchat: Dictionary = {}
+## Favorite queries flagged for permanent keeping, per collection:
+## { collection: Array[query-entry] }, newest first. Unlike the sidecar's recents
+## these travel with the project file and are never evicted. Each entry is a
+## QueryHistory saved-query dict.
+var favorite_queries: Dictionary = {}
 
 # Runtime-only, never serialized ----------------------------------------------
 ## Absolute path this project was loaded from / last saved to; "" for Untitled.
@@ -92,6 +97,44 @@ func set_name(new_name: String) -> void:
 	dirty = true
 
 
+# Favorite queries (mark the document dirty on change) ------------------------
+## The favorite queries saved for `collection`, newest first, or [] when none.
+func favorite_queries_for(collection: String) -> Array:
+	var list: Variant = favorite_queries.get(collection, [])
+	return list if list is Array else []
+
+
+## Flag `entry` as a favorite of `collection`. No-op (returns false) when an
+## identical query is already saved; otherwise prepends it and marks the doc dirty.
+func add_favorite_query(collection: String, entry: Dictionary) -> bool:
+	if collection.is_empty():
+		return false
+	var list := favorite_queries_for(collection)
+	for e in list:
+		if e is Dictionary and QueryHistory.same_query(e, entry):
+			return false
+	list.push_front(entry)
+	favorite_queries[collection] = list
+	dirty = true
+	return true
+
+
+## Remove the favorite of `collection` matching `entry`. Returns true when one was
+## removed (and marks the doc dirty).
+func remove_favorite_query(collection: String, entry: Dictionary) -> bool:
+	var list := favorite_queries_for(collection)
+	for i in list.size():
+		if list[i] is Dictionary and QueryHistory.same_query(list[i], entry):
+			list.remove_at(i)
+			if list.is_empty():
+				favorite_queries.erase(collection)
+			else:
+				favorite_queries[collection] = list
+			dirty = true
+			return true
+	return false
+
+
 # Serialization ---------------------------------------------------------------
 ## The persisted form: only non-empty blocks are written, and users are reduced to
 ## their config shape (session-only fields like acquired tokens are dropped).
@@ -107,6 +150,8 @@ func to_dict() -> Dictionary:
 			"url": rocketchat.get("url", ""),
 			"users": _clean_users(rocketchat.get("users", [])),
 		}
+	if not favorite_queries.is_empty():
+		data["favorites"] = favorite_queries
 	return data
 
 
@@ -128,6 +173,8 @@ static func from_dict(data: Dictionary) -> WorkspaceDoc:
 			"url": String(rd.get("url", "")),
 			"users": _clean_users(rd.get("users", [])),
 		}
+	var fav: Variant = data.get("favorites", {})
+	doc.favorite_queries = fav if fav is Dictionary else {}
 	return doc
 
 

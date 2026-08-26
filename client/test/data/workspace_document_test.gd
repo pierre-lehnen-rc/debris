@@ -146,6 +146,67 @@ func test_set_name_marks_dirty() -> void:
 	assert_bool(d.dirty).is_true()
 
 
+# Favorite queries ------------------------------------------------------------
+func _fav(filter: String, function := "find", options := "") -> Dictionary:
+	return {"function": function, "filter": filter, "options": options}
+
+
+func test_add_favorite_marks_dirty() -> void:
+	var d := _doc()
+	assert_bool(d.add_favorite_query("users", _fav("{\"a\": 1}"))).is_true()
+	assert_bool(d.dirty).is_true()
+	assert_array(d.favorite_queries_for("users")).has_size(1)
+
+
+func test_add_favorite_is_per_collection() -> void:
+	var d := _doc()
+	d.add_favorite_query("users", _fav("{\"a\": 1}"))
+	d.add_favorite_query("rooms", _fav("{\"b\": 2}"))
+	assert_array(d.favorite_queries_for("users")).has_size(1)
+	assert_array(d.favorite_queries_for("rooms")).has_size(1)
+
+
+func test_add_favorite_dedupes() -> void:
+	var d := _doc()
+	assert_bool(d.add_favorite_query("users", _fav("{\"a\": 1}"))).is_true()
+	d.dirty = false
+	# An identical query is already saved -> no change, stays clean.
+	assert_bool(d.add_favorite_query("users", _fav(" {\"a\": 1} "))).is_false()
+	assert_bool(d.dirty).is_false()
+	assert_array(d.favorite_queries_for("users")).has_size(1)
+
+
+func test_remove_favorite() -> void:
+	var d := _doc()
+	d.add_favorite_query("users", _fav("{\"a\": 1}"))
+	d.dirty = false
+	assert_bool(d.remove_favorite_query("users", _fav("{\"a\": 1}"))).is_true()
+	assert_bool(d.dirty).is_true()
+	assert_array(d.favorite_queries_for("users")).is_empty()
+
+
+func test_remove_favorite_not_present() -> void:
+	var d := _doc()
+	assert_bool(d.remove_favorite_query("users", _fav("{\"a\": 1}"))).is_false()
+
+
+func test_favorite_queries_survive_round_trip() -> void:
+	var d := _doc()
+	d.set_name("proj")
+	d.add_favorite_query("users", _fav("{\"active\": true}", "findOne", "{\"limit\": 1}"))
+	var restored := WorkspaceDoc.from_dict(JSON.parse_string(JSON.stringify(d.to_dict())))
+	var favs := restored.favorite_queries_for("users")
+	assert_array(favs).has_size(1)
+	assert_str(favs[0]["function"]).is_equal("findOne")
+	assert_str(favs[0]["options"]).is_equal("{\"limit\": 1}")
+
+
+func test_to_dict_omits_empty_favorites() -> void:
+	var d := _doc()
+	d.set_name("solo")
+	assert_bool(d.to_dict().has("favorites")).is_false()
+
+
 # to_dict ---------------------------------------------------------------------
 func test_to_dict_name_only() -> void:
 	var d := _doc()
