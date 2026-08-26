@@ -124,6 +124,21 @@ func test_collection_for_endpoint_unmapped_is_empty() -> void:
 	assert_str(schema.collection_for_endpoint("bananas", "bananas.list")).is_equal("")
 
 
+func test_media_call_actor_action_queries_by_type_and_id() -> void:
+	# "List Media Calls by <actor>" matches the actor by type + id (dot notation),
+	# not by the whole embedded object.
+	var action := {}
+	for a in schema.actions_for_type("MediaCallActor"):
+		if a["filter"].has("callee.id"):
+			action = a
+			break
+	assert_dict(action).is_not_empty()
+	assert_dict(action["filter"]).is_equal({"callee.type": "$type", "callee.id": "$id"})
+	var actor := {"type": "user", "id": "RWWhjYadQicPFPQfq", "sipExtension": "2002", "username": "u2"}
+	assert_dict(DatabaseSchema.resolve_filter(action["filter"], actor)) \
+		.is_equal({"callee.type": "user", "callee.id": "RWWhjYadQicPFPQfq"})
+
+
 func test_media_call_user_action_carries_type_condition() -> void:
 	# The "List MediaCalls by caller.id" UserId action folds in the sibling
 	# condition, so resolving it against a clicked id yields both constraints.

@@ -226,16 +226,7 @@ func actions_for_type(type_name: String) -> Array:
 		var label := group_label
 		if _type_field_count(type_name, collection) > 1:
 			label += " by %s" % field
-		# Filter by the clicked value, and fold in the rule's `when` condition so a
-		# value-dependent field also constrains its sibling — e.g. listing media
-		# calls by caller.id adds {"caller.type": "user"}, matching only the rows
-		# where that id really is a user. The `when` values are literals, so
-		# resolve_filter passes them through untouched (only "$" is substituted).
-		var filter := {field: "$"}
-		var when: Variant = rule.get("when", {})
-		if when is Dictionary:
-			for key in when:
-				filter[key] = when[key]
+		var filter := _list_filter(type_name, field, rule)
 		actions.append({
 			"id": "list_%s_by_%s" % [collection, field],
 			"label": label,
@@ -246,6 +237,62 @@ func actions_for_type(type_name: String) -> Array:
 			"function": "find",
 		})
 	return actions
+
+
+## Build the query filter for a "List by" action on `field` of type `type_name`.
+## An object (composite) type matches by its identifying sub-fields with dot
+## notation — e.g. { "callee.type": "$type", "callee.id": "$id" } — because a whole
+## embedded-object equality is matched field-for-field AND in field order by
+## MongoDB, so it rarely matches and isn't what the user wants. A scalar field
+## matches its own value ("$"), folding in the rule's `when` so a value-dependent
+## field also constrains its sibling (e.g. adds { "caller.type": "user" }). The
+## `$`-paths and `when` literals are resolved later by resolve_filter.
+func _list_filter(type_name: String, field: String, rule: Dictionary) -> Dictionary:
+	var key_fields := _object_key_fields(type_name)
+	if not key_fields.is_empty():
+		var filter: Dictionary = {}
+		for kf in key_fields:
+			filter["%s.%s" % [field, kf]] = "$%s" % kf
+		return filter
+	var out := {field: "$"}
+	var when: Variant = rule.get("when", {})
+	if when is Dictionary:
+		for key in when:
+			out[key] = when[key]
+	return out
+
+
+## The object-relative sub-paths that identify an object (composite) type, for
+## building a "List by" query: the sub-fields that carry a `when` discriminator,
+## plus the discriminator paths themselves. For MediaCallActor (whose `id` is a
+## UserId/SipExtension depending on `type`) this is ["type", "id"], while an
+## undiscriminated sub-field like `sipExtension` is left out. Returns [] for a type
+## with no such definition (a non-object type, or one without discriminated fields),
+## so the caller falls back to whole-value matching.
+func _object_key_fields(type_name: String) -> Array:
+	var defs: Variant = type_defs.get(type_name, {})
+	if not (defs is Dictionary):
+		return []
+	var out: Array = []
+	for sub in defs:
+		var candidates: Variant = (defs as Dictionary)[sub]
+		if not (candidates is Array):
+			continue
+		var discriminators: Array = []
+		for candidate in candidates:
+			var when: Variant = candidate.get("when", {}) if candidate is Dictionary else {}
+			if when is Dictionary:
+				for key in when:
+					if not (str(key) in discriminators):
+						discriminators.append(str(key))
+		if discriminators.is_empty():
+			continue  # An undiscriminated sub-field isn't part of the identity.
+		for d in discriminators:
+			if not (d in out):
+				out.append(d)
+		if not (str(sub) in out):
+			out.append(str(sub))
+	return out
 
 
 ## A readable singular label for a collection: its whole-document type name split

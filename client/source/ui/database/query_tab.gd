@@ -178,7 +178,9 @@ func _ready() -> void:
 	# handoff that opens a blank-collection tab (a schema search action without a
 	# target collection), so the filter survives until the user names the collection.
 	if not _initial_filter.is_empty():
-		_query_edit.text = JSON.stringify(_initial_filter)
+		# Indented so a generated filter (e.g. from a "List by" action) reads clearly
+		# in the editor rather than as one long line.
+		_query_edit.text = JSON.stringify(_initial_filter, "  ")
 	if not collection_name.is_empty():
 		if _initial_filter.is_empty():
 			_query_edit.text = "{}"
