@@ -20,6 +20,9 @@ signal open_query_requested(collection: String, filter: Dictionary, function: St
 ## Bubbled up from a sub-view's "Sort by this field" action, asking the owning
 ## QueryTab to fold `field` into its sort options (1 ascending, -1 descending).
 signal sort_requested(field: String, direction: int)
+## Bubbled up from a sub-view's "View JSON in New Tab" / "Unknown Type › JSON"
+## action, asking the owner to open a new JSON tab seeded with `text`.
+signal open_json_requested(text: String)
 
 enum ViewMode { TREE, TABLE, TEXT }
 
@@ -128,6 +131,12 @@ func _on_open_query_requested(collection: String, filter: Dictionary, function: 
 ## in results_view.tscn.
 func _on_sort_requested(field: String, direction: int) -> void:
 	sort_requested.emit(field, direction)
+
+
+## Relay a sub-view's request to open a new JSON tab (a "View JSON in New Tab" /
+## "Unknown Type › JSON" action). Wired from the tree/table views in results_view.tscn.
+func _on_open_json_requested(text: String) -> void:
+	open_json_requested.emit(text)
 
 
 ## Render the tree view's top-level rows as activity-log entries (Key =

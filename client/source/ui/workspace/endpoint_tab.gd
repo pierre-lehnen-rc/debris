@@ -14,6 +14,9 @@ signal status_changed(text: String)
 ## Bubbled up from the results view when a cross-query search action (the schema's
 ## "Unknown Type" menu on a result value) asks to open a query tab on the DB.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Bubbled up from the results view when a "View JSON in New Tab" / "Unknown Type ›
+## JSON" action asks to open a new JSON tab seeded with `text`.
+signal open_json_requested(text: String)
 ## Emitted when persistable state changes (a request was sent, capturing the
 ## current params), so the project can save the .debris-workspace sidecar.
 signal state_changed()
@@ -127,6 +130,8 @@ func _ready() -> void:
 		func(collection: String, filter: Dictionary, function: String) -> void:
 			open_query_requested.emit(collection, filter, function)
 	)
+	# Relay a results-view "open in a JSON tab" request up to the workspace center.
+	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 	if _endpoint == null:
 		return
 

@@ -106,6 +106,21 @@ func close_current_tab() -> bool:
 	return _center != null and _center.close_current_tab()
 
 
+## Open a JSON scratch tab in this project's center, optionally seeded with `text`
+## (a file's contents) and a display `title`. Returns the tab, or null if the center
+## isn't ready.
+func open_json(text := "", title := "JSON") -> JsonTab:
+	if _center == null:
+		return null
+	return _center.open_json(text, title)
+
+
+## The focused center tab when it's a JSON tab, else null (lets the host enable and
+## drive File ▸ Save JSON… for the active tab).
+func active_json_tab() -> JsonTab:
+	return _center.active_json_tab() if _center != null else null
+
+
 ## Cycle the active query/endpoint tab by `delta` (+1 next, -1 previous).
 func cycle_tab(delta: int) -> void:
 	if _center != null:

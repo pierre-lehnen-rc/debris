@@ -19,6 +19,10 @@ signal open_query_requested(collection: String, filter: Dictionary, function: St
 ## asking the owner (QueryTab) to fold `field` into the query's sort options with
 ## `direction` (1 ascending, -1 descending).
 signal sort_requested(field: String, direction: int)
+## Emitted when "View JSON in New Tab" (on an object/array row) or the "Unknown
+## Type › JSON" option (on an untyped string) is chosen, asking the owner to open a
+## new JSON tab seeded with `text`.
+signal open_json_requested(text: String)
 
 enum DocAction {
 	EXPAND_RECURSIVE,
@@ -29,6 +33,8 @@ enum DocAction {
 	COPY_NAME,
 	COPY_PATH,
 	COPY_JSON,
+	VIEW_JSON,  # open this object/array in a new JSON tab (stringified)
+	VIEW_STRING_JSON,  # open this untyped string's contents in a new JSON tab
 	# Date values offer a "Copy Value" sub-menu with these three formats instead of
 	# a single Copy Value.
 	COPY_DATE_STRING,  # the rendered UTC string
@@ -246,6 +252,10 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 			"Copy %s" % id_key,
 			COPY_ENTRY_BASE + _register_copy(_copy_text_for((value as Dictionary)[id_key])),
 		)
+	# Any object or array can be opened in its own JSON tab for a full-window look at
+	# (or a scratch edit of) its contents. Scalars are covered by the copy actions.
+	if _is_container(value):
+		_doc_menu.add_item("View JSON in New Tab", DocAction.VIEW_JSON)
 	# Scalar attributes of this view's own DB collection can be folded into the
 	# query's sort options (ascending/descending). Objects, arrays, whole documents
 	# and borrowed/raw rows don't qualify.
@@ -485,8 +495,12 @@ func _add_unknown_type_menu(value: Variant) -> void:
 		var type_menu := _make_submenu()
 		_add_grouped_actions(type_menu, actions, value)
 		root.add_submenu_node_item(type_name, type_menu)
-	if root.get_item_count() == 0:
-		return  # No usable scalar types; leave the menu unchanged (root is freed on next open).
+	# A string may itself hold JSON (an embedded/serialised payload): offer to open
+	# its contents in a new JSON tab, listed alongside the id types. Always available,
+	# so the menu shows even for a schema with no searchable scalar types.
+	var json_menu := _make_submenu()
+	json_menu.add_item("View in New Tab", DocAction.VIEW_STRING_JSON)
+	root.add_submenu_node_item("JSON", json_menu)
 	_doc_menu.add_separator()
 	_doc_menu.add_submenu_node_item("Unknown Type", root)
 
@@ -551,6 +565,12 @@ func _on_doc_action(id: int) -> void:
 			DisplayServer.clipboard_set(_meta_path(_menu_item))
 		DocAction.COPY_JSON:
 			DisplayServer.clipboard_set(_meta_copy_text(_menu_item))
+		DocAction.VIEW_JSON:
+			# Objects/arrays are opened as their pretty-printed JSON.
+			open_json_requested.emit(_copy_text_for(_menu_value()))
+		DocAction.VIEW_STRING_JSON:
+			# The string's own contents are opened verbatim (it is itself the JSON).
+			open_json_requested.emit(str(_menu_value()))
 		DocAction.COPY_DATE_STRING:
 			DisplayServer.clipboard_set(_scalar_text(_menu_value()))
 		DocAction.COPY_DATE_UNIX:
@@ -581,6 +601,13 @@ func _trigger_custom_action(index: int) -> void:
 		resolved,
 		str(action.get("function", "find")),
 	)
+
+
+# View as JSON ----------------------------------------------------------------
+## Whether `value` is a real container (a plain object or an array) — as opposed to
+## a scalar or an EJSON wrapper — so it can be opened in a JSON tab as pretty JSON.
+func _is_container(value: Variant) -> bool:
+	return (value is Dictionary and _ejson_scalar(value).is_empty()) or value is Array
 
 
 # Sort by attribute -----------------------------------------------------------

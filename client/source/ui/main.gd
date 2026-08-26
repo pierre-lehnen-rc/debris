@@ -236,6 +236,12 @@ var _file_dialog: FileDialog
 var _recent_menu: PopupMenu
 var _file_dialog_mode := ""  # "save" | "open"
 var _file_dialog_project: ProjectTab = null
+# JSON scratch files (File ▸ New/Open/Save JSON). A second FileDialog, filtered to
+# *.json; `_json_dialog_mode` says save vs open and `_json_save_tab` is the tab a
+# pending save writes from.
+var _json_dialog: FileDialog
+var _json_dialog_mode := ""  # "save" | "open"
+var _json_save_tab: JsonTab = null
 # Save-before-close flow.
 var _close_confirm: ConfirmationDialog
 var _closing_project: ProjectTab = null   # tab awaiting a close decision
@@ -268,6 +274,14 @@ func _build_project_dialogs() -> void:
 	_recent_menu = PopupMenu.new()
 	_recent_menu.name = "OpenRecent"
 	_recent_menu.id_pressed.connect(_on_recent_selected)
+
+	# A separate dialog for JSON scratch files, filtered to *.json.
+	_json_dialog = FileDialog.new()
+	_json_dialog.theme = AppTheme.shared()
+	_json_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_json_dialog.add_filter("*.json", "JSON")
+	_json_dialog.file_selected.connect(_on_json_dialog_selected)
+	add_child(_json_dialog)
 
 
 ## The project tab currently in focus, or null if the active tab isn't a project.
@@ -472,6 +486,88 @@ func _on_recent_selected(index: int) -> void:
 	var recent := Store.recent_workspaces()
 	if index >= 0 and index < recent.size():
 		_open_project_file(String(recent[index]))
+
+
+# JSON scratch tabs -----------------------------------------------------------
+## The project a JSON tab should open in: the current one, or a fresh Untitled
+## project when the active tab isn't a project (a JSON tab needs a project center to
+## live in, but no DB/API of its own).
+func _project_for_json() -> ProjectTab:
+	var proj := _current_project()
+	if proj == null:
+		var doc := WorkspaceDoc.new()
+		doc.name = "Untitled"
+		proj = _open_project_tab(doc)
+	return proj
+
+
+## New JSON: open an empty JSON scratch tab in the current (or a new) project.
+func _new_json() -> void:
+	_project_for_json().open_json()
+	_status_label.text = "New JSON tab"
+
+
+## Open JSON…: prompt for a .json file to load into a new JSON tab.
+func _open_json_dialog() -> void:
+	_json_dialog_mode = "open"
+	_json_save_tab = null
+	_json_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_json_dialog.title = "Open JSON"
+	_json_dialog.ok_button_text = "Open"
+	UiScale.popup_centered(_json_dialog, Vector2i(720, 520))
+
+
+## Save JSON…: prompt for a path and write the active JSON tab's text there. No-op
+## when the focused tab isn't a JSON tab (the menu item is disabled then anyway).
+func _save_json_dialog() -> void:
+	var proj := _current_project()
+	var tab: JsonTab = proj.active_json_tab() if proj != null else null
+	if tab == null:
+		return
+	_json_dialog_mode = "save"
+	_json_save_tab = tab
+	_json_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	_json_dialog.title = "Save JSON"
+	_json_dialog.ok_button_text = "Save"
+	_json_dialog.current_file = tab.tab_title() if tab.tab_title().ends_with(".json") else "data.json"
+	UiScale.popup_centered(_json_dialog, Vector2i(720, 520))
+
+
+func _on_json_dialog_selected(path: String) -> void:
+	if _json_dialog_mode == "open":
+		_open_json_file(path)
+	elif _json_dialog_mode == "save":
+		var tab := _json_save_tab
+		_json_save_tab = null
+		if tab != null and is_instance_valid(tab):
+			_write_json_file(tab, path)
+
+
+## Read `path` and open its contents in a new JSON tab, titled by the filename.
+func _open_json_file(path: String) -> void:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_status_label.text = "Open failed: %s" % error_string(FileAccess.get_open_error())
+		return
+	var text := file.get_as_text()
+	file.close()
+	_project_for_json().open_json(text, path.get_file())
+	_status_label.text = "Opened %s" % path.get_file()
+
+
+## Write a JSON tab's editor text to `path` (defaulting the extension to .json) and
+## adopt the filename as the tab's title.
+func _write_json_file(tab: JsonTab, path: String) -> void:
+	if not path.ends_with(".json"):
+		path += ".json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		_status_label.text = "Save failed: %s" % error_string(FileAccess.get_open_error())
+		return
+	file.store_string(tab.json_text())
+	file.close()
+	tab.mark_saved(path)
+	_status_label.text = "Saved %s" % path.get_file()
 
 
 # Tab title / helpers ---------------------------------------------------------
@@ -729,6 +825,9 @@ const FILE_ATTACH_API := 7
 const FILE_SAVE_PROJECT := 8
 const FILE_SAVE_PROJECT_AS := 9
 const FILE_OPEN_PROJECT := 10
+const FILE_NEW_JSON := 11
+const FILE_OPEN_JSON := 12
+const FILE_SAVE_JSON := 13
 
 
 func _on_file_menu(id: int) -> void:
@@ -741,6 +840,12 @@ func _on_file_menu(id: int) -> void:
 			_save_project()
 		FILE_SAVE_PROJECT_AS:
 			_save_project_as()
+		FILE_NEW_JSON:
+			_new_json()
+		FILE_OPEN_JSON:
+			_open_json_dialog()
+		FILE_SAVE_JSON:
+			_save_json_dialog()
 		FILE_ATTACH_DATABASE:
 			_attach_database()
 		FILE_ATTACH_API:
@@ -770,6 +875,10 @@ func _refresh_file_menu() -> void:
 	)
 	_file_menu.set_item_disabled(_file_menu.get_item_index(FILE_SAVE_PROJECT), proj == null)
 	_file_menu.set_item_disabled(_file_menu.get_item_index(FILE_SAVE_PROJECT_AS), proj == null)
+	# Save JSON… only makes sense when the focused inner tab is a JSON tab.
+	_file_menu.set_item_disabled(
+		_file_menu.get_item_index(FILE_SAVE_JSON), proj == null or proj.active_json_tab() == null
+	)
 	_refresh_recent_menu()
 
 
@@ -823,6 +932,10 @@ func _populate_menus() -> void:
 	_file_menu.add_item(
 		"Save Project As…", FILE_SAVE_PROJECT_AS, KEY_MASK_CMD_OR_CTRL | KEY_MASK_SHIFT | KEY_S
 	)
+	_file_menu.add_separator()
+	_file_menu.add_item("New JSON", FILE_NEW_JSON)
+	_file_menu.add_item("Open JSON…", FILE_OPEN_JSON)
+	_file_menu.add_item("Save JSON…", FILE_SAVE_JSON)
 	_file_menu.add_separator()
 	_file_menu.add_item("Attach Database…", FILE_ATTACH_DATABASE)
 	_file_menu.add_item("Attach API…", FILE_ATTACH_API)

@@ -1,9 +1,9 @@
 class_name WorkspaceCenter
 extends Control
 
-## The shared center of a project tab: a single TabContainer holding both Mongo
-## query tabs and Rocket.Chat endpoint tabs side by side, so the two browsers can
-## interact within one workspace. Query and endpoint tabs are distinguished by a
+## The shared center of a project tab: a single TabContainer holding Mongo query
+## tabs, Rocket.Chat endpoint tabs, and JSON scratch tabs side by side, so the
+## browsers can interact within one workspace. Each tab kind is distinguished by a
 ## per-tab type icon. A welcome overlay shows while nothing is open. Merges the
 ## former DatabaseWorkspace and EndpointWorkspace; there is no "+" new-tab button
 ## and opening a collection always adds a fresh tab (no blank-tab reuse).
@@ -16,8 +16,10 @@ signal state_changed()
 
 const QUERY_TAB_SCENE := preload("res://source/ui/database/query_tab.tscn")
 const ENDPOINT_TAB_SCENE := preload("res://source/ui/workspace/endpoint_tab.tscn")
+const JSON_TAB_SCENE := preload("res://source/ui/database/json_tab.tscn")
 const ICON_QUERY := preload("res://source/ui/icons/collection.svg")
 const ICON_ENDPOINT := preload("res://source/ui/icons/api.svg")
+const ICON_JSON := preload("res://source/ui/icons/json.svg")
 
 @onready var _tabs: TabContainer = %Tabs
 @onready var _welcome: Control = %Welcome
@@ -101,6 +103,7 @@ func open_collection(
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_query_requested.connect(_on_open_query_requested)
+	tab.open_json_requested.connect(_on_open_json_requested)
 	tab.state_changed.connect(_emit_state_changed)
 	tab.name = "q_%d" % _tab_counter
 	_tab_counter += 1
@@ -123,10 +126,47 @@ func _on_open_query_requested(collection: String, filter: Dictionary, function: 
 	open_collection(_bound_connection, _bound_database, collection, function, filter)
 
 
-func _on_tab_title_changed(title: String, tab: QueryTab) -> void:
+## A results view (any tab kind) asked to open its selected object/string in a new
+## JSON tab.
+func _on_open_json_requested(text: String) -> void:
+	open_json(text)
+
+
+func _on_tab_title_changed(title: String, tab: Control) -> void:
 	var index := _tabs.get_tab_idx_from_control(tab)
 	if index != -1:
 		_tabs.set_tab_title(index, title)
+
+
+# JSON scratch tabs -----------------------------------------------------------
+## Open a JSON tab, optionally seeded with `text` (a file's contents) and a display
+## `title`. JSON tabs are self-contained — they need no DB/API — but live here as
+## peers of the query/endpoint tabs so they share the tab strip and sidecar.
+func open_json(text := "", title := "JSON") -> JsonTab:
+	var tab: JsonTab = JSON_TAB_SCENE.instantiate()
+	tab.configure(text, title)
+	# Connect before add_child so the tab's initial _show() status is captured.
+	tab.status_changed.connect(func(t: String) -> void: status_changed.emit(t))
+	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
+	tab.open_json_requested.connect(_on_open_json_requested)
+	tab.state_changed.connect(_emit_state_changed)
+	tab.name = "j_%d" % _tab_counter
+	_tab_counter += 1
+
+	_tabs.add_child(tab)
+	var index := _tabs.get_tab_idx_from_control(tab)
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_icon(index, ICON_JSON)
+	_tabs.current_tab = index
+	_update_welcome()
+	_emit_state_changed()
+	return tab
+
+
+## The focused tab when it's a JSON tab, else null. Lets the host enable/drive
+## File ▸ Save JSON… for the active tab.
+func active_json_tab() -> JsonTab:
+	return _tabs.get_current_tab_control() as JsonTab
 
 
 # Rocket.Chat endpoint tabs ---------------------------------------------------
@@ -147,6 +187,7 @@ func open_endpoint(endpoint: ApiEndpoint, restore_state: Dictionary = {}) -> End
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	# A cross-query search action on a result opens a sibling query tab on the DB.
 	tab.open_query_requested.connect(_on_open_query_requested)
+	tab.open_json_requested.connect(_on_open_json_requested)
 	tab.state_changed.connect(_emit_state_changed)
 	tab.name = "e_%d" % _tab_counter
 	_tab_counter += 1
@@ -184,6 +225,8 @@ func run_current() -> void:
 		(control as QueryTab).run_query()
 	elif control is EndpointTab:
 		(control as EndpointTab).send_request()
+	elif control is JsonTab:
+		(control as JsonTab).show_json()
 
 
 ## Close the active source tab. Returns true when one was open to close, so the host
@@ -240,7 +283,7 @@ func active_tab_index() -> int:
 
 
 ## Snapshot every open tab, in tab order, as sidecar dicts (see QueryTab.to_state
-## / EndpointTab.to_state). Results are never included.
+## / EndpointTab.to_state / JsonTab.to_state). Results are never included.
 func capture_tabs() -> Array:
 	var out: Array = []
 	for child in _tabs.get_children():
@@ -248,6 +291,8 @@ func capture_tabs() -> Array:
 			out.append((child as QueryTab).to_state())
 		elif child is EndpointTab:
 			out.append((child as EndpointTab).to_state())
+		elif child is JsonTab:
+			out.append((child as JsonTab).to_state())
 	return out
 
 
@@ -268,6 +313,8 @@ func restore_tabs(states: Array, active: int, endpoints_by_id: Dictionary) -> vo
 				var ep: ApiEndpoint = endpoints_by_id.get(String(state.get("endpoint_id", "")))
 				if ep != null:
 					open_endpoint(ep, state)
+			"json":
+				_restore_json_tab(state)
 	_restoring = false
 	var count := _tabs.get_tab_count()
 	if count > 0:
@@ -285,6 +332,7 @@ func _restore_query_tab(state: Dictionary) -> void:
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_query_requested.connect(_on_open_query_requested)
+	tab.open_json_requested.connect(_on_open_json_requested)
 	tab.state_changed.connect(_emit_state_changed)
 	tab.name = "q_%d" % _tab_counter
 	_tab_counter += 1
@@ -292,3 +340,21 @@ func _restore_query_tab(state: Dictionary) -> void:
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_QUERY)
+
+
+## Reopen one saved JSON tab from the sidecar: its text and title are seeded and the
+## value is re-parsed on open (results aren't stored, but reproducing them from the
+## text is local and free).
+func _restore_json_tab(state: Dictionary) -> void:
+	var tab: JsonTab = JSON_TAB_SCENE.instantiate()
+	tab.configure_restore(state)
+	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
+	tab.open_json_requested.connect(_on_open_json_requested)
+	tab.state_changed.connect(_emit_state_changed)
+	tab.name = "j_%d" % _tab_counter
+	_tab_counter += 1
+	_tabs.add_child(tab)
+	var index := _tabs.get_tab_idx_from_control(tab)
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_icon(index, ICON_JSON)

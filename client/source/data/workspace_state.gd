@@ -24,8 +24,8 @@ const RECENT_LIMIT := 20
 
 # Persisted -------------------------------------------------------------------
 ## One entry per open source tab, in tab order. Each is a self-describing dict
-## tagged by "kind" ("query" | "endpoint"); see QueryTab.to_state /
-## EndpointTab.to_state for the exact shapes.
+## tagged by "kind" ("query" | "endpoint" | "json"); see QueryTab.to_state /
+## EndpointTab.to_state / JsonTab.to_state for the exact shapes.
 var tabs: Array = []
 ## Index of the tab that was focused, clamped on restore.
 var active_tab: int = 0

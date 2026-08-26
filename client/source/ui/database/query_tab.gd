@@ -16,6 +16,9 @@ signal title_changed(title: String)
 ## Bubbled up from the results view when a custom type action wants to open a new
 ## query tab on another collection with a pre-defined filter.
 signal open_query_requested(collection: String, filter: Dictionary, function: String)
+## Bubbled up from the results view when a "View JSON in New Tab" / "Unknown Type ›
+## JSON" action asks to open a new JSON tab seeded with `text`.
+signal open_json_requested(text: String)
 ## Emitted when persistable state changes (a query was run, or the collection was
 ## retargeted), so the project can save the .debris-workspace sidecar.
 signal state_changed()
@@ -219,6 +222,7 @@ func _ready() -> void:
 
 	_results.open_query_requested.connect(_on_results_open_query_requested)
 	_results.sort_requested.connect(_on_sort_requested)
+	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 
 	_target_label.text = "%s  ›  %s  ›" % [connection_name, database_name]
 	_collection_edit.text = collection_name
