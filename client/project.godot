@@ -22,6 +22,7 @@ ActivityLog="*res://source/data/activity_log.gd"
 Backend="*res://source/data/backend.gd"
 RocketChat="*res://source/data/rocket_chat.gd"
 ServerManager="*res://source/data/server_manager.gd"
+Updater="*res://source/data/updater.gd"
 
 [display]
 

@@ -26,6 +26,9 @@ const ACTIVITY_LOG_TAB_SCENE := preload("res://source/ui/log/activity_log_tab.ts
 @onready var _error_dialog: ErrorDialog = $ErrorDialog
 @onready var _about_dialog: AboutDialog = $AboutDialog
 
+# Auto-updater dialog, created in code (it has no .tscn) once the shell is up.
+var _update_dialog: UpdateDialog
+
 var _tab_counter := 0
 
 # UI scale (View ▸ UI Scale). The chosen content-scale factor, or 0.0 for "Auto",
@@ -67,6 +70,12 @@ func _ready() -> void:
 	# Reopen the projects that were open at last shutdown; show the start screen
 	# when there are none.
 	_restore_open_projects()
+
+	# Auto-updater: a quiet check for a newer GitHub release shortly after launch
+	# (so it never delays the window appearing), plus Help ▸ Check for Updates….
+	_update_dialog = UpdateDialog.new()
+	add_child(_update_dialog)
+	_check_for_updates_on_startup()
 
 
 # Keyboard shortcuts ----------------------------------------------------------
@@ -829,6 +838,10 @@ const FILE_NEW_JSON := 11
 const FILE_OPEN_JSON := 12
 const FILE_SAVE_JSON := 13
 
+# Help menu item ids.
+const HELP_ABOUT := 0
+const HELP_CHECK_UPDATES := 1
+
 
 func _on_file_menu(id: int) -> void:
 	match id:
@@ -856,10 +869,23 @@ func _on_file_menu(id: int) -> void:
 			ServerManager.quit()
 
 
-## Handle Help menu selections. Currently only "About Debris" (id 0).
+## Handle Help menu selections.
 func _on_help_menu(id: int) -> void:
-	if id == 0:
-		_about_dialog.open()
+	match id:
+		HELP_ABOUT:
+			_about_dialog.open()
+		HELP_CHECK_UPDATES:
+			_update_dialog.check_manual()
+
+
+## Quietly check GitHub for a newer release a few seconds after launch — late
+## enough that it never delays the window, silent unless an update turns up.
+## Skipped under the headless validation runner (which must not touch the network).
+func _check_for_updates_on_startup() -> void:
+	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
+		return
+	await get_tree().create_timer(3.0).timeout
+	_update_dialog.check_silent()
 
 
 ## Enable project-scoped items only when a project is active, and the Attach items
@@ -961,4 +987,6 @@ func _populate_menus() -> void:
 	_view_menu.add_submenu_node_item("UI Scale", _scale_menu)
 	_refresh_scale_menu()
 
-	_help_menu.add_item("About Debris", 0)
+	_help_menu.add_item("Check for Updates…", HELP_CHECK_UPDATES)
+	_help_menu.add_separator()
+	_help_menu.add_item("About Debris", HELP_ABOUT)
