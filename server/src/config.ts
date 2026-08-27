@@ -25,6 +25,13 @@ export interface Config {
   appTimeoutMs: number;
   /** How often (ms) the app registry sweeps for timed-out apps. */
   appSweepIntervalMs: number;
+  /**
+   * Executable used to open a Meteor shell when installing the Rocket.Chat model
+   * bridge. Configured here (not per request) because it is spawned as a command.
+   */
+  rocketchatMeteorBin: string;
+  /** Max time (ms) to wait for a `meteor shell` bridge install to complete. */
+  rocketchatShellTimeoutMs: number;
 }
 
 function intFromEnv(name: string, fallback: number): number {
@@ -45,5 +52,7 @@ export function loadConfig(): Config {
     managed: process.env.DEBRIS_MANAGED === "1",
     appTimeoutMs: intFromEnv("DEBRIS_CLIENT_TIMEOUT_MS", 60_000),
     appSweepIntervalMs: intFromEnv("DEBRIS_CLIENT_SWEEP_INTERVAL_MS", 15_000),
+    rocketchatMeteorBin: process.env.DEBRIS_RC_METEOR_BIN ?? "meteor",
+    rocketchatShellTimeoutMs: intFromEnv("DEBRIS_RC_SHELL_TIMEOUT_MS", 120_000),
   };
 }

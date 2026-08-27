@@ -3,6 +3,8 @@ import { AppRegistry } from "./apps.js";
 import type { Config } from "./config.js";
 import { describeError } from "./errors.js";
 import { ClientCache } from "./mongo/pool.js";
+import { RcBridgeRegistry } from "./rocketchat/bridge.js";
+import { registerRocketChatRoutes } from "./rocketchat/routes.js";
 import { registerRoutes } from "./routes.js";
 
 export interface AppContext {
@@ -28,6 +30,11 @@ export async function buildApp(config: Config): Promise<AppContext> {
   const apps = new AppRegistry({
     timeoutMs: config.appTimeoutMs,
     sweepIntervalMs: config.appSweepIntervalMs,
+  });
+
+  const rcBridges = new RcBridgeRegistry({
+    meteorBin: config.rocketchatMeteorBin,
+    shellTimeoutMs: config.rocketchatShellTimeoutMs,
   });
 
   // Map driver/validation errors to structured JSON responses.
@@ -80,6 +87,7 @@ export async function buildApp(config: Config): Promise<AppContext> {
   );
 
   await app.register(registerRoutes, { cache, prefix: "/api" });
+  await app.register(registerRocketChatRoutes, { registry: rcBridges, prefix: "/api" });
 
   return { app, cache, apps };
 }
