@@ -25,6 +25,9 @@ func _ready() -> void:
 func open_new() -> void:
 	_reset()
 	_edit_index = -1
+	# Pre-fill the most common local Rocket.Chat address so users pointing at a
+	# local server don't have to type it (and aren't left staring at a blank field).
+	_url_edit.text = "http://localhost:3000"
 	title = "New Workspace"
 	UiScale.popup_centered(self, Vector2i(560, 180))
 
