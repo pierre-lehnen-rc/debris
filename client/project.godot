@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Debris"
-config/version="0.1.5"
+config/version="0.1.6"
 run/main_scene="res://source/ui/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
