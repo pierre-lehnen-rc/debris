@@ -24,6 +24,27 @@ selector, and the response.
 
 ![API browser](docs/screenshots/api.png)
 
+## What it's good for
+
+Debris grew out of everyday debugging — the kind where you bounce between a
+database and an API and back, repeating the same fiddly steps. A few workflows it
+is built to make painless:
+
+- **Following an ID across collections.** Debugging often means pulling an
+  identifier out of one document and looking it up in another, over and over.
+  Right-click a record and jump straight to the linked records in other
+  collections, instead of copying IDs by hand each time.
+- **A database and an API, side by side.** Grab a value from a live document and
+  fire an API call with it without juggling windows. This matters most when
+  timing does — e.g. prepare a request in advance, read an ID off a record the
+  moment it appears (while a call is still ringing), and send, all in one place,
+  rather than shuttling between a Mongo client and a separate API tool.
+- **Testing an API as different users.** Rather than pasting a permanent auth
+  token into Swagger, Debris retrieves the token for you from a saved password.
+  Calling the same endpoint as several users — or as no user at all, to confirm
+  auth is actually being enforced — is a quick switch, so comparing responses is
+  trivial.
+
 ## Concepts
 
 Debris is a **document-based** app. You work in **projects** — a project is a
