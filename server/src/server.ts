@@ -1,4 +1,5 @@
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import { AppRegistry } from "./apps.js";
 import type { Config } from "./config.js";
 import { describeError } from "./errors.js";
 import { ClientCache } from "./mongo/pool.js";
@@ -7,6 +8,7 @@ import { registerRoutes } from "./routes.js";
 export interface AppContext {
   app: FastifyInstance;
   cache: ClientCache;
+  apps: AppRegistry;
 }
 
 /**
@@ -21,6 +23,11 @@ export async function buildApp(config: Config): Promise<AppContext> {
     idleTtlMs: config.clientIdleTtlMs,
     sweepIntervalMs: config.clientSweepIntervalMs,
     serverSelectionTimeoutMs: config.serverSelectionTimeoutMs,
+  });
+
+  const apps = new AppRegistry({
+    timeoutMs: config.appTimeoutMs,
+    sweepIntervalMs: config.appSweepIntervalMs,
   });
 
   // Map driver/validation errors to structured JSON responses.
@@ -38,9 +45,41 @@ export async function buildApp(config: Config): Promise<AppContext> {
     reply.code(status).send(payload);
   });
 
-  app.get("/health", async () => ({ status: "ok", clients: cache.size }));
+  app.get("/health", async () => ({
+    status: "ok",
+    clients: cache.size,
+    apps: apps.size,
+  }));
+
+  // Connection tracking for the app instances using this server. These are the
+  // app's own control-plane calls (not MongoDB proxying), so they live outside
+  // the /api prefix. Both carry a clientId the app generates for its lifetime.
+  const clientBody = {
+    type: "object",
+    required: ["clientId"],
+    additionalProperties: true,
+    properties: { clientId: { type: "string", minLength: 1 } },
+  } as const;
+
+  app.post<{ Body: { clientId: string } }>(
+    "/clients/heartbeat",
+    { schema: { body: clientBody } },
+    async (req) => {
+      apps.heartbeat(req.body.clientId);
+      return { ok: true, apps: apps.size };
+    },
+  );
+
+  app.post<{ Body: { clientId: string } }>(
+    "/clients/disconnect",
+    { schema: { body: clientBody } },
+    async (req) => {
+      apps.disconnect(req.body.clientId);
+      return { ok: true, apps: apps.size };
+    },
+  );
 
   await app.register(registerRoutes, { cache, prefix: "/api" });
 
-  return { app, cache };
+  return { app, cache, apps };
 }

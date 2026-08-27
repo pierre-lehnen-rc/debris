@@ -3,10 +3,14 @@ import { buildApp } from "./server.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const { app, cache } = await buildApp(config);
+  const { app, cache, apps } = await buildApp(config);
 
-  const shutdown = async (signal: string): Promise<void> => {
-    app.log.info({ signal }, "shutting down");
+  let shuttingDown = false;
+  const shutdown = async (reason: string): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.log.info({ reason }, "shutting down");
+    apps.stop();
     await app.close();
     await cache.closeAll();
     process.exit(0);
@@ -16,6 +20,16 @@ async function main(): Promise<void> {
     process.on(signal, () => {
       void shutdown(signal);
     });
+  }
+
+  // A managed server (launched by the app) stops itself once the last connected
+  // app disconnects, so runs don't leave an orphaned server behind. A server the
+  // developer started by hand leaves onEmpty unset and keeps running.
+  if (config.managed) {
+    apps.onEmpty = () => {
+      app.log.info("no apps connected; stopping managed server");
+      void shutdown("no-apps");
+    };
   }
 
   try {

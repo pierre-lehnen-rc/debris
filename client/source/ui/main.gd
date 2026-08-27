@@ -125,7 +125,7 @@ func _input(event: InputEvent) -> void:
 				_save_project()
 			accept_event()
 		KEY_Q when not shift:
-			get_tree().quit()
+			ServerManager.quit()
 			accept_event()
 		KEY_W when not shift:
 			_close_current_document()
@@ -853,7 +853,7 @@ func _on_file_menu(id: int) -> void:
 		FILE_ACTIVITY_LOG:
 			_open_activity_log_tab()
 		FILE_QUIT:
-			get_tree().quit()
+			ServerManager.quit()
 
 
 ## Handle Help menu selections. Currently only "About Debris" (id 0).

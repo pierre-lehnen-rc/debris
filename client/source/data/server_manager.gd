@@ -4,13 +4,14 @@ extends Node
 ## server is already answering at Backend's base URL (one the developer started by
 ## hand, or one this app opened earlier); if so it reuses it. Otherwise it locates
 ## a `node` binary, extracts the bundled server (res://server/…) to a writable
-## location, and launches it in its OWN terminal window so the user can watch the
-## logs and stop it whenever they like.
+## location, and launches it as a quiet background process (no console window).
 ##
-## The server is intentionally NOT killed when the app exits — it keeps running in
-## its terminal and will simply be reused the next time the app starts (so runs
-## never stack up duplicate servers). To stop it, the user closes the terminal
-## window (or presses Ctrl+C).
+## While the app runs it heartbeats the server every 30 seconds and sends a
+## disconnect when it closes, so the server knows who is connected. A server this
+## app launched (a "managed" server) stops itself once the last connected app
+## goes away — so runs never leave an orphaned server behind, and there's no
+## window for the user to watch or close. A server the developer started by hand
+## keeps running regardless; the app just reuses it.
 ##
 ## If Node.js can't be found the app still runs — the user just has to start a
 ## server themselves; a status message explains what happened.
@@ -25,20 +26,26 @@ const BUNDLE_RES_PATH := "res://server/debris-server.cjs"
 ## Where the bundle is copied so `node` can run it (res:// may live inside a
 ## packed archive in exported builds and isn't a real filesystem path).
 const BUNDLE_USER_PATH := "user://server/debris-server.cjs"
-## Directory (inside user://) where we write the launcher script.
-const LAUNCHER_USER_DIR := "user://server"
 ## How long to wait for a freshly-launched server to answer /health.
 const STARTUP_POLL_ATTEMPTS := 40
 const STARTUP_POLL_INTERVAL := 0.25
+## How often we tell the server we're still here. The server presumes an app gone
+## after ~60s of silence, so 30s tolerates one dropped beat.
+const HEARTBEAT_INTERVAL := 30.0
 
 var _host := "127.0.0.1"
-var _port := 4000
+var _port := 4020
 
 # Startup readiness, consumed by await_ready(). `_startup_resolved` flips true the
 # moment startup concludes (server answering, or given up on); `_server_available`
 # is the outcome. Callers that ask before it resolves await `ready_resolved`.
 var _startup_resolved := false
 var _server_available := false
+
+# Identifies this app instance to the server for connection tracking. Generated
+# once per run; distinct instances on one machine get distinct ids.
+var _client_id := ""
+var _heartbeat_timer: Timer = null
 
 
 func _ready() -> void:
@@ -49,8 +56,25 @@ func _ready() -> void:
 	if not OS.get_environment("DEBRIS_HEADLESS").is_empty():
 		_finish_startup(false)
 		return
+	# Route the window's close button through us so we can send a disconnect
+	# before the process dies. Programmatic quits go through quit() instead.
+	get_tree().set_auto_accept_quit(false)
 	_parse_base_url(Backend.base_url)
 	_start()
+
+
+## Handle the OS "close window" request: tell the server we're leaving, then quit.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		quit()
+
+
+## Notify the server we're disconnecting, then quit the app. Every quit path
+## (window close, Cmd/Ctrl+Q, File ▸ Quit) should call this so a managed server
+## learns promptly that this app is gone instead of waiting out its timeout.
+func quit() -> void:
+	await _notify_disconnect()
+	get_tree().quit()
 
 
 ## Await the bundled server's startup. Returns immediately once startup has
@@ -72,6 +96,8 @@ func _finish_startup(available: bool) -> void:
 	_server_available = available
 	_startup_resolved = true
 	ready_resolved.emit(available)
+	if available:
+		_start_heartbeat()
 
 
 ## Latest status line, also emitted via status_changed for the UI.
@@ -92,8 +118,10 @@ func _parse_base_url(url: String) -> void:
 
 
 func _start() -> void:
+	var started := Time.get_ticks_msec()
 	if await _healthy():
 		_set_status("Using server already running at %s" % Backend.base_url)
+		_record_server_event("detected", true, "Reused server already running", Time.get_ticks_msec() - started)
 		_finish_startup(true)
 		return
 
@@ -101,6 +129,7 @@ func _start() -> void:
 	if node.is_empty():
 		_set_status("Node.js not found — start the server manually (set DEBRIS_NODE to override)")
 		push_warning("ServerManager: no usable `node` binary found; server not started")
+		_record_server_event("start", false, "Node.js not found — start the server manually", Time.get_ticks_msec() - started)
 		_finish_startup(false)
 		return
 
@@ -108,41 +137,57 @@ func _start() -> void:
 	if script.is_empty():
 		_set_status("Bundled server is missing (run `yarn bundle`)")
 		push_warning("ServerManager: could not read " + BUNDLE_RES_PATH)
+		_record_server_event("start", false, "Bundled server is missing (run `yarn bundle`)", Time.get_ticks_msec() - started)
 		_finish_startup(false)
 		return
 
-	var windowed := _launch_in_terminal(node, script)
-	if not windowed:
-		# No terminal emulator available (e.g. a headless box) — fall back to a
-		# plain background process so the app still works. Reuse detection keeps
-		# this from stacking up across runs. The server reads its port/host from
-		# the environment, which the child inherits from us. (The terminal path
-		# instead bakes these into the launcher script.)
-		OS.set_environment("PORT", str(_port))
-		OS.set_environment("HOST", _host)
-		if OS.get_environment("LOG_LEVEL").is_empty():
-			OS.set_environment("LOG_LEVEL", "warn")
-		var pid := OS.create_process(node, [script])
-		if pid <= 0:
-			_set_status("Failed to launch the bundled server")
-			push_warning("ServerManager: OS.create_process failed for " + node)
-			_finish_startup(false)
-			return
-		_set_status("Started bundled server in the background (pid %d)" % pid)
-	else:
-		_set_status("Opening a terminal window for the bundled server…")
+	# Launch the server as a detached background process — no console window. It
+	# runs quietly and stops itself once the last app disconnects (see the class
+	# doc), so there's nothing for the user to watch or close. The child reads its
+	# port/host and the managed flag from the environment it inherits from us.
+	# Reuse detection keeps this from stacking up across runs.
+	OS.set_environment("PORT", str(_port))
+	OS.set_environment("HOST", _host)
+	# Mark this as a managed server so it stops itself when the last app leaves.
+	OS.set_environment("DEBRIS_MANAGED", "1")
+	if OS.get_environment("LOG_LEVEL").is_empty():
+		OS.set_environment("LOG_LEVEL", "warn")
+	# open_console defaults to false, so no terminal window appears on Windows.
+	var pid := OS.create_process(node, [script])
+	if pid <= 0:
+		_set_status("Failed to launch the bundled server")
+		push_warning("ServerManager: OS.create_process failed for " + node)
+		_record_server_event("start", false, "Failed to launch the bundled server", Time.get_ticks_msec() - started)
+		_finish_startup(false)
+		return
+	_set_status("Started bundled server in the background (pid %d)" % pid)
 
 	for _i in STARTUP_POLL_ATTEMPTS:
 		await get_tree().create_timer(STARTUP_POLL_INTERVAL).timeout
 		if await _healthy():
-			if windowed:
-				_set_status("Bundled server ready at %s (running in its own terminal)" % Backend.base_url)
-			else:
-				_set_status("Bundled server ready at %s" % Backend.base_url)
+			_set_status("Bundled server ready at %s" % Backend.base_url)
+			_record_server_event("started", true, "Launched bundled server (pid %d)" % pid, Time.get_ticks_msec() - started)
 			_finish_startup(true)
 			return
 	_set_status("Bundled server launched but not yet responding")
+	_record_server_event("started", false, "Launched bundled server (pid %d) but it never answered" % pid, Time.get_ticks_msec() - started)
 	_finish_startup(false)
+
+
+## Record a server-lifecycle event in the shared ActivityLog, so the user sees
+## when and how the server came up (or why it didn't) alongside their queries.
+## The message lands in `result` on success and in `error` on failure; the
+## `target` is the server's base URL, matching how Backend logs its requests.
+func _record_server_event(action: String, ok: bool, message: String, ms: int) -> void:
+	ActivityLog.record({
+		"source": "server",
+		"action": action,
+		"target": Backend.base_url,
+		"ok": ok,
+		"result": message if ok else "",
+		"error": "" if ok else message,
+		"ms": ms,
+	})
 
 
 ## GET /health once; true when the server answers 200.
@@ -157,6 +202,54 @@ func _healthy() -> bool:
 	var result: Array = await http.request_completed
 	http.queue_free()
 	return result[0] == HTTPRequest.RESULT_SUCCESS and int(result[1]) == 200
+
+
+# Connection heartbeat --------------------------------------------------------
+## Begin heartbeating the server so it knows this app is connected. Sends one
+## beat immediately, then every HEARTBEAT_INTERVAL. Idempotent. No-op under the
+## headless runner (no network) and when not inside the tree.
+func _start_heartbeat() -> void:
+	if _heartbeat_timer != null:
+		return
+	if not OS.get_environment("DEBRIS_HEADLESS").is_empty() or not is_inside_tree():
+		return
+	_client_id = "%d-%d" % [Time.get_ticks_usec(), randi()]
+	_send_heartbeat()
+	_heartbeat_timer = Timer.new()
+	_heartbeat_timer.wait_time = HEARTBEAT_INTERVAL
+	_heartbeat_timer.timeout.connect(_send_heartbeat)
+	add_child(_heartbeat_timer)
+	_heartbeat_timer.start()
+
+
+## POST /clients/heartbeat, fire-and-forget (a missed beat is tolerated server-side).
+func _send_heartbeat() -> void:
+	_post_client("/clients/heartbeat")
+
+
+## Tell the server we're disconnecting and wait briefly for it to land, so a
+## managed server can stop promptly instead of waiting out its timeout. No-op if
+## we never started heartbeating (server was never available).
+func _notify_disconnect() -> void:
+	if _client_id.is_empty():
+		return
+	await _post_client("/clients/disconnect")
+
+
+## POST a control-plane call carrying our client id. Awaitable; short timeout so
+## it never stalls shutdown if the server is already gone.
+func _post_client(path: String) -> void:
+	var http := HTTPRequest.new()
+	http.timeout = 2.0
+	add_child(http)
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	var body := JSON.stringify({"clientId": _client_id})
+	var err := http.request(Backend.base_url + path, headers, HTTPClient.METHOD_POST, body)
+	if err != OK:
+		http.queue_free()
+		return
+	await http.request_completed
+	http.queue_free()
 
 
 ## Find a runnable `node`: an explicit override first, then PATH, then the usual
@@ -205,99 +298,3 @@ func _extract_bundle() -> String:
 	dst.store_buffer(bytes)
 	dst.close()
 	return ProjectSettings.globalize_path(BUNDLE_USER_PATH)
-
-
-# Terminal launch -------------------------------------------------------------
-## Launch `node script` inside a new terminal window. Returns true if a terminal
-## was opened, false if no supported terminal could be found (caller then falls
-## back to a background process).
-func _launch_in_terminal(node: String, script: String) -> bool:
-	var launcher := _write_launcher(node, script)
-	if launcher.is_empty():
-		return false
-
-	match OS.get_name():
-		"Windows":
-			return OS.create_process("cmd", \
-				["/c", "start", "Debris Server", "cmd", "/k", launcher]) > 0
-		"macOS":
-			# Terminal.app runs an executable file; it needs the exec bit set.
-			OS.execute("chmod", ["+x", launcher])
-			return OS.create_process("open", ["-a", "Terminal", launcher]) > 0
-		_:
-			return _launch_linux_terminal(launcher)
-
-
-## Try each known Linux/BSD terminal emulator in turn; the first one present wins.
-func _launch_linux_terminal(launcher: String) -> bool:
-	# Each entry is [binary, args]. Most terminals want the command split into
-	# separate argv entries (-e sh <file>); a few want it as one string.
-	var candidates := [
-		["x-terminal-emulator", ["-e", "sh", launcher]],
-		["gnome-terminal", ["--title", "Debris Server", "--", "sh", launcher]],
-		["konsole", ["-e", "sh", launcher]],
-		["kitty", ["sh", launcher]],
-		["alacritty", ["-e", "sh", launcher]],
-		["xfce4-terminal", ["--title=Debris Server", "--command", "sh %s" % launcher]],
-		["tilix", ["-e", "sh %s" % launcher]],
-		["terminator", ["-e", "sh %s" % launcher]],
-		["xterm", ["-e", "sh", launcher]],
-	]
-	for entry in candidates:
-		var binary: String = entry[0]
-		if not _which(binary):
-			continue
-		if OS.create_process(binary, entry[1]) > 0:
-			return true
-	return false
-
-
-func _which(binary: String) -> bool:
-	var out: Array = []
-	return OS.execute("which", [binary], out, true) == 0
-
-
-## Write a small launcher script (sh or bat) that sets the server's env, runs it,
-## and keeps the window open afterwards so any startup error stays visible.
-## Returns the globalized path, or "" on failure.
-func _write_launcher(node: String, script: String) -> String:
-	DirAccess.make_dir_recursive_absolute(LAUNCHER_USER_DIR)
-	var is_windows := OS.get_name() == "Windows"
-	# macOS: ".command" is the canonical Terminal-executable extension, so
-	# `open -a Terminal` runs it regardless of how ".sh" happens to be associated.
-	var filename := "run-server.sh"
-	if is_windows:
-		filename = "run-server.bat"
-	elif OS.get_name() == "macOS":
-		filename = "run-server.command"
-	var path := LAUNCHER_USER_DIR + "/" + filename
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return ""
-
-	if is_windows:
-		f.store_string("@echo off\r\n")
-		f.store_string("title Debris Server\r\n")
-		f.store_string("set PORT=%d\r\n" % _port)
-		f.store_string("set HOST=%s\r\n" % _host)
-		f.store_string("if \"%%LOG_LEVEL%%\"==\"\" set LOG_LEVEL=info\r\n")
-		f.store_string("echo Debris bundled server - close this window to stop it.\r\n")
-		f.store_string("echo.\r\n")
-		f.store_string("\"%s\" \"%s\"\r\n" % [node, script])
-		f.store_string("echo.\r\n")
-		f.store_string("echo Server exited. Press any key to close.\r\n")
-		f.store_string("pause >nul\r\n")
-	else:
-		f.store_string("#!/bin/sh\n")
-		f.store_string("export PORT='%d'\n" % _port)
-		f.store_string("export HOST='%s'\n" % _host)
-		f.store_string(": \"${LOG_LEVEL:=info}\"; export LOG_LEVEL\n")
-		f.store_string("echo 'Debris bundled server - close this window (or Ctrl+C) to stop it.'\n")
-		f.store_string("echo\n")
-		f.store_string("'%s' '%s'\n" % [node, script])
-		f.store_string("status=$?\n")
-		f.store_string("echo\n")
-		f.store_string("echo \"Server exited (status $status). Press Enter to close.\"\n")
-		f.store_string("read _\n")
-	f.close()
-	return ProjectSettings.globalize_path(path)

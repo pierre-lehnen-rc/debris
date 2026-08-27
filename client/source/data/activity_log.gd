@@ -3,13 +3,14 @@ extends Node
 ## In-memory record of every action the app runs against a backend, so the user
 ## can review what happened and what came back. Registered as the `ActivityLog`
 ## autoload. Both data clients (Backend for MongoDB, RocketChat for the REST API)
-## call record() at their request chokepoints; the Activity Log tab renders the
-## entries and listens to entry_added for live updates.
+## call record() at their request chokepoints, and ServerManager records server
+## lifecycle events (start / reuse); the Activity Log tab renders the entries and
+## listens to entry_added for live updates.
 ##
 ## Each entry is a Dictionary shaped as:
 ##   {
 ##     time: String,     # local "HH:MM:SS" when the action completed
-##     source: String,   # "mongo" | "rocketchat"
+##     source: String,   # "mongo" | "rocketchat" | "server"
 ##     action: String,   # operation name, e.g. "find" or "GET /api/…"
 ##     target: String,   # what it acted on, e.g. "mydb.users" or a URL path
 ##     params: Dictionary, # inputs sent (filter, options, pagination, query, body)

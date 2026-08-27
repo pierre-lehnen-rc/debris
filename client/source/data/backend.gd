@@ -6,7 +6,7 @@ extends Node
 ## { ok: bool, data: Variant, error: String }. Connection details (host, port,
 ## credentials) are sent with every request; nothing is stored server-side.
 
-const DEFAULT_BASE_URL := "http://127.0.0.1:4000"
+const DEFAULT_BASE_URL := "http://127.0.0.1:4020"
 const REQUEST_TIMEOUT_SECONDS := 15.0
 
 var base_url := DEFAULT_BASE_URL

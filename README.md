@@ -101,11 +101,12 @@ godot --path client
 ```
 
 On launch the app checks whether a server is already answering at
-`http://127.0.0.1:4000`; if not, it locates `node`, extracts the bundled server,
-and starts it **in its own terminal window** so you can watch its logs. The
-server is intentionally left running when the app exits and is reused next time
-(so runs never stack up duplicate servers). To stop it, close its terminal window
-or press Ctrl+C there.
+`http://127.0.0.1:4020`; if not, it locates `node`, extracts the bundled server,
+and starts it as a **quiet background process** (no console window). While the
+app runs it heartbeats the server every 30s and sends a disconnect on close, so
+the server knows who is connected. A server the app launched stops itself once
+the last connected app goes away (so runs never leave an orphaned server behind);
+a server you started by hand keeps running and is simply reused.
 
 Useful environment overrides:
 
@@ -113,7 +114,7 @@ Useful environment overrides:
 | ------------------- | ---------------------------------------------------- |
 | `DEBRIS_NODE`       | Path to a specific `node` binary.                    |
 | `DEBRIS_SERVER_URL` | Point the client at an already-running server.       |
-| `PORT` / `HOST`     | Where the server listens (default `4000` / `127.0.0.1`). |
+| `PORT` / `HOST`     | Where the server listens (default `4020` / `127.0.0.1`). |
 
 ## Using the app
 
