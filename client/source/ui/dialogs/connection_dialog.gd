@@ -64,6 +64,11 @@ func _apply_style() -> void:
 func open_new() -> void:
 	_reset()
 	_edit_index = -1
+	# Pre-fill the host with "localhost" rather than leaving it blank behind a
+	# placeholder: users connecting to localhost were reading the greyed-out
+	# placeholder as an already-set value and saving an empty host.
+	_host_edit.text = "localhost"
+	_update_url_preview()
 	title = "New Connection"
 	UiScale.popup_centered(self, Vector2i(540, 460))
 
