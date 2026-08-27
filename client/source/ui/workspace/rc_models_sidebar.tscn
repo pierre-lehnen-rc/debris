@@ -1,0 +1,42 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/rc_models_sidebar.gd" id="1_rcs0"]
+
+[node name="RcModelsSidebar" type="PanelContainer"]
+script = ExtResource("1_rcs0")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Header" type="PanelContainer" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Title" type="Label" parent="VBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SERVER MODELS"
+
+[node name="Body" type="MarginContainer" parent="VBox"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Box" type="VBoxContainer" parent="VBox/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Desc" type="Label" parent="VBox/Body/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Call @rocket.chat/models methods on the running Rocket.Chat server and view the results."
+autowrap_mode = 3
+
+[node name="NewBtn" type="Button" parent="VBox/Body/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+text = "New Model Query"

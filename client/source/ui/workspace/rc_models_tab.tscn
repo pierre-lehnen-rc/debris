@@ -1,0 +1,87 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/rc_models_tab.gd" id="1_rcm0"]
+[ext_resource type="PackedScene" path="res://source/ui/database/results_view.tscn" id="2_rcm1"]
+
+[node name="RcModelsTab" type="VBoxContainer"]
+theme_override_constants/separation = 0
+script = ExtResource("1_rcm0")
+
+[node name="Toolbar" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Toolbar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RunBtn" type="Button" parent="Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Call the model method (F5)"
+focus_mode = 0
+text = "Run"
+
+[node name="TitleLabel" type="Label" parent="Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Models"
+
+[node name="Split" type="VSplitContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+split_offsets = PackedInt32Array(190)
+split_offset = 190
+
+[node name="Form" type="VBoxContainer" parent="Split"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Targets" type="HBoxContainer" parent="Split/Form"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MeteorEdit" type="LineEdit" parent="Split/Form/Targets"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Meteor app dir — …/Rocket.Chat/apps/meteor"
+
+[node name="UrlEdit" type="LineEdit" parent="Split/Form/Targets"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+placeholder_text = "http://localhost:3000"
+
+[node name="Call" type="HBoxContainer" parent="Split/Form"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ModelEdit" type="LineEdit" parent="Split/Form/Call"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Model (e.g. Users)"
+
+[node name="MethodEdit" type="LineEdit" parent="Split/Form/Call"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Method (e.g. findOneByUsername)"
+
+[node name="ArgsEdit" type="CodeEdit" parent="Split/Form"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+size_flags_vertical = 3
+placeholder_text = "[ ]  — JSON array of arguments, e.g. [\"rocket.cat\"]"
+tab_input_mode = false
+gutters_draw_line_numbers = true
+
+[node name="Results" parent="Split" instance=ExtResource("2_rcm1")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[connection signal="pressed" from="Toolbar/Row/RunBtn" to="." method="_run"]

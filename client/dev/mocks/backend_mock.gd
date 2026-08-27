@@ -47,8 +47,23 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 			return _ok(_load("explain.json"))
 		"/api/ping":
 			return _ok({"ok": 1})
+		"/api/rocketchat/call":
+			return _rc_call(body)
 	# Unknown endpoint: behave like a find so the caller still gets rows.
 	return _ok(_find_docs(collection))
+
+
+## Stand-in for the Rocket.Chat model bridge. Returns the bridge's { result: … }
+## envelope: a count fixture for count* methods, else a sample user document.
+## model "force-error" (or a missing model/method) exercises the failure path.
+func _rc_call(body: Dictionary) -> Dictionary:
+	var model: String = body.get("model", "")
+	var method: String = body.get("method", "")
+	if model == FORCE_ERROR_HOST or model.is_empty() or method.is_empty():
+		return _err("forced error (mock): model '%s'" % model)
+	if method.begins_with("count"):
+		return _ok({"result": {"$numberInt": "3"}})
+	return _ok({"result": _load("rocketchat_user.json")})
 
 
 ## Documents for a collection: its own fixture (find/<collection>.json) when

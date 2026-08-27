@@ -122,6 +122,20 @@ func ping(connection: Dictionary) -> Dictionary:
 	return await _post("/api/ping", {"connection": connection})
 
 
+## Call a @rocket.chat/models method on a running Rocket.Chat server via the
+## server's bridge. `target` names the RC instance ({ meteorDir, url? }); `args` is
+## the argument list, spread into the call. The result's `data` is `{ result }`,
+## the method's return value as canonical Extended JSON (parses to plain nested
+## dictionaries, same as the Mongo routes).
+func rocketchat_call(target: Dictionary, model: String, method: String, args: Array) -> Dictionary:
+	return await _post("/api/rocketchat/call", {
+		"target": target,
+		"model": model,
+		"method": method,
+		"args": args,
+	})
+
+
 ## Convert a stored connection config (name / "host:port" / optional auth) into
 ## the discrete connection spec the server expects.
 static func to_spec(conn: Dictionary) -> Dictionary:
@@ -203,6 +217,10 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 ## endpoint name (path minus the "/api/" prefix); the target is the collection
 ## (or database) the body addressed.
 func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	# Rocket.Chat model-bridge calls aren't Mongo actions; label them accordingly.
+	if path == "/api/rocketchat/call":
+		_log_rocketchat_call(body, outcome, ms)
+		return
 	var target: String = body.get("database", "")
 	if body.has("collection"):
 		target = "%s.%s" % [target, body["collection"]]
@@ -213,6 +231,23 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 		"params": _params_from(body),
 		"ok": outcome.get("ok", false),
 		"result": _summarize(outcome.get("data")) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": ms,
+	})
+
+
+## Record a Rocket.Chat model-bridge call: the target is "Model.method", the args
+## are the logged params, and the result summary unwraps the bridge's { result }.
+func _log_rocketchat_call(body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	var data: Variant = outcome.get("data")
+	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
+	ActivityLog.record({
+		"source": "rocketchat",
+		"action": "model call",
+		"target": "%s.%s" % [body.get("model", ""), body.get("method", "")],
+		"params": {"args": body.get("args", [])},
+		"ok": outcome.get("ok", false),
+		"result": _summarize(value) if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
 	})

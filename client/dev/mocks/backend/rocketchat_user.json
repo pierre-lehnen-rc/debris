@@ -1,0 +1,9 @@
+{
+  "_id": "rocket.cat",
+  "username": "rocket.cat",
+  "name": "Rocket.Cat",
+  "type": "bot",
+  "active": true,
+  "roles": ["bot"],
+  "createdAt": { "$date": { "$numberLong": "1756402551272" } }
+}

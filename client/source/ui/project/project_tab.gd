@@ -27,15 +27,18 @@ signal save_requested()
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
 const USERS_PANEL_SCENE := preload("res://source/ui/workspace/users_panel.tscn")
+const RCMODELS_SIDEBAR_SCENE := preload("res://source/ui/workspace/rc_models_sidebar.tscn")
 const CENTER_SCENE := preload("res://source/ui/project/workspace_center.tscn")
 
 const ICON_COLLECTIONS := preload("res://source/ui/icons/database.svg")
 const ICON_ENDPOINTS := preload("res://source/ui/icons/api.svg")
 const ICON_USERS := preload("res://source/ui/icons/users.svg")
+const ICON_MODELS := preload("res://source/ui/icons/models.svg")
 
 const VIEW_COLLECTIONS := "collections"
 const VIEW_ENDPOINTS := "endpoints"
 const VIEW_USERS := "users"
+const VIEW_MODELS := "models"
 
 # Default sidebar width matches the old database tab (split_offset 360, 180 floor),
 # which is the width the sidebar reference was taken from.
@@ -64,6 +67,7 @@ var _center: WorkspaceCenter
 var _collection_sidebar: CollectionSidebar = null
 var _endpoint_sidebar: EndpointSidebar = null
 var _users_panel: UsersPanel = null
+var _models_sidebar: RcModelsSidebar = null
 # view id -> sidebar Control, so a view selection can show exactly one.
 var _views: Dictionary = {}
 
@@ -183,6 +187,7 @@ func _setup() -> void:
 	_build_endpoints_view()
 	if _doc.has_rocketchat():
 		_build_users_view()
+		_build_models_view()
 	_refresh_activity()
 	# With an API attached, tab restore waits for the endpoint list (cache or live)
 	# so endpoint tabs can be matched to their definitions; _on_endpoints_loaded
@@ -244,6 +249,7 @@ func attach_rocketchat(config: Dictionary) -> void:
 	_remove_view(VIEW_ENDPOINTS)
 	_build_endpoints_view()
 	_build_users_view()
+	_build_models_view()
 	_refresh_activity(VIEW_ENDPOINTS)
 
 
@@ -333,6 +339,14 @@ func _build_users_view() -> void:
 	_users_panel.configure(_session)
 
 
+## The Models view: a launcher for the server-models console. Present whenever an
+## API is attached (the console targets that Rocket.Chat server).
+func _build_models_view() -> void:
+	_models_sidebar = RCMODELS_SIDEBAR_SCENE.instantiate()
+	_add_view(VIEW_MODELS, _models_sidebar)
+	_models_sidebar.new_query_requested.connect(_on_new_model_query)
+
+
 ## Create the shared Rocket.Chat session once, binding it to the center.
 func _ensure_session() -> void:
 	if _session == null:
@@ -392,6 +406,7 @@ func _refresh_activity(select_view: String = "") -> void:
 	]
 	if _doc.has_rocketchat():
 		views.append({"id": VIEW_USERS, "icon": ICON_USERS, "tooltip": "Users"})
+		views.append({"id": VIEW_MODELS, "icon": ICON_MODELS, "tooltip": "Server Models"})
 	_activity.set_views(views, select_view)
 
 
@@ -445,6 +460,13 @@ func _on_schema_changed(schema: DatabaseSchema) -> void:
 func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 	_center.open_endpoint(endpoint)
 	status_changed.emit("Opened %s" % endpoint.label())
+
+
+func _on_new_model_query() -> void:
+	# Pre-fill the console with the project's known RC URL; the Meteor dir is entered
+	# per tab (it's a local path we don't store in the project document).
+	_center.open_rcmodels(_rocketchat_url())
+	status_changed.emit("Opened a server-models query")
 
 
 func _on_status_changed(text: String) -> void:
