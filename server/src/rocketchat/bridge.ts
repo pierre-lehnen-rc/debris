@@ -55,6 +55,19 @@ function buildInstaller(token: string): string {
   const models = require('@rocket.chat/models');
   const { EJSON } = require('mongodb').BSON;
   const BLOCKED = new Set(['constructor','__proto__','prototype','__defineGetter__','__defineSetter__','__lookupGetter__','__lookupSetter__','hasOwnProperty','isPrototypeOf','propertyIsEnumerable','toString','valueOf']);
+  // Many model methods return a live Mongo cursor (or a { cursor, totalCount }
+  // paginated shape) rather than a resolved array. A cursor back-references the
+  // client/session pool, so serializing it directly throws on the circular
+  // structure — drain it to documents first.
+  async function materialize(v) {
+    if (v && typeof v.toArray === 'function') return await v.toArray();
+    if (v && v.cursor && typeof v.cursor.toArray === 'function') {
+      const documents = await v.cursor.toArray();
+      const totalCount = (v.totalCount && typeof v.totalCount.then === 'function') ? await v.totalCount : v.totalCount;
+      return { documents: documents, totalCount: totalCount };
+    }
+    return v;
+  }
   const D = (globalThis.__debris = globalThis.__debris || {});
   D.token = ${tokenLiteral};
   D.handle = async function (body) {
@@ -67,7 +80,7 @@ function buildInstaller(token: string): string {
     if (!inst || typeof inst !== 'object') throw new Error('unknown model: ' + model);
     const fn = inst[method];
     if (typeof fn !== 'function') throw new Error('not a function: ' + model + '.' + method);
-    return await fn.apply(inst, Array.isArray(args) ? args : []);
+    return await materialize(await fn.apply(inst, Array.isArray(args) ? args : []));
   };
   if (D.installed) return 'handler-updated';
   D.installed = true;
