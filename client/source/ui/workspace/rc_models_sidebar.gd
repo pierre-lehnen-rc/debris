@@ -6,7 +6,9 @@ extends PanelContainer
 ## (folder icon per model; functions will hang under them later). The model list is
 ## supplied by the host after the bridge is injected (set_models). Double-clicking a
 ## function opens a query for it. The header's filter box narrows the list as you
-## type, matching model names and the functions already loaded under them. When the
+## type, matching model names and the functions already loaded under them. A model's
+## functions are themselves grouped: everything inherited from IBaseModel under
+## "base", and the model's own methods by the first word of their name. When the
 ## workspace has no Rocket.Chat repository path the bridge can't be reached, so a
 ## message replaces the tree until one is set.
 
@@ -28,13 +30,24 @@ const DESC_NEEDS_CONFIG := (
 	+ "set its Rocket.Chat Repository path — where the server is checked out — to use "
 	+ "Server Models."
 )
-## Same folder icon the Database panel uses for its collection groups.
-const ICON_MODEL := preload("res://source/ui/icons/group.svg")
+## The models glyph the Server Models tabs use, so a model row reads as a model and
+## not as one of the sub-group folders hanging under it.
+const ICON_MODEL := preload("res://source/ui/icons/models.svg")
+## The folder icon the Database panel uses for its collection groups, for the
+## function sub-groups.
+const ICON_GROUP := preload("res://source/ui/icons/group.svg")
 const ICON_FUNCTION := preload("res://source/ui/icons/function.svg")
 const ICON_REFRESH := preload("res://source/ui/icons/refresh.svg")
 const ICON_SIZE := 16
 ## Cell-button id for a model row's "reload functions" button.
 const BTN_RELOAD := 0
+## A model's own methods are bucketed by the first word of their name; a word needs
+## this many methods to earn its own sub-group. Anything rarer lands in "others".
+const GROUP_MIN := 3
+## The sub-group holding everything a model inherits from IBaseModel, and the one
+## holding its own methods whose first word is too rare to group on.
+const GROUP_BASE := "base"
+const GROUP_OTHERS := "others"
 
 @onready var _header: PanelContainer = %Header
 @onready var _title: Label = %Title
@@ -159,15 +172,15 @@ func _add_model_item(root: TreeItem, model: String, collection: String) -> void:
 		state = "loaded"
 	item.set_metadata(0, {
 		"type": "model", "model": model, "collection": collection, "state": state,
+		"key": model,
 	})
 	match state:
 		"loading":
 			_add_loading_row(item)
 			item.set_collapsed(false)
 		"loaded":
-			_fill_functions(item, model, collection, _listed_methods(model))
-			var open: bool = _expanded.get(model, false) or not _filter_terms.is_empty()
-			item.set_collapsed(not open)
+			_fill_functions(item, model, collection)
+			item.set_collapsed(not _is_open(model))
 		_:
 			item.set_collapsed(true)
 
@@ -182,32 +195,96 @@ func listed_models() -> Array:
 	return out
 
 
-## The function names currently listed under `model`. Empty until its functions are
-## loaded, or when the filter leaves none of them.
+## The visible function sub-groups of `model`, in display order: each a dictionary of
+## { name, functions } holding the function names it lists. Empty until the model's
+## functions are loaded, or when the filter leaves none of them.
+func listed_function_groups(model: String) -> Array:
+	var out: Array = []
+	for group in _listed_groups(model):
+		var names: Array = []
+		for entry in group["methods"]:
+			names.append(_method_name(entry))
+		out.append({"name": group["name"], "functions": names})
+	return out
+
+
+## The function names currently listed under `model`, flattened across its sub-groups
+## in display order.
 func listed_functions(model: String) -> Array:
 	var out: Array = []
-	for entry in _listed_methods(model):
-		out.append(_method_name(entry))
+	for group in listed_function_groups(model):
+		out.append_array(group["functions"])
 	return out
 
 
 ## Whether `model` survives the filter: by its own name, or by one of the functions
 ## already loaded under it.
 func _is_listed(model: String) -> bool:
-	return FilterField.matches(model, _filter_terms) or not _listed_methods(model).is_empty()
+	return FilterField.matches(model, _filter_terms) or not _listed_groups(model).is_empty()
 
 
-## The loaded method entries of `model` to list: all of them when the model's own
-## name matches the filter (or there is none), otherwise only the matching ones.
-func _listed_methods(model: String) -> Array:
-	var methods: Array = _functions.get(model, [])
-	if FilterField.matches(model, _filter_terms):
-		return methods
+## The sub-groups of `model` to show, with the filtered-out functions removed and any
+## group left empty dropped. The bucketing itself always runs over the model's full
+## method list, so the filter only takes rows away — sub-groups never reshuffle,
+## appear or relabel themselves as the user types. A sub-group whose own name matches
+## keeps all of its functions (so "base" lists the inherited API).
+func _listed_groups(model: String) -> Array:
+	var name_matches := FilterField.matches(model, _filter_terms)
 	var out: Array = []
-	for entry in methods:
-		if FilterField.matches("%s.%s" % [model, _method_name(entry)], _filter_terms):
-			out.append(entry)
+	for group in _group_methods(_functions.get(model, [])):
+		var kept: Array = []
+		for entry in group["methods"]:
+			var leaf := "%s.%s" % [model, _method_name(entry)]
+			if name_matches or FilterField.matches_in(leaf, [group["name"]], _filter_terms):
+				kept.append(entry)
+		if not kept.is_empty():
+			out.append({"name": group["name"], "methods": kept})
 	return out
+
+
+## Bucket a model's methods into display sub-groups: everything inherited from
+## IBaseModel under "base", and the model's own methods under the first word of their
+## name once GROUP_MIN of them share it — the rest under "others". "base" leads,
+## then the word groups alphabetically, then "others".
+## Returns [{ name, methods }], skipping groups that would be empty.
+static func _group_methods(methods: Array) -> Array:
+	var base: Array = []
+	var by_word: Dictionary = {}
+	for entry in methods:
+		if entry is Dictionary and bool((entry as Dictionary).get("base", false)):
+			base.append(entry)
+			continue
+		var word := _first_word(_method_name(entry))
+		if not by_word.has(word):
+			by_word[word] = []
+		by_word[word].append(entry)
+
+	var words: Array = by_word.keys()
+	words.sort()
+	var groups: Array = []
+	if not base.is_empty():
+		groups.append({"name": GROUP_BASE, "methods": base})
+	var others: Array = []
+	for word in words:
+		var bucket: Array = by_word[word]
+		if bucket.size() >= GROUP_MIN:
+			groups.append({"name": word, "methods": bucket})
+		else:
+			others.append_array(bucket)
+	if not others.is_empty():
+		groups.append({"name": GROUP_OTHERS, "methods": others})
+	return groups
+
+
+## The first word of a camelCase method name: "findOneByUsername" -> "find". Digits
+## and other uncased characters don't end a word ("e2eKeys" -> "e2e"), and a name with
+## no case boundary at all is one word.
+static func _first_word(name: String) -> String:
+	for i in name.length():
+		var c := name[i]
+		if i > 0 and c == c.to_upper() and c != c.to_lower():
+			return name.substr(0, i)
+	return name
 
 
 ## A model list entry's name and Mongo collection. Entries are { name, collection };
@@ -231,13 +308,14 @@ static func _method_name(entry: Variant) -> String:
 	return String(entry)
 
 
-## Remember whether a model's folder is open, so the next rebuild restores it.
+## Remember whether a model or sub-group folder is open, so the next rebuild restores
+## it. Both carry a "key" in their metadata for exactly this.
 func _on_item_collapsed(item: TreeItem) -> void:
 	if _populating:
 		return
 	var meta: Variant = item.get_metadata(0)
-	if meta is Dictionary and (meta as Dictionary).get("type") == "model":
-		_expanded[String((meta as Dictionary).get("model", ""))] = not item.is_collapsed()
+	if meta is Dictionary and (meta as Dictionary).has("key"):
+		_expanded[String((meta as Dictionary)["key"])] = not item.is_collapsed()
 
 
 ## Double-click / Enter on a tree item. Expanding a model the first time asks the
@@ -261,6 +339,8 @@ func _on_item_activated() -> void:
 			)
 		"model":
 			_activate_model(item, d)
+		"function_group":
+			item.set_collapsed(not item.is_collapsed())
 
 
 ## Expanding a model the first time asks the host to load its functions; afterwards
@@ -318,40 +398,64 @@ func set_model_functions(model: String, methods: Array) -> void:
 	var d: Dictionary = item.get_metadata(0)
 	d["state"] = "loaded"
 	item.set_metadata(0, d)
-	_fill_functions(item, model, String(d.get("collection", "")), methods)
+	_fill_functions(item, model, String(d.get("collection", "")))
 	item.set_collapsed(false)
 
 
-## Replace a model row's children with one leaf per method, and give it the reload
-## button (added once — it isn't a child, so _clear_children leaves it in place).
-func _fill_functions(item: TreeItem, model: String, collection: String, methods: Array) -> void:
+## Replace a model row's children with its function sub-groups, and give the model
+## the reload button (added once — it isn't a child, so _clear_children leaves it in
+## place across reloads).
+func _fill_functions(item: TreeItem, model: String, collection: String) -> void:
 	_clear_children(item)
 	if item.get_button_count(0) == 0:
 		item.add_button(0, ICON_REFRESH, BTN_RELOAD, false, "Reload functions")
 		item.set_button_color(0, 0, AppTheme.TEXT_DIM)
-	if methods.is_empty():
-		# With a filter on, an empty list means its functions were filtered out —
-		# the model itself is only listed because its name matched.
+	var groups := _listed_groups(model)
+	if groups.is_empty():
+		# With a filter on, an empty list means the functions were filtered out — the
+		# model itself is only listed because its name matched.
 		_add_placeholder(item, "(no functions)" if _filter_terms.is_empty() else "(no matching functions)")
 		return
-	for entry in methods:
-		var fn := _method_name(entry)
-		if fn.is_empty():
-			continue
-		var signature := ""
-		if entry is Dictionary:
-			signature = String((entry as Dictionary).get("signature", ""))
-		var leaf := _tree.create_item(item)
-		leaf.set_text(0, fn)
-		leaf.set_icon(0, ICON_FUNCTION)
-		leaf.set_icon_max_width(0, ICON_SIZE)
-		leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
-		if not signature.is_empty():
-			leaf.set_tooltip_text(0, fn + signature)
-		leaf.set_metadata(0, {
-			"type": "function", "model": model, "function": fn,
-			"collection": collection, "signature": signature,
+	for group in groups:
+		var name := String(group["name"])
+		var folder := _tree.create_item(item)
+		folder.set_text(0, name)
+		folder.set_icon(0, ICON_GROUP)
+		folder.set_icon_max_width(0, ICON_SIZE)
+		folder.set_icon_modulate(0, AppTheme.TEXT_DIM)
+		folder.set_metadata(0, {
+			"type": "function_group", "model": model, "group": name,
+			"key": "%s/%s" % [model, name],
 		})
+		for entry in group["methods"]:
+			_add_function_leaf(folder, model, collection, entry)
+		folder.set_collapsed(not _is_open(String(folder.get_metadata(0)["key"])))
+
+
+func _add_function_leaf(folder: TreeItem, model: String, collection: String, entry: Variant) -> void:
+	var fn := _method_name(entry)
+	if fn.is_empty():
+		return
+	var signature := ""
+	if entry is Dictionary:
+		signature = String((entry as Dictionary).get("signature", ""))
+	var leaf := _tree.create_item(folder)
+	leaf.set_text(0, fn)
+	leaf.set_icon(0, ICON_FUNCTION)
+	leaf.set_icon_max_width(0, ICON_SIZE)
+	leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
+	if not signature.is_empty():
+		leaf.set_tooltip_text(0, fn + signature)
+	leaf.set_metadata(0, {
+		"type": "function", "model": model, "function": fn,
+		"collection": collection, "signature": signature,
+	})
+
+
+## Whether a model or sub-group row should render open: as the user left it, or
+## unconditionally while a filter is on, so its hits show without unfolding by hand.
+func _is_open(key: String) -> bool:
+	return bool(_expanded.get(key, false)) or not _filter_terms.is_empty()
 
 
 ## The top-level tree item for `model`, or null.

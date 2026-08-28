@@ -311,7 +311,7 @@ func _check_panel() -> void:
 	var first: TreeItem = root_item.get_first_child()
 	expect_eq(first.get_text(0), "Messages", "model items carry the model name")
 	expect_eq((first.get_metadata(0) as Dictionary).get("type"), "model", "model items are tagged type=model")
-	expect(first.get_icon(0) != null, "model items use a folder icon")
+	expect_eq(first.get_icon(0), RcModelsSidebar.ICON_MODEL, "model items use the models icon")
 	# Double-clicking a model asks the host for its functions and shows a loader.
 	var requested: Array = [""]
 	sidebar.functions_requested.connect(func(m: String) -> void: requested[0] = m)
@@ -319,17 +319,36 @@ func _check_panel() -> void:
 	sidebar._on_item_activated()
 	expect_eq(requested[0], "Messages", "expanding a model requests its functions")
 	expect_eq(first.get_child_count(), 1, "a loading placeholder shows while functions load")
-	# The host returns the methods; they fill in as child leaves.
+	# The host returns the methods; they fill in under sub-group folders — "base" for
+	# the one inherited from IBaseModel, then "others" for the model's own methods
+	# (neither word reaches GROUP_MIN here).
 	sidebar.set_model_functions("Messages", [
 		{"name": "countByRoomId", "signature": "(rid: string) => Promise<number>"},
-		{"name": "findOneById", "signature": "(_id: string) => Promise<IMessage | null>"},
+		{"name": "findOneById", "signature": "(_id: string) => Promise<IMessage | null>", "base": true},
 	])
-	expect_eq(first.get_child_count(), 2, "functions fill in as leaves")
-	var leaf: TreeItem = first.get_first_child()
+	expect_eq(first.get_child_count(), 2, "functions fill in under sub-groups")
+	var base_group: TreeItem = first.get_first_child()
+	expect_eq(base_group.get_text(0), "base", "the inherited API groups first")
+	expect_eq((base_group.get_metadata(0) as Dictionary).get("type"), "function_group",
+		"sub-groups are tagged type=function_group")
+	expect_eq(base_group.get_icon(0), RcModelsSidebar.ICON_GROUP,
+		"sub-groups use the folder icon, not the model one")
+	expect_eq(base_group.get_child_count(), 1, "the base group holds the inherited method")
+	var others: TreeItem = base_group.get_next()
+	expect_eq(others.get_text(0), "others", "the model's own methods follow")
+	var leaf: TreeItem = others.get_first_child()
 	expect_eq(leaf.get_text(0), "countByRoomId", "function leaves carry the method name")
 	expect_eq((leaf.get_metadata(0) as Dictionary).get("type"), "function", "leaves are tagged type=function")
 	expect(leaf.get_icon(0) != null, "function leaves have an icon")
 	expect_eq(first.get_button_count(0), 1, "a loaded model shows a reload button")
+	# Sub-groups start folded (that's the point of grouping) and toggle on activation.
+	expect(others.is_collapsed(), "sub-groups start folded")
+	others.select(0)
+	sidebar._on_item_activated()
+	expect(not others.is_collapsed(), "activating a sub-group unfolds it")
+	others.select(0)
+	sidebar._on_item_activated()
+	expect(others.is_collapsed(), "activating it again folds it")
 	# Double-clicking a function asks the host to open a query for model.method,
 	# carrying the model's collection so the results can be typed.
 	var activated: Array = ["", "", "", ""]

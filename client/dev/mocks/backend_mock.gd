@@ -64,10 +64,12 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 			return _ok({
 				"model": body.get("model", ""),
 				"methods": [
-					{"name": "countByRole", "signature": "(roleName: string) => Promise<number>"},
-					{"name": "findOneById", "signature": "(_id: string, options?: O) => Promise<IUser | null>"},
-					{"name": "findOneByUsername", "signature": "(username: string, options?: O) => Promise<IUser | null>"},
-					{"name": "updateStatusById", "signature": "(userId: IUser['_id'], status: UserStatus) => Promise<UpdateResult>"},
+					{"name": "countByRole", "signature": "(roleName: string) => Promise<number>", "base": false},
+					{"name": "find", "signature": "(query: Filter<T>, options?: O) => FindCursor<T>", "base": true},
+					{"name": "findOneById", "signature": "(_id: string, options?: O) => Promise<IUser | null>", "base": true},
+					{"name": "findOneByUsername", "signature": "(username: string, options?: O) => Promise<IUser | null>", "base": false},
+					{"name": "insertOne", "signature": "(doc: InsertionModel<T>) => Promise<InsertOneResult<T>>", "base": true},
+					{"name": "updateStatusById", "signature": "(userId: IUser['_id'], status: UserStatus) => Promise<UpdateResult>", "base": false},
 				],
 			})
 	# Unknown endpoint: behave like a find so the caller still gets rows.

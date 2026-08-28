@@ -8,7 +8,23 @@ export interface RcModelMethod {
   name: string;
   /** e.g. `(username: string, options?: O) => Promise<IUser | null>`; "" if unknown. */
   signature: string;
+  /**
+   * Declared on IBaseModel — the CRUD every model inherits (findOneById, insertOne,
+   * …) rather than something this model defines. The client lists these separately
+   * so they can be hidden, since they'd otherwise bury each model's own API.
+   */
+  base: boolean;
 }
+
+/** The interface the shared model API is declared on. */
+const BASE_INTERFACE = "IBaseModel";
+
+/**
+ * IBaseModel members that aren't callable model API: the raw driver collection, the
+ * index bootstrap, and the Updater plumbing. Listing them would only invite calls
+ * that can't work over the bridge.
+ */
+const BASE_EXCLUDED = new Set(["col", "createIndexes", "getUpdater", "updateFromUpdater", "watch"]);
 
 /**
  * Lists a model's public methods from the `@rocket.chat/model-typings` interfaces
@@ -71,6 +87,11 @@ export class ModelTypings {
     const program = ts.createProgram([file], {
       target: ts.ScriptTarget.Latest,
       skipLibCheck: true,
+      // module must accompany moduleResolution: NodeNext resolution paired with the
+      // module kind inferred from the target is an invalid combination, under which
+      // the typings' extensionless relative imports (./IBaseModel) don't resolve —
+      // leaving every inherited method silently missing from the list.
+      module: ts.ModuleKind.NodeNext,
       moduleResolution: ts.ModuleResolutionKind.NodeNext,
       noEmit: true,
     });
@@ -78,14 +99,20 @@ export class ModelTypings {
     const src = program.getSourceFile(file);
     if (!src) return [];
 
-    let iface: any = null;
+    // Most models declare an interface, but the few that add nothing of their own are
+    // written as a plain alias of the base (`export type ICronHistoryModel =
+    // IBaseModel<ICronHistoryItem>`), so both forms have to be recognised.
+    let decl: any = null;
     ts.forEachChild(src, (n: any) => {
-      if (ts.isInterfaceDeclaration(n) && n.name.text === ifaceName) iface = n;
+      const named = ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n);
+      if (named && n.name.text === ifaceName) decl = n;
     });
-    if (!iface) return [];
+    const symbol = decl ? checker.getSymbolAtLocation(decl.name) : null;
+    if (!symbol) return [];
 
-    // The type includes inherited members (IBaseModel), which is what we want.
-    const type = checker.getTypeAtLocation(iface.name);
+    // The type includes inherited members (IBaseModel), which is what we want — each
+    // is tagged so the client can fold them away.
+    const type = checker.getDeclaredTypeOfSymbol(symbol);
     const out: RcModelMethod[] = [];
     const seen = new Set<string>();
     for (const sym of checker.getPropertiesOfType(type)) {
@@ -98,8 +125,10 @@ export class ModelTypings {
       );
       const node = method ?? (fnProp ? (fnProp as any).type : null);
       if (node === null || seen.has(sym.getName())) continue;
+      const base = decls.some((d: any) => d.parent?.name?.text === BASE_INTERFACE);
+      if (base && BASE_EXCLUDED.has(sym.getName())) continue;
       seen.add(sym.getName());
-      out.push({ name: sym.getName(), signature: this.signatureOf(node) });
+      out.push({ name: sym.getName(), signature: this.signatureOf(node), base });
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
