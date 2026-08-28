@@ -5,6 +5,7 @@ import { describeError } from "./errors.js";
 import { ClientCache } from "./mongo/pool.js";
 import { RcBridgeRegistry } from "./rocketchat/bridge.js";
 import { registerRocketChatRoutes } from "./rocketchat/routes.js";
+import { ModelTypings } from "./rocketchat/typings.js";
 import { registerRoutes } from "./routes.js";
 
 export interface AppContext {
@@ -36,6 +37,7 @@ export async function buildApp(config: Config): Promise<AppContext> {
     meteorBin: config.rocketchatMeteorBin,
     shellTimeoutMs: config.rocketchatShellTimeoutMs,
   });
+  const rcTypings = new ModelTypings();
 
   // Map driver/validation errors to structured JSON responses.
   app.setErrorHandler((err: FastifyError, req, reply) => {
@@ -87,7 +89,11 @@ export async function buildApp(config: Config): Promise<AppContext> {
   );
 
   await app.register(registerRoutes, { cache, prefix: "/api" });
-  await app.register(registerRocketChatRoutes, { registry: rcBridges, prefix: "/api" });
+  await app.register(registerRocketChatRoutes, {
+    registry: rcBridges,
+    typings: rcTypings,
+    prefix: "/api",
+  });
 
   return { app, cache, apps };
 }

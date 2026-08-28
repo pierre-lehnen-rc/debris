@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { RcBridgeRegistry, RcTarget } from "./bridge.js";
+import type { ModelTypings } from "./typings.js";
 
 export interface RcRoutesOptions {
   registry: RcBridgeRegistry;
+  typings: ModelTypings;
 }
 
 /** JSON schema for the `target` object every request carries. */
@@ -35,8 +37,19 @@ const stringField = { type: "string", minLength: 1 } as const;
  */
 export const registerRocketChatRoutes: FastifyPluginAsync<RcRoutesOptions> = async (
   app,
-  { registry },
+  { registry, typings },
 ) => {
+  // List a model's public methods from @rocket.chat/model-typings. Pure metadata
+  // (reads the .d.ts), so it needs only the meteor dir — not a running server.
+  app.post<{ Body: { target: RcTarget; model: string } }>(
+    "/rocketchat/model-methods",
+    { schema: { body: withTarget({ model: stringField }, ["model"]) } },
+    async (req) => {
+      const methods = typings.methods(req.body.target.meteorDir, req.body.model);
+      return { model: req.body.model, methods };
+    },
+  );
+
   // Force a (re)install of the bridge handler into the running RC server.
   app.post<{ Body: { target: RcTarget } }>(
     "/rocketchat/install",
