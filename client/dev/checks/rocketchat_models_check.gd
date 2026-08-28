@@ -22,6 +22,8 @@ func _run() -> void:
 	await _check_typing()
 	await _check_duplicate_tabs()
 	await _check_type_action_opens_query()
+	await _check_history()
+	await _check_history_compatibility()
 	await _check_panel()
 
 
@@ -148,6 +150,84 @@ func _check_type_action_opens_query() -> void:
 	expect_eq(center.capture_tabs().size(), before + 1,
 		"a type action on a model result opens a query tab")
 	center.queue_free()
+
+
+## History for model functions: recents + favorites in the same two stores the
+## query history uses, keyed per function and never colliding with a collection.
+func _check_history() -> void:
+	var state := WorkspaceState.new()
+	var doc := WorkspaceDoc.new()
+	var history := QueryHistory.new()
+	history.setup(state, doc)
+
+	var center: Variant = load("res://source/ui/project/workspace_center.tscn").instantiate()
+	root.add_child(center)
+	center.bind_history(history)
+	center.bind_rocketchat_target("http://localhost:3000", "/x/Rocket.Chat")
+	var tab: Variant = center.open_rcmodels("Users", "findOneByUsername", "users", "(u: string)")
+
+	var key := QueryHistory.model_key("Users", "findOneByUsername")
+	expect_eq(key, "model:Users.findOneByUsername", "the store key is namespaced per function")
+
+	# Running records the call as a recent for this function.
+	tab._args_edit.text = "[\"rocket.cat\"]"
+	tab.run()
+	await _settle()
+	var recents: Array = history.recents(key)
+	expect_eq(recents.size(), 1, "a run is recorded as a recent")
+	expect_eq(String((recents[0] as Dictionary).get("args", "")), "[\"rocket.cat\"]",
+		"the recent keeps the args")
+	# Re-running the identical call resurfaces it instead of stacking a duplicate.
+	tab.run()
+	await _settle()
+	expect_eq(history.recents(key).size(), 1, "an identical re-run doesn't stack a duplicate")
+	# A different argument list is a distinct entry.
+	tab._args_edit.text = "[\"admin\"]"
+	tab.run()
+	await _settle()
+	expect_eq(history.recents(key).size(), 2, "a different call is a separate recent")
+
+	# Favorites round-trip through the project document.
+	var entry: Dictionary = history.recents(key)[0]
+	expect(not history.is_favorite(key, entry), "a fresh recent isn't a favorite")
+	history.add_favorite(key, entry)
+	expect(history.is_favorite(key, entry), "the call can be favorited")
+	expect_eq(history.favorites(key).size(), 1, "the favorite is stored")
+	history.remove_favorite(key, entry)
+	expect(not history.is_favorite(key, entry), "the favorite can be removed")
+
+	# Applying an entry fills the args without running.
+	tab.apply_entry({"model": "Users", "method": "findOneByUsername", "args": "[\"loaded\"]"})
+	expect_eq(tab._args_edit.text, "[\"loaded\"]", "applying an entry fills the args editor")
+
+	# The list label shows the args (model/method are implied by the tab).
+	expect_eq(QueryHistory.preview(entry), "[\"admin\"]", "the history row previews the args")
+	center.queue_free()
+
+
+## Model history must not disturb the existing collection query history: the two
+## kinds live in the same stores under different keys and identify independently.
+func _check_history_compatibility() -> void:
+	var state := WorkspaceState.new()
+	var doc := WorkspaceDoc.new()
+	var history := QueryHistory.new()
+	history.setup(state, doc)
+
+	var query_entry := {"function": "find", "filter": "{\"a\": 1}", "options": ""}
+	var model_entry := {"model": "Users", "method": "findOneByUsername", "args": "[\"x\"]"}
+	history.record("users", query_entry)
+	history.record(QueryHistory.model_key("Users", "findOneByUsername"), model_entry)
+
+	expect_eq(history.recents("users").size(), 1, "the collection keeps its own recents")
+	expect_eq(history.recents(QueryHistory.model_key("Users", "findOneByUsername")).size(), 1,
+		"the function keeps its own recents")
+	# Existing entries keep their old identity and preview.
+	expect(QueryHistory.same_query(query_entry, {"function": "find", "filter": " {\"a\": 1} "}),
+		"collection queries still compare by function/filter/options")
+	expect(not QueryHistory.same_query(query_entry, model_entry),
+		"a collection query never equals a model call")
+	expect_eq(QueryHistory.preview(query_entry), "{\"a\": 1}",
+		"collection queries still preview their filter")
 
 
 func _check_panel() -> void:

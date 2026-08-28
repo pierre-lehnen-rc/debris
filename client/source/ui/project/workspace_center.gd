@@ -223,6 +223,7 @@ func open_rcmodels(model: String, method: String, collection := "", signature :=
 		collection = String(_rc_collections.get(model, ""))
 	tab.configure(model, method, collection, signature)
 	tab.bind_target(_rc_target)
+	tab.set_history(_history)
 	# Connect before add_child so the tab's initial status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.open_json_requested.connect(_on_open_json_requested)
@@ -448,6 +449,7 @@ func _restore_rcmodels_tab(state: Dictionary) -> void:
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
 	tab.configure_restore(state)
 	tab.bind_target(_rc_target)
+	tab.set_history(_history)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.open_json_requested.connect(_on_open_json_requested)
 	# A schema type action on a result opens a sibling query tab on the DB.

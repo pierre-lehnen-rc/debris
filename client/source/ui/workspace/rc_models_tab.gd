@@ -48,9 +48,15 @@ var _target_provider: Callable = Callable()
 var _initial_args := ""
 ## Set by configure_restore() to reopen a saved tab from the sidecar.
 var _restore_state: Dictionary = {}
+## Shared per-project store of recent/favorite queries; set via set_history(). The
+## history button browses this function's past calls, and each run is recorded.
+var _history: QueryHistory = null
+## Lazily-created dropdown shown by the history button.
+var _history_popup: QueryHistoryPopup = null
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
+@onready var _history_btn: Button = %HistoryBtn
 @onready var _title_label: Label = %TitleLabel
 @onready var _signature_label: Label = %SignatureLabel
 @onready var _args_edit: CodeEdit = %ArgsEdit
@@ -85,6 +91,45 @@ func configure_restore(state: Dictionary) -> void:
 ## fresh on every Run, so editing the workspace's path affects already-open tabs.
 func bind_target(provider: Callable) -> void:
 	_target_provider = provider
+
+
+## Bind the shared query-history store (recents + favorites) this tab records into
+## and its history button browses. Safe to call before or after _ready.
+func set_history(history: QueryHistory) -> void:
+	_history = history
+
+
+## This function's key in the history stores (namespaced away from collections).
+func _history_key() -> String:
+	return QueryHistory.model_key(_model, _method)
+
+
+## The current call as a saved-query entry (see QueryHistory).
+func _current_entry() -> Dictionary:
+	return {
+		"model": _model,
+		"method": _method,
+		"args": _args_edit.text,
+		"run_at": Time.get_datetime_string_from_system(true),
+	}
+
+
+## Load a saved call (from the history dropdown) into the args editor without
+## running it — consistent with tab restore; the user presses Run/F5 to execute.
+func apply_entry(entry: Dictionary) -> void:
+	_args_edit.text = String(entry.get("args", ""))
+	status_changed.emit("Loaded a saved call — press Run to execute")
+
+
+func _on_history_pressed() -> void:
+	if _history == null:
+		return
+	if _history_popup == null:
+		_history_popup = QueryHistoryPopup.new()
+		_history_popup.apply_requested.connect(apply_entry)
+		add_child(_history_popup)
+	_history_popup.configure(_history, _history_key())
+	_history_popup.open_under(_history_btn)
 
 
 ## Snapshot this tab for the sidecar: the model/method and current args (never the
@@ -194,6 +239,7 @@ func _apply_style() -> void:
 	_toolbar.add_theme_stylebox_override("panel", sb)
 	_run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
 	_run_btn.tooltip_text = "Call the model method (F5)"
+	_history_btn.tooltip_text = "Recent and saved calls for this function"
 	_title_label.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
 	_signature_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
 	_signature_label.add_theme_font_size_override("font_size", 12)
@@ -240,6 +286,10 @@ func _run() -> void:
 	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
 	var count := (value as Array).size() if value is Array else 0
 	_results.show_raw(value, _entity_roots(value), count)
+	# Record the call in this function's recent history (deduped/capped in the
+	# store); QueryHistory persists the sidecar via its own change signal.
+	if _history != null:
+		_history.record(_history_key(), _current_entry())
 	status_changed.emit("%s.%s — %s" % [_model, _method, _describe(value, count)])
 	state_changed.emit()
 

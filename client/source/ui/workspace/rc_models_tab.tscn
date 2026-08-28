@@ -28,6 +28,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Model.method"
 
+[node name="HistoryBtn" type="Button" parent="Toolbar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Recent and saved calls for this function"
+focus_mode = 0
+text = "History"
+
 [node name="Split" type="VSplitContainer" parent="."]
 layout_mode = 2
 size_flags_vertical = 3
@@ -59,3 +66,4 @@ unique_name_in_owner = true
 layout_mode = 2
 
 [connection signal="pressed" from="Toolbar/Row/RunBtn" to="." method="_run"]
+[connection signal="pressed" from="Toolbar/Row/HistoryBtn" to="." method="_on_history_pressed"]
