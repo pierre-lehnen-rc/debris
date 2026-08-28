@@ -207,10 +207,15 @@ func _setup_history() -> void:
 	_center.bind_history(_history)
 
 
-## A favorite query was added/removed, so the project document is now dirty. Save it
+## A favorite query was added/removed, so the project document is now dirty.
+func _on_favorites_changed() -> void:
+	_persist_or_flag_dirty()
+
+
+## The document gained a change worth keeping (a favorite, a workspace user). Save it
 ## in place when it has a file (silent auto-save); otherwise just reflect the unsaved
 ## state in the tab title — it'll be written on the next explicit Save.
-func _on_favorites_changed() -> void:
+func _persist_or_flag_dirty() -> void:
 	if _doc != null and not _doc.file_path.is_empty():
 		save_requested.emit()
 	else:
@@ -381,10 +386,10 @@ func _set_session(config: Dictionary) -> void:
 
 ## The session changed (a user was added/removed/edited, or logged in/out). Persist
 ## the user list to the project; login-acquired tokens are stripped by the doc, so
-## login/logout make no persistable change and don't dirty the project.
+## login/logout make no persistable change and neither dirty nor re-save the project.
 func _on_session_changed() -> void:
 	if _doc.sync_rocketchat_users(_session.users()):
-		dirty_changed.emit()
+		_persist_or_flag_dirty()
 
 
 ## A placeholder panel shown in the sidebar for an unattached source: a message and

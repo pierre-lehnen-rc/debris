@@ -440,9 +440,10 @@ func _on_file_dialog_selected(path: String) -> void:
 		var proj := _file_dialog_project
 		_file_dialog_project = null
 		if proj != null and is_instance_valid(proj):
-			_write_project(proj, path)
-			# A Save triggered by the save-before-close prompt closes the tab now.
-			if _close_after_save == proj:
+			# A Save triggered by the save-before-close prompt closes the tab now —
+			# but only once the write landed, so a failed save never discards the
+			# project it was meant to preserve (the error stays in the status bar).
+			if _write_project(proj, path) and _close_after_save == proj:
 				_close_tab(proj)
 		_close_after_save = null
 	elif _file_dialog_mode == "open":
@@ -456,15 +457,16 @@ func _on_file_dialog_canceled() -> void:
 
 
 ## Write a project to `path`, deriving a name from the filename when the project is
-## still Untitled, then refresh its tab title and the recent list.
-func _write_project(proj: ProjectTab, path: String) -> void:
+## still Untitled, then refresh its tab title and the recent list. Returns whether
+## the write succeeded.
+func _write_project(proj: ProjectTab, path: String) -> bool:
 	var doc := proj.doc()
 	if doc.name.is_empty() or doc.name == "Untitled":
 		doc.name = path.get_file().get_basename()
 	var result := WorkspaceFile.save(doc, path)
 	if not result.get("ok", false):
 		_status_label.text = "Save failed: %s" % result.get("error", "unknown error")
-		return
+		return false
 	Store.add_recent_workspace(path)
 	_update_project_tab_title(proj)
 	# The project now has a path (or a new one), so refresh the restore list and
@@ -472,6 +474,7 @@ func _write_project(proj: ProjectTab, path: String) -> void:
 	_save_open_projects()
 	proj.persist_state()
 	_status_label.text = "Saved %s" % doc.name
+	return true
 
 
 ## Open a project file into a new tab, focusing it if it's already open.
@@ -792,13 +795,14 @@ func _apply_mongo_config(config: Dictionary) -> void:
 	_dialog_project = null
 	if proj == null or not is_instance_valid(proj):
 		return
+	var message := ""
 	if _dialog_editing:
 		proj.update_mongo_connection(config)
-		_status_label.text = "Updated database connection"
+		message = "Updated database connection"
 	else:
 		proj.attach_mongo(config, String(config.get("database", "")))
-		_status_label.text = "Attached database"
-	_update_project_tab_title(proj)
+		message = "Attached database"
+	_persist_source_change(proj, message)
 
 
 # Same pattern for the API config.
@@ -815,13 +819,29 @@ func _apply_api_config(config: Dictionary) -> void:
 	_dialog_project = null
 	if proj == null or not is_instance_valid(proj):
 		return
+	var message := ""
 	if _dialog_editing:
 		proj.update_rocketchat(config)
-		_status_label.text = "Updated workspace"
+		message = "Updated workspace"
 	else:
 		proj.attach_rocketchat(config)
-		_status_label.text = "Attached workspace"
-	_update_project_tab_title(proj)
+		message = "Attached workspace"
+	_persist_source_change(proj, message)
+
+
+## A source was attached or edited from a dialog — a change the user already
+## confirmed, so write it straight through to the project file (the silent in-place
+## auto-save favorites get). A project with no file yet can't be written without
+## prompting, so it just gets the unsaved dot in its tab title and waits for an
+## explicit Save.
+func _persist_source_change(proj: ProjectTab, message: String) -> void:
+	if proj.doc().file_path.is_empty():
+		_update_project_tab_title(proj)
+		_status_label.text = message
+		return
+	if _write_project(proj, proj.doc().file_path):
+		# _write_project leaves its own "Saved <name>" behind; say what was saved.
+		_status_label.text = "%s — saved %s" % [message, proj.doc().name]
 
 
 # Menus / styling -------------------------------------------------------------

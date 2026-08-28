@@ -53,7 +53,8 @@ func find(id: int) -> Dictionary:
 	return {}
 
 
-## Add a user for this session only (never persisted to the workspace config).
+## Add a user. It's tagged as session-sourced, but the project persists the whole
+## list through sync_rocketchat_users(), so it outlives the session.
 func add_user(entry: Dictionary) -> void:
 	_users.append(_make_entry(entry, "session"))
 	changed.emit()
