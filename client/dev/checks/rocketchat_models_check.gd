@@ -66,7 +66,7 @@ func _check_install() -> void:
 		"install returns the server's model list")
 	var entry: Dictionary = activity_log.entries().back()
 	expect_eq(entry.get("source"), "rocketchat", "install logged under source rocketchat")
-	expect_eq(entry.get("action"), "install bridge", "install logged as install bridge")
+	expect_eq(entry.get("action"), "inject bridge", "injection logged as inject bridge")
 	expect_eq(entry.get("target"), TARGET["meteorDir"], "install log target is the meteor dir")
 
 	var counted: Dictionary = await backend.rocketchat_call(TARGET, "Users", "countByRole", ["admin"])

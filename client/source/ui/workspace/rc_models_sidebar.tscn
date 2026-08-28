@@ -32,7 +32,7 @@ text = "✎"
 [node name="RefreshBtn" type="Button" parent="VBox/Header/Row"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Reinstall the Server Models bridge"
+tooltip_text = "Inject the bridge and reload the models"
 focus_mode = 0
 text = "⟳"
 

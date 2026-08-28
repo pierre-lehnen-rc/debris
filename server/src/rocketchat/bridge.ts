@@ -264,7 +264,7 @@ export class RcBridge {
     );
     if (!/installed \/debris\/call|handler-updated/.test(output)) {
       throw new RcBridgeError(
-        `bridge install did not confirm; meteor shell said: ${output.slice(0, 500) || "(no output)"}`,
+        `bridge injection did not confirm; meteor shell said: ${output.slice(0, 500) || "(no output)"}`,
         502,
       );
     }
@@ -300,8 +300,8 @@ export class RcBridge {
         throw new RcBridgeError(attempt.message, attempt.status);
       case "reinstall":
         throw new RcBridgeError(
-          `Server Models endpoint isn't installed on ${this.target.url}. `
-            + `Use Refresh in the Server Models panel to install it.`,
+          `Server Models endpoint isn't injected on ${this.target.url}. `
+            + `Use the ⟳ button in the Server Models panel to inject it.`,
           503,
         );
     }

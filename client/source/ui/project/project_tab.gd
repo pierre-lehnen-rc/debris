@@ -518,7 +518,7 @@ func _install_models_bridge() -> void:
 	if not has_rocketchat() or _doc.rocketchat_meteor_dir().is_empty():
 		return
 	var target := {"meteorDir": _doc.rocketchat_meteor_dir(), "url": _rocketchat_url()}
-	status_changed.emit("Installing Server Models bridge…")
+	status_changed.emit("Injecting Server Models bridge…")
 	var result: Dictionary = await Backend.rocketchat_install(target)
 	if result.get("ok", false):
 		# The install response carries the server's models ({ name, collection }) for
@@ -530,7 +530,7 @@ func _install_models_bridge() -> void:
 		_center.bind_rocketchat_models(models)
 		status_changed.emit("Server Models bridge ready")
 	else:
-		status_changed.emit("Server Models install failed: %s" % result.get("error", "unknown error"))
+		status_changed.emit("Server Models injection failed: %s" % result.get("error", "unknown error"))
 
 
 func _on_status_changed(text: String) -> void:

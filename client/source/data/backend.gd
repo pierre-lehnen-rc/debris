@@ -284,7 +284,7 @@ func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int) -> 
 	var target: Dictionary = body.get("target", {})
 	ActivityLog.record({
 		"source": "rocketchat",
-		"action": "install bridge",
+		"action": "inject bridge",
 		"target": String(target.get("meteorDir", "")),
 		"params": {"url": target.get("url", "")},
 		"ok": outcome.get("ok", false),
