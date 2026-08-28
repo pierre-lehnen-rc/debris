@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://source/ui/sidebar/collection_sidebar.gd" id="1_coll"]
 [ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="2_theme"]
+[ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="3_filter"]
 
 [node name="CollectionSidebar" type="PanelContainer"]
 script = ExtResource("1_coll")
@@ -64,6 +65,13 @@ popup/item_1/id = 1
 popup/item_2/text = "Flat"
 popup/item_2/id = 2
 
+[node name="Filter" type="LineEdit" parent="Box/Header/HeaderBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Filter collections (space-separated terms)"
+placeholder_text = "Filter collections"
+script = ExtResource("3_filter")
+
 [node name="Tree" type="Tree" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -83,6 +91,7 @@ theme = ExtResource("2_theme")
 [connection signal="pressed" from="Box/Header/HeaderBox/Row/EditBtn" to="." method="_on_edit_pressed"]
 [connection signal="pressed" from="Box/Header/HeaderBox/Row/RefreshBtn" to="." method="_on_refresh_pressed"]
 [connection signal="item_selected" from="Box/Header/HeaderBox/SchemaRow/SchemaOption" to="." method="_on_schema_selected"]
+[connection signal="filter_changed" from="Box/Header/HeaderBox/Filter" to="." method="set_filter"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
 [connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
 [connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]

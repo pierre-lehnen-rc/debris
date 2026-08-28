@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://source/ui/workspace/rc_models_sidebar.gd" id="1_rcs0"]
+[ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="2_filter"]
 
 [node name="RcModelsSidebar" type="PanelContainer"]
 script = ExtResource("1_rcs0")
@@ -13,28 +14,39 @@ theme_override_constants/separation = 0
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Row" type="HBoxContainer" parent="VBox/Header"]
+[node name="HeaderBox" type="VBoxContainer" parent="VBox/Header"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Row" type="HBoxContainer" parent="VBox/Header/HeaderBox"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="VBox/Header/Row"]
+[node name="Title" type="Label" parent="VBox/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "SERVER MODELS"
 
-[node name="EditBtn" type="Button" parent="VBox/Header/Row"]
+[node name="EditBtn" type="Button" parent="VBox/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Edit workspace"
 focus_mode = 0
 text = "✎"
 
-[node name="RefreshBtn" type="Button" parent="VBox/Header/Row"]
+[node name="RefreshBtn" type="Button" parent="VBox/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Inject the bridge and reload the models"
 focus_mode = 0
 text = "⟳"
+
+[node name="Filter" type="LineEdit" parent="VBox/Header/HeaderBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Filter models and loaded functions (space-separated terms)"
+placeholder_text = "Filter models"
+script = ExtResource("2_filter")
 
 [node name="Tree" type="Tree" parent="VBox"]
 unique_name_in_owner = true

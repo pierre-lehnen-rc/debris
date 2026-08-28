@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://source/ui/workspace/endpoint_sidebar.gd" id="1_epside"]
 [ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="2_theme"]
+[ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="3_filter"]
 
 [node name="EndpointSidebar" type="PanelContainer"]
 script = ExtResource("1_epside")
@@ -14,21 +15,32 @@ theme_override_constants/separation = 0
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Row" type="HBoxContainer" parent="Box/Header"]
+[node name="HeaderBox" type="VBoxContainer" parent="Box/Header"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Row" type="HBoxContainer" parent="Box/Header/HeaderBox"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Box/Header/Row"]
+[node name="Title" type="Label" parent="Box/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "ENDPOINTS"
 
-[node name="EditBtn" type="Button" parent="Box/Header/Row"]
+[node name="EditBtn" type="Button" parent="Box/Header/HeaderBox/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Edit workspace"
 focus_mode = 0
 text = "✎"
+
+[node name="Filter" type="LineEdit" parent="Box/Header/HeaderBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Filter endpoints (space-separated terms)"
+placeholder_text = "Filter endpoints"
+script = ExtResource("3_filter")
 
 [node name="Tree" type="Tree" parent="Box"]
 unique_name_in_owner = true
@@ -42,7 +54,8 @@ select_mode = 1
 unique_name_in_owner = true
 theme = ExtResource("2_theme")
 
-[connection signal="pressed" from="Box/Header/Row/EditBtn" to="." method="_on_edit_pressed"]
+[connection signal="pressed" from="Box/Header/HeaderBox/Row/EditBtn" to="." method="_on_edit_pressed"]
+[connection signal="filter_changed" from="Box/Header/HeaderBox/Filter" to="." method="set_filter"]
 [connection signal="item_activated" from="Box/Tree" to="." method="_on_item_activated"]
 [connection signal="item_mouse_selected" from="Box/Tree" to="." method="_on_item_mouse_selected"]
 [connection signal="id_pressed" from="ContextMenu" to="." method="_on_context_action"]

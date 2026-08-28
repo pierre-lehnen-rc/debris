@@ -5,7 +5,8 @@ extends PanelContainer
 ## (Channels, Users, …). Endpoints are read live from the server's OpenAPI
 ## document (/api/docs/json); if that can't be fetched, it falls back to the
 ## curated ApiCatalog. Double-clicking an endpoint opens it in a tab;
-## right-clicking offers quick actions. Mirrors the Mongo CollectionSidebar.
+## right-clicking offers quick actions. The header's filter box narrows the list as
+## you type. Mirrors the Mongo CollectionSidebar.
 
 signal endpoint_activated(endpoint: ApiEndpoint)
 signal status_changed(text: String)
@@ -40,6 +41,9 @@ var _endpoints: Array = []
 var _cache: Array = []
 var _menu_target: ApiEndpoint = null
 var _loading := false
+# Terms from the header's filter box (see FilterField), applied on every render.
+# Empty = show every endpoint.
+var _filter_terms := PackedStringArray()
 
 
 func _ready() -> void:
@@ -65,6 +69,16 @@ func configure(workspace: Dictionary) -> void:
 ## restore lookups by id.
 func endpoints() -> Array:
 	return _endpoints
+
+
+## Show only the endpoints matching `text` — wired to the header's filter box, which
+## debounces typing. Matched against "METHOD /path", so both the verb and any part of
+## the path count, and a folder whose own label matches keeps all of its endpoints.
+## The filter sticks across reloads.
+func set_filter(text: String) -> void:
+	_filter_terms = FilterField.terms_of(text)
+	if is_node_ready():
+		_render()
 
 
 func _on_edit_pressed() -> void:
@@ -161,7 +175,11 @@ func _render() -> void:
 	if _endpoints.is_empty():
 		_add_placeholder(root, "(no endpoints)")
 		return
-	for endpoint in _endpoints:
+	var matching := listed_endpoints()
+	if matching.is_empty():
+		_add_placeholder(root, "(no matching endpoints)")
+		return
+	for endpoint in matching:
 		var ep := endpoint as ApiEndpoint
 		var segs := ep.segments()
 		var parent := root
@@ -169,6 +187,23 @@ func _render() -> void:
 			parent = _get_or_create_group(parent, segs[i])
 		var leaf_label: String = segs[segs.size() - 1] if segs.size() > 0 else ep.label()
 		_make_leaf(parent, ep, leaf_label)
+
+
+## The endpoints currently listed — the effective catalog, less those the filter
+## excludes — in sorted order. endpoints() returns the unfiltered catalog.
+func listed_endpoints() -> Array:
+	if _filter_terms.is_empty():
+		return _endpoints
+	var out: Array = []
+	for endpoint in _endpoints:
+		var ep := endpoint as ApiEndpoint
+		# The path folders an endpoint hangs under are its own leading segments, so a
+		# matching folder keeps everything below it.
+		var segs := ep.segments()
+		var folders := Array(segs.slice(0, segs.size() - 1))
+		if FilterField.matches_in("%s %s" % [ep.method, ep.path], folders, _filter_terms):
+			out.append(ep)
+	return out
 
 
 ## Return the child folder of `parent` with the given label, creating it if it
@@ -188,7 +223,7 @@ func _make_group(parent: TreeItem, label: String) -> TreeItem:
 	group.set_icon(0, ICON_GROUP)
 	group.set_icon_max_width(0, ICON_SIZE)
 	group.set_icon_modulate(0, AppTheme.TEXT_DIM)
-	group.set_collapsed(COLLAPSE_GROUPS)
+	group.set_collapsed(COLLAPSE_GROUPS and _filter_terms.is_empty())
 	group.set_metadata(0, {META_TYPE: "group"})
 	return group
 

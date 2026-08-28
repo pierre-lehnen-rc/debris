@@ -5,7 +5,7 @@ extends PanelContainer
 ## pre-selected database. Collection names are loaded from the backend and the
 ## folder tree is built by the selected DatabaseSchema (Generic/Rocket.Chat).
 ## Double-clicking a collection opens a query tab; right-clicking one shows
-## collection actions.
+## collection actions. The header's filter box narrows the list as you type.
 
 signal collection_activated(connection: Dictionary, database: String, collection: String)
 signal insert_document_requested(connection: Dictionary, database: String, collection: String)
@@ -50,6 +50,12 @@ var _schema: DatabaseSchema = GenericSchema.new()
 # Set once the user picks a schema by hand, so auto-detection on (re)load stops
 # overriding their choice.
 var _schema_user_selected := false
+# Terms from the header's filter box (see FilterField), applied on every render.
+# Empty = show every collection.
+var _filter_terms := PackedStringArray()
+# The schema's grouping of the full collection list, rebuilt on each render. Kept so
+# the filter can look up a collection's folder path without regrouping.
+var _structure: Array = []
 
 
 func _ready() -> void:
@@ -66,6 +72,18 @@ func configure(connection: Dictionary, database: String) -> void:
 	if is_node_ready():
 		_title.text = _database.to_upper()
 		_load()
+
+
+## Show only the collections matching `text` — wired to the header's filter box,
+## which debounces typing. Matched against the full collection name, so a prefix
+## folded away into a group folder ("rocketchat_") still counts; a folder whose own
+## label matches keeps all of its collections. Only rows are removed — the grouping
+## itself is unchanged, so folders don't reshuffle as you type. The filter sticks
+## across reloads and schema changes.
+func set_filter(text: String) -> void:
+	_filter_terms = FilterField.terms_of(text)
+	if is_node_ready():
+		_render()
 
 
 func _apply_style() -> void:
@@ -160,14 +178,42 @@ func _render() -> void:
 	if _names.is_empty():
 		_add_placeholder(root, "(no collections)")
 		return
-	var structure := _schema.build_structure(_names)
-	var ordered := _schema.order_names(structure, _names)
+	# Always group the full list: the filter drops rows, it doesn't regroup. Grouping
+	# the survivors instead would re-derive the folders from a smaller set, so folders
+	# would appear, vanish and relabel themselves as the user types. Folders left with
+	# no visible collection are simply never created (they're made on demand below).
+	_structure = _schema.build_structure(_names)
+	var ordered := _schema.order_names(_structure, _names)
+	var shown := 0
 	for coll in ordered:
-		var path := _schema.path_for(structure, coll)
+		var path := _schema.path_for(_structure, coll)
+		if not _is_listed(coll, path):
+			continue
+		shown += 1
 		var parent := root
 		for i in path.size() - 1:
 			parent = _get_or_create_group(parent, path[i])
 		_add_collection_leaf(parent, path[path.size() - 1], coll)
+	if shown == 0:
+		_add_placeholder(root, "(no matching collections)")
+
+
+## The collection names currently listed — every loaded name, less those the filter
+## excludes — in load order.
+func listed_collections() -> Array:
+	if _filter_terms.is_empty():
+		return _names
+	var out: Array = []
+	for name in _names:
+		if _is_listed(name, _schema.path_for(_structure, name)):
+			out.append(name)
+	return out
+
+
+## Whether a collection survives the filter, by its own name or by the label of a
+## folder above it (`path` is its tree path, folders first, leaf label last).
+func _is_listed(collection: String, path: Array) -> bool:
+	return FilterField.matches_in(collection, path.slice(0, path.size() - 1), _filter_terms)
 
 
 func _render_message(text: String) -> void:
@@ -239,7 +285,7 @@ func _get_or_create_group(parent: TreeItem, label: String) -> TreeItem:
 	group.set_icon(0, ICON_GROUP)
 	group.set_icon_max_width(0, ICON_SIZE)
 	group.set_icon_modulate(0, AppTheme.TEXT_DIM)
-	group.set_collapsed(COLLAPSE_GROUPS)
+	group.set_collapsed(COLLAPSE_GROUPS and _filter_terms.is_empty())
 	group.set_metadata(0, {META_TYPE: "collection_group"})
 	return group
 
