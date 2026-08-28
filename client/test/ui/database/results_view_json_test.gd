@@ -51,6 +51,19 @@ func test_view_json_emits_object_as_pretty_json() -> void:
 	)
 
 
+func test_display_raw_top_level_ejson_scalar_renders_as_value() -> void:
+	# A raw response that is itself an Extended JSON scalar (e.g. countByRole ->
+	# {"$numberInt": "28"}) shows as the value 28, not an object with a $numberInt
+	# field. Regression for the models console's scalar results.
+	var view := _tree()
+	view.display_raw({"$numberInt": "28"}, [])
+	var item := view.get_root().get_first_child()
+	assert_object(item).is_not_null()
+	assert_str(item.get_text(1)).is_equal("28")
+	assert_str(item.get_text(2)).is_equal("Int32")
+	assert_int(item.get_child_count()).is_equal(0)
+
+
 func test_view_string_json_emits_raw_string() -> void:
 	var view := _tree()
 	# A field whose value is a string that itself contains JSON.

@@ -46,6 +46,9 @@ var _raw_mode := false
 var _raw: Variant = null
 var _raw_entities: Array = []
 var _row_count := 0
+## In raw mode, whether the Table stays available when the raw value is an array of
+## documents (opted in per tab; endpoints leave it off). See set_raw_mode.
+var _raw_table := false
 
 @onready var _header: PanelContainer = %Header
 @onready var _pager: HBoxContainer = %Pager
@@ -156,15 +159,18 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	_table_view.set_cross_query_enabled(enabled)
 
 
-## Switch to raw-response rendering (endpoint tabs): the Tree/Text show the raw
-## body via show_raw(), and the Table mode is hidden since it needs a document
-## array. Called once when the tab is set up. DB tabs leave this off.
-func set_raw_mode(enabled: bool) -> void:
+## Switch to raw-response rendering (endpoint / models tabs): the Tree/Text show the
+## raw body via show_raw(). By default the Table mode is hidden (it needs a document
+## array); pass allow_table when the result is commonly an array of documents (the
+## models console), so the Table stays available and arrays default to it. Called
+## once when the tab is set up. DB tabs leave this off.
+func set_raw_mode(enabled: bool, allow_table := false) -> void:
 	_raw_mode = enabled
-	_mode_buttons[ViewMode.TABLE].visible = not enabled
+	_raw_table = allow_table
 	_tree_view.set_raw_mode(enabled)
 	_table_view.set_raw_mode(enabled)
-	if enabled and _mode == ViewMode.TABLE:
+	_update_table_button()
+	if _mode == ViewMode.TABLE and not _table_button_shown():
 		_set_mode(ViewMode.TREE)
 
 
@@ -175,6 +181,9 @@ func show_raw(raw: Variant, entity_roots: Array, row_count: int) -> void:
 	_raw = raw
 	_raw_entities = entity_roots
 	_row_count = row_count
+	_update_table_button()
+	# The result never changes the selected view — the user picks Tree/Table/Text and
+	# it stays put across runs. The Table just stays available (see set_raw_mode).
 	_update_count()
 	_update_pager()
 	_rebuild()
@@ -223,12 +232,29 @@ func _update_count() -> void:
 
 func _set_mode(mode: ViewMode) -> void:
 	_mode = mode
-	for i in _mode_buttons.size():
-		_mode_buttons[i].button_pressed = (i == mode)
-	_tree_view.visible = mode == ViewMode.TREE
-	_table_view.visible = mode == ViewMode.TABLE
-	_text_view.visible = mode == ViewMode.TEXT
+	_sync_mode_widgets()
 	_rebuild()
+
+
+## Sync the mode buttons and sub-view visibility to `_mode` (without rebuilding).
+func _sync_mode_widgets() -> void:
+	for i in _mode_buttons.size():
+		_mode_buttons[i].button_pressed = (i == _mode)
+	_tree_view.visible = _mode == ViewMode.TREE
+	_table_view.visible = _mode == ViewMode.TABLE
+	_text_view.visible = _mode == ViewMode.TEXT
+
+
+## Whether the Table mode button is shown: always for document pages (DB query tabs)
+## and the models console (allow_table), so it doesn't blink in and out with each
+## result; never for endpoint raw results. It renders whatever is shown (a single
+## object as one row, empty for a scalar), useless-but-harmless off an array.
+func _table_button_shown() -> bool:
+	return not _raw_mode or _raw_table
+
+
+func _update_table_button() -> void:
+	_mode_buttons[ViewMode.TABLE].visible = _table_button_shown()
 
 
 func _rebuild() -> void:
@@ -242,7 +268,18 @@ func _rebuild() -> void:
 			else:
 				_tree_view.display(_documents, _offset)
 		ViewMode.TABLE:
-			_table_view.display(_documents, _offset)
+			if _raw_mode:
+				# An array renders its document elements (scalars filtered out so the
+				# table never chokes on them); a single object renders as one row; a
+				# scalar has nothing to tabulate.
+				var rows: Array = []
+				if _raw is Array:
+					rows = (_raw as Array).filter(func(x: Variant) -> bool: return x is Dictionary)
+				elif _raw is Dictionary:
+					rows = [_raw]
+				_table_view.display(rows, 0)
+			else:
+				_table_view.display(_documents, _offset)
 		ViewMode.TEXT:
 			if _raw_mode:
 				_text_view.display_value(_raw)

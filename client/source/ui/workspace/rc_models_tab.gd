@@ -102,8 +102,10 @@ func results() -> ResultsView:
 
 func _ready() -> void:
 	_apply_style()
-	# Model results, like endpoint responses, carry no schema and aren't paginated.
-	_results.set_raw_mode(true)
+	# Model results, like endpoint responses, carry no schema and aren't paginated —
+	# but they're very often an array (any cursor method), so keep the Table mode
+	# available and let array results default to it.
+	_results.set_raw_mode(true, true)
 	_results.set_pagination_enabled(false)
 	_results.set_item_noun("result")
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))

@@ -74,6 +74,15 @@ func _check_panel() -> void:
 	expect(String(events3.back()).contains("model"), "missing model rejected locally (got '%s')" % events3.back())
 	tab3.queue_free()
 
+	# An array result (a cursor method) counts its rows and offers the Table mode.
+	var events4: Array = []
+	var tab4: Variant = _tab("Users", "findUsersInRoles", "[\"admin\"]", events4)
+	tab4.run()
+	await _settle()
+	expect(String(events4.back()).contains("2 result"), "array result counts rows (got '%s')" % events4.back())
+	expect(tab4.results()._table_button_shown(), "Table mode is available on the models tab")
+	tab4.queue_free()
+
 
 # Helpers ---------------------------------------------------------------------
 ## Unwrap Backend's { ok, data } where data is the bridge's { result } envelope.

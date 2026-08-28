@@ -63,6 +63,12 @@ func _rc_call(body: Dictionary) -> Dictionary:
 		return _err("forced error (mock): model '%s'" % model)
 	if method.begins_with("count"):
 		return _ok({"result": {"$numberInt": "3"}})
+	# find* (bar findOne*) stand in for cursor methods, returning a list of docs.
+	if method.begins_with("find") and not method.begins_with("findOne"):
+		return _ok({"result": [
+			_load("rocketchat_user.json"),
+			{"_id": "user1", "username": "user1", "roles": ["user"]},
+		]})
 	return _ok({"result": _load("rocketchat_user.json")})
 
 
