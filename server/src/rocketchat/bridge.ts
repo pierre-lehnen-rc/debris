@@ -26,6 +26,12 @@ export interface RcBridgeOptions {
 const DEFAULT_URL = "http://localhost:3000";
 const BRIDGE_PATH = "/debris/call";
 
+/** One model exposed by @rocket.chat/models, and the collection it reads. */
+export interface RcModelInfo {
+  name: string;
+  collection: string;
+}
+
 /** An error carrying an HTTP status; {@link describeError} maps it to a response. */
 export class RcBridgeError extends Error {
   constructor(
@@ -71,13 +77,23 @@ function buildInstaller(token: string): string {
   const D = (globalThis.__debris = globalThis.__debris || {});
   D.token = ${tokenLiteral};
   D.handle = async function (body) {
-    // Meta-op: list the model names available in @rocket.chat/models (PascalCase
-    // object exports), for the Server Models sidebar tree.
+    // Meta-op: list the models available in @rocket.chat/models (PascalCase object
+    // exports) for the Server Models sidebar, each with the Mongo collection it
+    // reads. The collection comes from the model's own getCollectionName(), which is
+    // authoritative — it already accounts for the rocketchat_ prefix and for the
+    // models that opt out of it via a collectionNameResolver (users, instances, …).
     if (body && body.op === 'listModels') {
       return Object.keys(models).filter(function (k) {
         if (!/^[A-Z]/.test(k)) return false;
         try { return models[k] && typeof models[k] === 'object'; } catch (e) { return false; }
-      }).sort();
+      }).sort().map(function (name) {
+        var collection = '';
+        try {
+          var c = models[name].getCollectionName();
+          if (typeof c === 'string') collection = c;
+        } catch (e) { /* a model without a resolvable collection stays untyped */ }
+        return { name: name, collection: collection };
+      });
     }
     const model = body && body.model;
     const method = body && body.method;
@@ -265,10 +281,14 @@ export class RcBridge {
     return this.unwrap(await this.post({ model, method, args }));
   }
 
-  /** List the names of the models available in @rocket.chat/models on this server. */
-  async listModels(): Promise<string[]> {
+  /**
+   * List the models available in @rocket.chat/models on this server, each as
+   * `{ name, collection }` where `collection` is the Mongo collection the model
+   * reads (used to type its query results against the database schema).
+   */
+  async listModels(): Promise<RcModelInfo[]> {
     const result = this.unwrap(await this.post({ op: "listModels" }));
-    return Array.isArray(result) ? (result as string[]) : [];
+    return Array.isArray(result) ? (result as RcModelInfo[]) : [];
   }
 
   /** Map a post outcome to a value or a thrown error (the "not installed" 503). */

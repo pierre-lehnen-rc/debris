@@ -19,6 +19,7 @@ func _run() -> void:
 	await _check_backend()
 	await _check_install()
 	await _check_model_methods()
+	await _check_typing()
 	await _check_panel()
 
 
@@ -79,6 +80,37 @@ func _check_install() -> void:
 
 
 # 2. The RcModelsTab console. --------------------------------------------------
+## Which result values get typed as documents of the model's collection. Documents
+## and arrays of documents do; write results (acknowledged), scalars, Extended JSON
+## scalar wrappers and non-objects don't.
+func _check_typing() -> void:
+	var tab: Variant = _tab("Users", "findOneByUsername", "[]", [])
+	tab.set_collection("users")
+	expect_eq(tab._collection, "users", "the tab adopts the model's collection")
+	# A schema is always available: the project's, else a stock Rocket.Chat one.
+	expect(tab._effective_schema() != null, "a schema is available even without a DB")
+
+	var doc := {"_id": "u1", "username": "rocket.cat"}
+	expect_eq(tab._entity_roots(doc), [doc], "a returned document is typed")
+	expect_eq(tab._entity_roots([doc, doc]).size(), 2, "each document in an array is typed")
+	# Write results carry `acknowledged` — command output, not stored documents.
+	expect_eq(tab._entity_roots({"acknowledged": true, "modifiedCount": 2}), [],
+		"an UpdateResult is not typed")
+	expect_eq(tab._entity_roots([{"acknowledged": true}]), [],
+		"UpdateResults inside an array are not typed")
+	# Scalars keep their own types.
+	expect_eq(tab._entity_roots("rocket.cat"), [], "a string result is not typed")
+	expect_eq(tab._entity_roots(42), [], "a number result is not typed")
+	expect_eq(tab._entity_roots(true), [], "a boolean result is not typed")
+	expect_eq(tab._entity_roots({"$numberInt": "28"}), [],
+		"an Extended JSON scalar is not typed")
+	expect_eq(tab._entity_roots(["a", "b"]), [], "an array of strings is not typed")
+	# A cursor-with-count result types the documents it carries.
+	expect_eq(tab._entity_roots({"documents": [doc], "totalCount": 1}), [doc],
+		"a paginated result types its documents")
+	tab.queue_free()
+
+
 func _check_panel() -> void:
 	# Happy path: fill inputs, Run, expect a success status naming the call.
 	var events: Array = []
@@ -131,7 +163,11 @@ func _check_panel() -> void:
 	expect(edited[0], "Edit button emits edit_requested")
 	# Configured with a model list: the tree shows, with a folder item per model.
 	sidebar.set_configured(true)
-	sidebar.set_models(["Messages", "Rooms", "Users"])
+	sidebar.set_models([
+		{"name": "Messages", "collection": "rocketchat_message"},
+		{"name": "Rooms", "collection": "rocketchat_room"},
+		{"name": "Users", "collection": "users"},
+	])
 	expect(sidebar._tree.visible, "model tree is shown once configured")
 	expect(not sidebar._msg_wrap.visible, "config message is hidden once configured")
 	var root_item: TreeItem = sidebar._tree.get_root()
@@ -155,15 +191,18 @@ func _check_panel() -> void:
 	expect_eq((leaf.get_metadata(0) as Dictionary).get("type"), "function", "leaves are tagged type=function")
 	expect(leaf.get_icon(0) != null, "function leaves have an icon")
 	expect_eq(first.get_button_count(0), 1, "a loaded model shows a reload button")
-	# Double-clicking a function asks the host to open a query for model.method.
-	var activated: Array = ["", ""]
-	sidebar.function_activated.connect(func(m: String, fn: String) -> void:
+	# Double-clicking a function asks the host to open a query for model.method,
+	# carrying the model's collection so the results can be typed.
+	var activated: Array = ["", "", ""]
+	sidebar.function_activated.connect(func(m: String, fn: String, coll: String) -> void:
 		activated[0] = m
-		activated[1] = fn)
+		activated[1] = fn
+		activated[2] = coll)
 	leaf.select(0)
 	sidebar._on_item_activated()
 	expect_eq(activated[0], "Messages", "activating a function passes its model")
 	expect_eq(activated[1], "countByRoomId", "activating a function passes its method")
+	expect_eq(activated[2], "rocketchat_message", "activating a function passes its collection")
 	# The reload button drops and re-requests the model's functions.
 	requested[0] = ""
 	sidebar._on_tree_button_clicked(first, 0, 0, MOUSE_BUTTON_LEFT)
@@ -176,7 +215,7 @@ func _check_panel() -> void:
 	var live := {"meteor_dir": "", "url": "http://localhost:3000"}
 	var events5: Array = []
 	var tab5: Variant = load(TAB_PATH).instantiate()
-	tab5.configure("Users", "findOneByUsername", "[\"rocket.cat\"]")
+	tab5.configure("Users", "findOneByUsername", "", "[\"rocket.cat\"]")
 	tab5.bind_target(func() -> Dictionary: return live)
 	tab5.status_changed.connect(func(t: String) -> void: events5.append(t))
 	root.add_child(tab5)
@@ -205,7 +244,7 @@ func _result_of(outcome: Dictionary) -> Variant:
 ## this script's compile, which fails before autoloads register).
 func _tab(model: String, method: String, args_text: String, events: Array) -> Variant:
 	var tab = load(TAB_PATH).instantiate()
-	tab.configure(model, method, args_text)
+	tab.configure(model, method, "", args_text)
 	tab.bind_target(func() -> Dictionary: return {"meteor_dir": "/x/Rocket.Chat/apps/meteor", "url": "http://localhost:3000"})
 	tab.status_changed.connect(func(t: String) -> void: events.append(t))
 	root.add_child(tab)

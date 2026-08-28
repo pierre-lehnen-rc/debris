@@ -43,6 +43,9 @@ var _session: WorkspaceSession = null
 # path, bound when an API is attached, passed to new and restored models tabs.
 var _rc_url := ""
 var _rc_meteor_dir := ""
+# model name -> the Mongo collection it reads, from the bridge install. Lets a
+# models tab type its results with the schema rules of that collection.
+var _rc_collections: Dictionary = {}
 # Shared per-project recent/favorite query store, handed to every query tab.
 var _history: QueryHistory = null
 
@@ -75,6 +78,22 @@ func bind_rocketchat_target(url: String, meteor_dir: String) -> void:
 	_rc_meteor_dir = meteor_dir
 
 
+## Bind the server's model list ({ name, collection } entries, from the bridge
+## install) so models tabs can type their results against the collection each model
+## reads. Open tabs pick up a newly-resolved collection too.
+func bind_rocketchat_models(models: Array) -> void:
+	_rc_collections = {}
+	for entry in models:
+		if entry is Dictionary:
+			var name := String((entry as Dictionary).get("name", ""))
+			if not name.is_empty():
+				_rc_collections[name] = String((entry as Dictionary).get("collection", ""))
+	for child in _tabs.get_children():
+		if child is RcModelsTab:
+			var tab := child as RcModelsTab
+			tab.set_collection(String(_rc_collections.get(tab.model_name(), "")))
+
+
 ## The current Server Models target, as { meteor_dir, url }. Handed to models tabs
 ## as a Callable so their Run reads the up-to-date workspace config, not a snapshot.
 func _rc_target() -> Dictionary:
@@ -93,6 +112,8 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	for child in _tabs.get_children():
 		if child is EndpointTab:
 			(child as EndpointTab).set_cross_query_enabled(enabled)
+		elif child is RcModelsTab:
+			(child as RcModelsTab).set_cross_query_enabled(enabled)
 
 
 ## Set the active schema and push it to every open query tab, and to endpoint tabs
@@ -104,6 +125,8 @@ func set_schema(schema: DatabaseSchema) -> void:
 			(child as QueryTab).set_schema(schema)
 		elif child is EndpointTab:
 			(child as EndpointTab).set_schema(schema)
+		elif child is RcModelsTab:
+			(child as RcModelsTab).set_schema(schema)
 
 
 # Mongo query tabs ------------------------------------------------------------
@@ -192,7 +215,7 @@ func active_json_tab() -> JsonTab:
 ## Open a models console tab, optionally pre-filling the RC server URL (the project
 ## already knows it) and Meteor directory. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
-func open_rcmodels(model: String, method: String) -> RcModelsTab:
+func open_rcmodels(model: String, method: String, collection := "") -> RcModelsTab:
 	# Focus an existing tab for this model.method instead of stacking a duplicate.
 	var existing := _find_rcmodels_tab(model, method)
 	if existing != null:
@@ -200,7 +223,9 @@ func open_rcmodels(model: String, method: String) -> RcModelsTab:
 		return existing
 
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
-	tab.configure(model, method)
+	if collection.is_empty():
+		collection = String(_rc_collections.get(model, ""))
+	tab.configure(model, method, collection)
 	tab.bind_target(_rc_target)
 	# Connect before add_child so the tab's initial status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
@@ -210,6 +235,9 @@ func open_rcmodels(model: String, method: String) -> RcModelsTab:
 	_tab_counter += 1
 
 	_tabs.add_child(tab)
+	# After add_child, so the tab is ready to apply them to its results view.
+	tab.set_schema(_schema)
+	tab.set_cross_query_enabled(not _bound_database.is_empty())
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_RCMODELS)
@@ -438,6 +466,9 @@ func _restore_rcmodels_tab(state: Dictionary) -> void:
 	tab.name = "m_%d" % _tab_counter
 	_tab_counter += 1
 	_tabs.add_child(tab)
+	tab.set_collection(String(_rc_collections.get(tab.model_name(), "")))
+	tab.set_schema(_schema)
+	tab.set_cross_query_enabled(not _bound_database.is_empty())
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_RCMODELS)

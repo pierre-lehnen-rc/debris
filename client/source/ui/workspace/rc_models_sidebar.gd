@@ -9,8 +9,9 @@ extends PanelContainer
 ## can't be reached, so a message replaces the tree until one is set.
 
 ## A function leaf was double-clicked — the host should open a query for
-## model.method (without auto-running it).
-signal function_activated(model: String, method: String)
+## model.method (without auto-running it). `collection` is the Mongo collection the
+## model reads, so the query's results can be typed against the database schema.
+signal function_activated(model: String, method: String, collection: String)
 ## Asks the host to (re)install the Server Models bridge into the workspace's server.
 signal refresh_requested()
 ## Asks the host to open the workspace editor (to set/change the server URL + meteor dir).
@@ -62,9 +63,10 @@ func set_configured(configured: bool) -> void:
 		_render()
 
 
-## Set the model names to list (from the install response). Safe before _ready.
-func set_models(names: Array) -> void:
-	_models = names
+## Set the models to list (from the install response), each a dictionary of
+## { name, collection }. Safe before _ready.
+func set_models(models: Array) -> void:
+	_models = models
 	if is_node_ready():
 		_render()
 
@@ -90,14 +92,27 @@ func _populate_tree() -> void:
 		ph.set_custom_color(0, AppTheme.TEXT_DIM)
 		ph.set_selectable(0, false)
 		return
-	for name in _models:
+	for entry in _models:
+		var model := ""
+		var collection := ""
+		if entry is Dictionary:
+			model = String((entry as Dictionary).get("name", ""))
+			collection = String((entry as Dictionary).get("collection", ""))
+		else:
+			model = String(entry)
+		if model.is_empty():
+			continue
 		var item := _tree.create_item(root)
-		item.set_text(0, String(name))
+		item.set_text(0, model)
 		item.set_icon(0, ICON_MODEL)
 		item.set_icon_max_width(0, ICON_SIZE)
 		item.set_icon_modulate(0, AppTheme.TEXT_DIM)
+		if not collection.is_empty():
+			item.set_tooltip_text(0, collection)
 		# state: idle -> loading -> loaded, so a model's methods load once on expand.
-		item.set_metadata(0, {"type": "model", "model": String(name), "state": "idle"})
+		item.set_metadata(0, {
+			"type": "model", "model": model, "collection": collection, "state": "idle",
+		})
 
 
 ## Double-click / Enter on a tree item. Expanding a model the first time asks the
@@ -113,7 +128,11 @@ func _on_item_activated() -> void:
 	match String(d.get("type", "")):
 		"function":
 			# Open a query for this model.method (the host doesn't auto-run it).
-			function_activated.emit(String(d.get("model", "")), String(d.get("function", "")))
+			function_activated.emit(
+				String(d.get("model", "")),
+				String(d.get("function", "")),
+				String(d.get("collection", "")),
+			)
 		"model":
 			_activate_model(item, d)
 
@@ -174,13 +193,16 @@ func set_model_functions(model: String, methods: Array) -> void:
 		ph.set_custom_color(0, AppTheme.TEXT_DIM)
 		ph.set_selectable(0, false)
 		return
+	var collection := String(d.get("collection", ""))
 	for fn in methods:
 		var leaf := _tree.create_item(item)
 		leaf.set_text(0, String(fn))
 		leaf.set_icon(0, ICON_FUNCTION)
 		leaf.set_icon_max_width(0, ICON_SIZE)
 		leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
-		leaf.set_metadata(0, {"type": "function", "model": model, "function": String(fn)})
+		leaf.set_metadata(0, {
+			"type": "function", "model": model, "function": String(fn), "collection": collection,
+		})
 	item.set_collapsed(false)
 
 

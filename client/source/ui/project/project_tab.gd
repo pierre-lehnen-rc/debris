@@ -480,10 +480,11 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 	status_changed.emit("Opened %s" % endpoint.label())
 
 
-func _on_model_function_activated(model: String, method: String) -> void:
+func _on_model_function_activated(model: String, method: String, collection: String) -> void:
 	# Double-clicking a function opens (or focuses) a query for model.method. The tab
-	# reads the workspace's server URL + meteor dir live; the user presses Run.
-	_center.open_rcmodels(model, method)
+	# reads the workspace's server URL + meteor dir live; the user presses Run. The
+	# collection types the results against the schema.
+	_center.open_rcmodels(model, method, collection)
 	status_changed.emit("Opened %s.%s" % [model, method])
 
 
@@ -520,10 +521,13 @@ func _install_models_bridge() -> void:
 	status_changed.emit("Installing Server Models bridge…")
 	var result: Dictionary = await Backend.rocketchat_install(target)
 	if result.get("ok", false):
-		# The install response carries the server's model list for the sidebar tree.
+		# The install response carries the server's models ({ name, collection }) for
+		# the sidebar tree and for typing model results against their collections.
 		var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+		var models: Array = data.get("models", [])
 		if _models_sidebar != null:
-			_models_sidebar.set_models(data.get("models", []))
+			_models_sidebar.set_models(models)
+		_center.bind_rocketchat_models(models)
 		status_changed.emit("Server Models bridge ready")
 	else:
 		status_changed.emit("Server Models install failed: %s" % result.get("error", "unknown error"))

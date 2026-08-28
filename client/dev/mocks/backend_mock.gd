@@ -53,7 +53,12 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 			return _ok({
 				"installed": true,
 				"url": body.get("target", {}).get("url", ""),
-				"models": ["Messages", "Rooms", "Subscriptions", "Users"],
+				"models": [
+					{"name": "Messages", "collection": "rocketchat_message"},
+					{"name": "Rooms", "collection": "rocketchat_room"},
+					{"name": "Subscriptions", "collection": "rocketchat_subscription"},
+					{"name": "Users", "collection": "users"},
+				],
 			})
 		"/api/rocketchat/model-methods":
 			return _ok({

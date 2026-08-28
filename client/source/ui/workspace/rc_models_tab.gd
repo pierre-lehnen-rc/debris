@@ -26,6 +26,14 @@ signal open_json_requested(text: String)
 ## The model and method this tab queries (set via configure/restore; fixed after).
 var _model := ""
 var _method := ""
+## The Mongo collection this model reads (e.g. "rocketchat_subscription"), used to
+## type result documents against the database schema. "" leaves results untyped.
+var _collection := ""
+## The project's database schema, when a DB is attached. Model results are
+## Rocket.Chat documents either way, so a plain Rocket.Chat schema stands in when
+## the project has no database of its own (see _effective_schema).
+var _schema: DatabaseSchema = null
+var _fallback_schema: RocketChatSchema = null
 ## Returns the workspace's current Server Models target as { meteor_dir, url }.
 ## Set by bind_target(); called fresh on every Run so config changes take effect.
 var _target_provider: Callable = Callable()
@@ -43,9 +51,10 @@ var _restore_state: Dictionary = {}
 
 ## Open a tab for `model`.`method`, optionally pre-filling the args editor. Call
 ## before the node enters the tree; pair with bind_target() for the live target.
-func configure(model: String, method: String, args_text := "") -> void:
+func configure(model: String, method: String, collection := "", args_text := "") -> void:
 	_model = model
 	_method = method
+	_collection = collection
 	_initial_args = args_text
 
 
@@ -56,6 +65,7 @@ func configure_restore(state: Dictionary) -> void:
 	_restore_state = state
 	_model = String(state.get("model", ""))
 	_method = String(state.get("method", ""))
+	_collection = String(state.get("collection", ""))
 	_initial_args = String(state.get("args", ""))
 
 
@@ -72,12 +82,60 @@ func to_state() -> Dictionary:
 		"kind": "rcmodels",
 		"model": _model,
 		"method": _method,
+		"collection": _collection,
 		"args": _args_edit.text,
 	}
 
 
 func tab_title() -> String:
 	return "%s.%s" % [_model, _method]
+
+
+## The model this tab queries, so the center can re-resolve its collection when a
+## fresh model list arrives.
+func model_name() -> String:
+	return _model
+
+
+## Set the Mongo collection this model reads, typing result documents against it.
+## Ignores an empty name so a known collection isn't cleared by a failed refresh.
+func set_collection(collection: String) -> void:
+	if collection.is_empty() or collection == _collection:
+		return
+	_collection = collection
+	_apply_type_context()
+
+
+## Apply the project's database schema (mirrors QueryTab/EndpointTab).
+func set_schema(schema: DatabaseSchema) -> void:
+	_schema = schema
+	_apply_type_context()
+
+
+## Enable/disable the schema's cross-query search actions on result rows. The
+## center enables them when the project also has a database attached.
+func set_cross_query_enabled(enabled: bool) -> void:
+	if is_node_ready():
+		_results.set_cross_query_enabled(enabled)
+
+
+## Type result rows as documents of this model's collection. The collection is
+## borrowed only for typing (owns = false): the Type column and its actions light
+## up, while sorting/paging stay off, exactly as for endpoint results.
+func _apply_type_context() -> void:
+	if is_node_ready():
+		_results.set_type_context(_effective_schema(), _collection, false)
+
+
+## The schema used to type results: the project's when a database is attached,
+## otherwise a stock Rocket.Chat schema — these are Rocket.Chat documents by
+## definition, so their ids/types resolve even without a DB in the project.
+func _effective_schema() -> DatabaseSchema:
+	if _schema != null:
+		return _schema
+	if _fallback_schema == null:
+		_fallback_schema = RocketChatSchema.new()
+	return _fallback_schema
 
 
 ## Public entry point mirroring the Run button (F5).
@@ -100,6 +158,7 @@ func _ready() -> void:
 	_results.set_item_noun("result")
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 
+	_apply_type_context()
 	_args_edit.text = _initial_args
 	_title_label.text = tab_title()
 	status_changed.emit("Enter JSON args, then Run (F5)")
@@ -157,9 +216,42 @@ func _run() -> void:
 	var data: Variant = result.get("data")
 	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
 	var count := (value as Array).size() if value is Array else 0
-	_results.show_raw(value, [], count)
+	_results.show_raw(value, _entity_roots(value), count)
 	status_changed.emit("%s.%s — %s" % [_model, _method, _describe(value, count)])
 	state_changed.emit()
+
+
+## The objects in a result to type as documents of this model's collection: an
+## array's document elements, a single returned document, or the documents of a
+## paginated { documents, totalCount } result. Everything else is left untyped.
+func _entity_roots(value: Variant) -> Array:
+	if value is Array:
+		return (value as Array).filter(_is_document)
+	if value is Dictionary:
+		var d := value as Dictionary
+		# A cursor-with-count method returns its rows under `documents`.
+		if d.get("documents") is Array:
+			return (d["documents"] as Array).filter(_is_document)
+		if _is_document(d):
+			return [d]
+	return []
+
+
+## Whether a result value is a collection document (so the schema should type it).
+## Two kinds of object are deliberately excluded: write results (UpdateResult and
+## friends, identified by `acknowledged`), which are command output rather than
+## stored documents, and Extended JSON scalar wrappers ({"$numberInt": …}), which
+## are plain values. Strings, numbers and booleans are never documents either.
+func _is_document(value: Variant) -> bool:
+	if not (value is Dictionary):
+		return false
+	var d := value as Dictionary
+	if d.has("acknowledged"):
+		return false
+	for key in d:
+		if not String(key).begins_with("$"):
+			return true
+	return false
 
 
 ## Parse the args editor into an Array. Empty input is no args ([]); anything that
