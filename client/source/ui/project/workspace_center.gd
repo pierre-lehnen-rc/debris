@@ -216,12 +216,8 @@ func active_json_tab() -> JsonTab:
 ## already knows it) and repository path. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
 func open_rcmodels(model: String, method: String, collection := "", signature := "") -> RcModelsTab:
-	# Focus an existing tab for this model.method instead of stacking a duplicate.
-	var existing := _find_rcmodels_tab(model, method)
-	if existing != null:
-		_tabs.current_tab = _tabs.get_tab_idx_from_control(existing)
-		return existing
-
+	# Always a fresh tab (like query tabs): the same function is often run side by
+	# side with different arguments, so duplicates are wanted, not deduplicated.
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
 	if collection.is_empty():
 		collection = String(_rc_collections.get(model, ""))
@@ -245,16 +241,6 @@ func open_rcmodels(model: String, method: String, collection := "", signature :=
 	_update_welcome()
 	_emit_state_changed()
 	return tab
-
-
-## The open models tab for `model`.`method`, or null.
-func _find_rcmodels_tab(model: String, method: String) -> RcModelsTab:
-	var title := "%s.%s" % [model, method]
-	for child in _tabs.get_children():
-		var tab := child as RcModelsTab
-		if tab != null and tab.tab_title() == title:
-			return tab
-	return null
 
 
 # Rocket.Chat endpoint tabs ---------------------------------------------------

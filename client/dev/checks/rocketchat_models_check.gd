@@ -20,6 +20,7 @@ func _run() -> void:
 	await _check_install()
 	await _check_model_methods()
 	await _check_typing()
+	await _check_duplicate_tabs()
 	await _check_panel()
 
 
@@ -113,6 +114,23 @@ func _check_typing() -> void:
 	expect_eq(tab._entity_roots({"documents": [doc], "totalCount": 1}), [doc],
 		"a paginated result types its documents")
 	tab.queue_free()
+
+
+## Opening the same function twice stacks two independent tabs, so it can be run
+## side by side with different arguments.
+func _check_duplicate_tabs() -> void:
+	var center: Variant = load("res://source/ui/project/workspace_center.tscn").instantiate()
+	root.add_child(center)
+	var a: Variant = center.open_rcmodels("Users", "findOneByUsername", "users", "(u: string)")
+	var b: Variant = center.open_rcmodels("Users", "findOneByUsername", "users", "(u: string)")
+	expect(a != b, "opening the same function again makes a second tab")
+	expect_eq(center.capture_tabs().size(), 2, "both tabs are open")
+	# Each keeps its own arguments.
+	a._args_edit.text = "[\"alice\"]"
+	b._args_edit.text = "[\"bob\"]"
+	expect_eq(a.to_state().get("args"), "[\"alice\"]", "the first tab keeps its own args")
+	expect_eq(b.to_state().get("args"), "[\"bob\"]", "the second tab keeps its own args")
+	center.queue_free()
 
 
 func _check_panel() -> void:

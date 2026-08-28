@@ -483,7 +483,7 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 func _on_model_function_activated(
 	model: String, method: String, collection: String, signature: String
 ) -> void:
-	# Double-clicking a function opens (or focuses) a query for model.method. The tab
+	# Double-clicking a function opens a new query tab for model.method. The tab
 	# reads the workspace's server URL + repository path live; the user presses Run. The
 	# collection types the results against the schema.
 	_center.open_rcmodels(model, method, collection, signature)
