@@ -1,0 +1,62 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/workspace/rc_models_sidebar.gd" id="1_rcs0"]
+
+[node name="RcModelsSidebar" type="PanelContainer"]
+script = ExtResource("1_rcs0")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Header" type="PanelContainer" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="VBox/Header"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="VBox/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "SERVER MODELS"
+
+[node name="EditBtn" type="Button" parent="VBox/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Edit workspace"
+focus_mode = 0
+text = "✎"
+
+[node name="RefreshBtn" type="Button" parent="VBox/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Inject the bridge and reload the models"
+focus_mode = 0
+text = "⟳"
+
+[node name="Tree" type="Tree" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+allow_rmb_select = true
+hide_root = true
+select_mode = 1
+
+[node name="MsgWrap" type="MarginContainer" parent="VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Desc" type="Label" parent="VBox/MsgWrap"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+text = "No Rocket.Chat repository configured."
+autowrap_mode = 3

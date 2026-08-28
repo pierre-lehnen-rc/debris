@@ -52,6 +52,7 @@ func test_set_rocketchat() -> void:
 		"name": "work",
 		"url": "https://chat.example",
 		"users": [],
+		"repo_path": "",
 	})
 	assert_bool(d.dirty).is_true()
 
@@ -63,7 +64,26 @@ func test_rocketchat_config_when_absent() -> void:
 		"name": "empty",
 		"url": "",
 		"users": [],
+		"repo_path": "",
 	})
+
+
+func test_set_rocketchat_with_repo_path_round_trips() -> void:
+	var d := _doc()
+	d.set_name("work")
+	d.set_rocketchat("https://chat", [], "/srv/Rocket.Chat")
+	assert_str(d.rocketchat_repo_path()).is_equal("/srv/Rocket.Chat")
+	assert_str(d.rocketchat_config()["repo_path"]).is_equal("/srv/Rocket.Chat")
+	var data := d.to_dict()
+	assert_str(data["rocketchat"]["repo_path"]).is_equal("/srv/Rocket.Chat")
+	var restored := WorkspaceDoc.from_dict(data)
+	assert_str(restored.rocketchat_repo_path()).is_equal("/srv/Rocket.Chat")
+
+
+func test_to_dict_omits_empty_repo_path() -> void:
+	var d := _doc()
+	d.set_rocketchat("https://chat", [])
+	assert_bool(d.to_dict()["rocketchat"].has("repo_path")).is_false()
 
 
 func test_set_rocketchat_cleans_users() -> void:

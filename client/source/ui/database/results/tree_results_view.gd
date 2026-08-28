@@ -70,7 +70,7 @@ func display_raw(raw: Variant, entity_roots: Array) -> void:
 	clear()
 	_raw_entity_roots = entity_roots
 	var root := create_item()
-	if raw is Dictionary:
+	if raw is Dictionary and _ejson_scalar(raw).is_empty():
 		# A body that is itself an entity types its own fields; an envelope doesn't.
 		var type_doc: Variant = raw if _is_entity_root(raw) else null
 		for key in raw:

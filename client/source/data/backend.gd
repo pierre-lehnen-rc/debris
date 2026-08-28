@@ -122,6 +122,33 @@ func ping(connection: Dictionary) -> Dictionary:
 	return await _post("/api/ping", {"connection": connection})
 
 
+## Call a @rocket.chat/models method on a running Rocket.Chat server via the
+## server's bridge. `target` names the RC instance ({ repoPath, url? }); `args` is
+## the argument list, spread into the call. The result's `data` is `{ result }`,
+## the method's return value as canonical Extended JSON (parses to plain nested
+## dictionaries, same as the Mongo routes).
+func rocketchat_call(target: Dictionary, model: String, method: String, args: Array) -> Dictionary:
+	return await _post("/api/rocketchat/call", {
+		"target": target,
+		"model": model,
+		"method": method,
+		"args": args,
+	})
+
+
+## Inject (or refresh) the Server Models bridge endpoint into the running Rocket.Chat
+## server named by `target` ({ repoPath, url }). This is the only step that uses the
+## repository path; queries then post to the injected endpoint. Logged as its own action.
+func rocketchat_install(target: Dictionary) -> Dictionary:
+	return await _post("/api/rocketchat/install", {"target": target})
+
+
+## List a model's public methods (from @rocket.chat/model-typings). Metadata for the
+## sidebar tree; only the target's repository path is used (no running server needed).
+func rocketchat_model_methods(target: Dictionary, model: String) -> Dictionary:
+	return await _post("/api/rocketchat/model-methods", {"target": target, "model": model})
+
+
 ## Convert a stored connection config (name / "host:port" / optional auth) into
 ## the discrete connection spec the server expects.
 static func to_spec(conn: Dictionary) -> Dictionary:
@@ -203,6 +230,16 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 ## endpoint name (path minus the "/api/" prefix); the target is the collection
 ## (or database) the body addressed.
 func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	# Listing a model's methods is metadata for the sidebar tree, not an action.
+	if path == "/api/rocketchat/model-methods":
+		return
+	# Rocket.Chat model-bridge calls aren't Mongo actions; label them accordingly.
+	if path == "/api/rocketchat/call":
+		_log_rocketchat_call(body, outcome, ms)
+		return
+	if path == "/api/rocketchat/install":
+		_log_rocketchat_install(body, outcome, ms)
+		return
 	var target: String = body.get("database", "")
 	if body.has("collection"):
 		target = "%s.%s" % [target, body["collection"]]
@@ -213,6 +250,45 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 		"params": _params_from(body),
 		"ok": outcome.get("ok", false),
 		"result": _summarize(outcome.get("data")) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": ms,
+	})
+
+
+## Record a Rocket.Chat model-bridge call: the target is "Model.method", the args
+## are the logged params, and the result summary unwraps the bridge's { result }.
+func _log_rocketchat_call(body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	var data: Variant = outcome.get("data")
+	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
+	# The call posts to the endpoint's server URL (the repository path isn't used here
+	# — it only drives the separate injection step), so log the URL alongside the args.
+	var call_target: Dictionary = body.get("target", {})
+	ActivityLog.record({
+		"source": "rocketchat",
+		"action": "model call",
+		"target": "%s.%s" % [body.get("model", ""), body.get("method", "")],
+		"params": {
+			"url": call_target.get("url", ""),
+			"args": body.get("args", []),
+		},
+		"ok": outcome.get("ok", false),
+		"result": _summarize(value) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": ms,
+	})
+
+
+## Record a Server Models bridge injection (startup / repository-path change /
+## manual refresh): the repository path is the target, since injection is what uses it.
+func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	var target: Dictionary = body.get("target", {})
+	ActivityLog.record({
+		"source": "rocketchat",
+		"action": "inject bridge",
+		"target": String(target.get("repoPath", "")),
+		"params": {"url": target.get("url", "")},
+		"ok": outcome.get("ok", false),
+		"result": "installed" if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
 	})

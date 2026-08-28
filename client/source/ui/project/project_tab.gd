@@ -27,15 +27,18 @@ signal save_requested()
 const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_sidebar.tscn")
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
 const USERS_PANEL_SCENE := preload("res://source/ui/workspace/users_panel.tscn")
+const RCMODELS_SIDEBAR_SCENE := preload("res://source/ui/workspace/rc_models_sidebar.tscn")
 const CENTER_SCENE := preload("res://source/ui/project/workspace_center.tscn")
 
 const ICON_COLLECTIONS := preload("res://source/ui/icons/database.svg")
 const ICON_ENDPOINTS := preload("res://source/ui/icons/api.svg")
 const ICON_USERS := preload("res://source/ui/icons/users.svg")
+const ICON_MODELS := preload("res://source/ui/icons/models.svg")
 
 const VIEW_COLLECTIONS := "collections"
 const VIEW_ENDPOINTS := "endpoints"
 const VIEW_USERS := "users"
+const VIEW_MODELS := "models"
 
 # Default sidebar width matches the old database tab (split_offset 360, 180 floor),
 # which is the width the sidebar reference was taken from.
@@ -64,6 +67,7 @@ var _center: WorkspaceCenter
 var _collection_sidebar: CollectionSidebar = null
 var _endpoint_sidebar: EndpointSidebar = null
 var _users_panel: UsersPanel = null
+var _models_sidebar: RcModelsSidebar = null
 # view id -> sidebar Control, so a view selection can show exactly one.
 var _views: Dictionary = {}
 
@@ -183,6 +187,7 @@ func _setup() -> void:
 	_build_endpoints_view()
 	if _doc.has_rocketchat():
 		_build_users_view()
+		_build_models_view()
 	_refresh_activity()
 	# With an API attached, tab restore waits for the endpoint list (cache or live)
 	# so endpoint tabs can be matched to their definitions; _on_endpoints_loaded
@@ -240,10 +245,13 @@ func attach_mongo(connection: Dictionary, database: String) -> void:
 func attach_rocketchat(config: Dictionary) -> void:
 	if has_rocketchat():
 		return
-	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
+	_doc.set_rocketchat(
+		String(config.get("url", "")), config.get("users", []), String(config.get("repo_path", ""))
+	)
 	_remove_view(VIEW_ENDPOINTS)
 	_build_endpoints_view()
 	_build_users_view()
+	_build_models_view()
 	_refresh_activity(VIEW_ENDPOINTS)
 
 
@@ -269,8 +277,9 @@ func update_mongo_connection(connection: Dictionary) -> void:
 func update_rocketchat(config: Dictionary) -> void:
 	if not has_rocketchat():
 		return
+	var old_repo := _doc.rocketchat_repo_path()
 	var users: Array = _doc.rocketchat.get("users", [])
-	_doc.set_rocketchat(String(config.get("url", "")), users)
+	_doc.set_rocketchat(String(config.get("url", "")), users, String(config.get("repo_path", "")))
 	_set_session(_doc.rocketchat_config())
 	if _endpoint_sidebar != null:
 		# Re-seed the cache for the (possibly new) URL — cached_endpoints returns []
@@ -279,6 +288,12 @@ func update_rocketchat(config: Dictionary) -> void:
 		_endpoint_sidebar.configure(_doc.rocketchat_config())
 	if _users_panel != null:
 		_users_panel.configure(_session)
+	if _models_sidebar != null:
+		_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
+	# Reinject the Server Models bridge only when the repository path actually
+	# changed (a new URL reaches the same injected endpoint, so it needs no reinject).
+	if _doc.rocketchat_repo_path() != old_repo and not _doc.rocketchat_repo_path().is_empty():
+		_install_models_bridge()
 
 
 # View building ---------------------------------------------------------------
@@ -309,7 +324,7 @@ func _build_collections_view() -> void:
 func _build_endpoints_view() -> void:
 	if not _doc.has_rocketchat():
 		_add_view(VIEW_ENDPOINTS, _make_attach_placeholder(
-			"api", "No API in this project.", "Attach API…"
+			"api", "No workspace in this project.", "Attach Workspace…"
 		))
 		return
 	_ensure_session()
@@ -333,6 +348,20 @@ func _build_users_view() -> void:
 	_users_panel.configure(_session)
 
 
+## The Models view: a launcher for the server-models console. Present whenever an
+## API is attached (the console targets that Rocket.Chat server).
+func _build_models_view() -> void:
+	_models_sidebar = RCMODELS_SIDEBAR_SCENE.instantiate()
+	_add_view(VIEW_MODELS, _models_sidebar)
+	_models_sidebar.function_activated.connect(_on_model_function_activated)
+	_models_sidebar.refresh_requested.connect(_on_models_refresh)
+	_models_sidebar.functions_requested.connect(_on_model_functions_requested)
+	_models_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
+	_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
+	# Inject the bridge on startup so the endpoint is ready before the first query.
+	_install_models_bridge()
+
+
 ## Create the shared Rocket.Chat session once, binding it to the center.
 func _ensure_session() -> void:
 	if _session == null:
@@ -345,6 +374,9 @@ func _set_session(config: Dictionary) -> void:
 	_session = WorkspaceSession.new(config)
 	_session.changed.connect(_on_session_changed)
 	_center.bind_session(_session)
+	# The Server Models console targets the Debris bridge, not the RC REST session,
+	# so give the center the server URL + local repository path it needs directly.
+	_center.bind_rocketchat_target(String(config.get("url", "")), String(config.get("repo_path", "")))
 
 
 ## The session changed (a user was added/removed/edited, or logged in/out). Persist
@@ -392,6 +424,7 @@ func _refresh_activity(select_view: String = "") -> void:
 	]
 	if _doc.has_rocketchat():
 		views.append({"id": VIEW_USERS, "icon": ICON_USERS, "tooltip": "Users"})
+		views.append({"id": VIEW_MODELS, "icon": ICON_MODELS, "tooltip": "Server Models"})
 	_activity.set_views(views, select_view)
 
 
@@ -445,6 +478,61 @@ func _on_schema_changed(schema: DatabaseSchema) -> void:
 func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 	_center.open_endpoint(endpoint)
 	status_changed.emit("Opened %s" % endpoint.label())
+
+
+func _on_model_function_activated(
+	model: String, method: String, collection: String, signature: String
+) -> void:
+	# Double-clicking a function opens a new query tab for model.method. The tab
+	# reads the workspace's server URL + repository path live; the user presses Run. The
+	# collection types the results against the schema.
+	_center.open_rcmodels(model, method, collection, signature)
+	status_changed.emit("Opened %s.%s" % [model, method])
+
+
+## Manual "Refresh" on the Server Models sidebar: reinstall the bridge endpoint.
+func _on_models_refresh() -> void:
+	_install_models_bridge()
+
+
+## A model was expanded in the sidebar: fetch its methods (from model-typings) and
+## hand them back to fill in as child leaves.
+func _on_model_functions_requested(model: String) -> void:
+	if not has_rocketchat() or _doc.rocketchat_repo_path().is_empty():
+		return
+	var target := {"repoPath": _doc.rocketchat_repo_path(), "url": _rocketchat_url()}
+	var result: Dictionary = await Backend.rocketchat_model_methods(target, model)
+	if _models_sidebar == null:
+		return
+	var methods: Array = []
+	if result.get("ok", false):
+		var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+		methods = data.get("methods", [])
+	else:
+		status_changed.emit("Couldn't load %s functions: %s" % [model, result.get("error", "error")])
+	_models_sidebar.set_model_functions(model, methods)
+
+
+## Inject (or refresh) the Server Models bridge into the workspace's Rocket.Chat
+## server. A no-op without a repository path. Its own Activity Log entry is recorded
+## by Backend. Fire-and-forget: the status line reflects the outcome.
+func _install_models_bridge() -> void:
+	if not has_rocketchat() or _doc.rocketchat_repo_path().is_empty():
+		return
+	var target := {"repoPath": _doc.rocketchat_repo_path(), "url": _rocketchat_url()}
+	status_changed.emit("Injecting Server Models bridge…")
+	var result: Dictionary = await Backend.rocketchat_install(target)
+	if result.get("ok", false):
+		# The install response carries the server's models ({ name, collection }) for
+		# the sidebar tree and for typing model results against their collections.
+		var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+		var models: Array = data.get("models", [])
+		if _models_sidebar != null:
+			_models_sidebar.set_models(models)
+		_center.bind_rocketchat_models(models)
+		status_changed.emit("Server Models bridge ready")
+	else:
+		status_changed.emit("Server Models injection failed: %s" % result.get("error", "unknown error"))
 
 
 func _on_status_changed(text: String) -> void:

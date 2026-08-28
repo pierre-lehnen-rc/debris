@@ -30,6 +30,12 @@ export function describeError(err: unknown): { status: number; payload: ErrorPay
     };
   }
 
+  // Errors that carry their own HTTP status (e.g. the Rocket.Chat bridge).
+  if (err instanceof Error && typeof (err as { statusCode?: unknown }).statusCode === "number") {
+    const status = (err as unknown as { statusCode: number }).statusCode;
+    return { status, payload: { error: { message: err.message, name: err.name } } };
+  }
+
   if (err instanceof Error) {
     return {
       status: 500,

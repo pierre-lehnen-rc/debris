@@ -47,8 +47,50 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 			return _ok(_load("explain.json"))
 		"/api/ping":
 			return _ok({"ok": 1})
+		"/api/rocketchat/call":
+			return _rc_call(body)
+		"/api/rocketchat/install":
+			return _ok({
+				"installed": true,
+				"url": body.get("target", {}).get("url", ""),
+				"models": [
+					{"name": "Messages", "collection": "rocketchat_message"},
+					{"name": "Rooms", "collection": "rocketchat_room"},
+					{"name": "Subscriptions", "collection": "rocketchat_subscription"},
+					{"name": "Users", "collection": "users"},
+				],
+			})
+		"/api/rocketchat/model-methods":
+			return _ok({
+				"model": body.get("model", ""),
+				"methods": [
+					{"name": "countByRole", "signature": "(roleName: string) => Promise<number>"},
+					{"name": "findOneById", "signature": "(_id: string, options?: O) => Promise<IUser | null>"},
+					{"name": "findOneByUsername", "signature": "(username: string, options?: O) => Promise<IUser | null>"},
+					{"name": "updateStatusById", "signature": "(userId: IUser['_id'], status: UserStatus) => Promise<UpdateResult>"},
+				],
+			})
 	# Unknown endpoint: behave like a find so the caller still gets rows.
 	return _ok(_find_docs(collection))
+
+
+## Stand-in for the Rocket.Chat model bridge. Returns the bridge's { result: … }
+## envelope: a count fixture for count* methods, else a sample user document.
+## model "force-error" (or a missing model/method) exercises the failure path.
+func _rc_call(body: Dictionary) -> Dictionary:
+	var model: String = body.get("model", "")
+	var method: String = body.get("method", "")
+	if model == FORCE_ERROR_HOST or model.is_empty() or method.is_empty():
+		return _err("forced error (mock): model '%s'" % model)
+	if method.begins_with("count"):
+		return _ok({"result": {"$numberInt": "3"}})
+	# find* (bar findOne*) stand in for cursor methods, returning a list of docs.
+	if method.begins_with("find") and not method.begins_with("findOne"):
+		return _ok({"result": [
+			_load("rocketchat_user.json"),
+			{"_id": "user1", "username": "user1", "roles": ["user"]},
+		]})
+	return _ok({"result": _load("rocketchat_user.json")})
 
 
 ## Documents for a collection: its own fixture (find/<collection>.json) when

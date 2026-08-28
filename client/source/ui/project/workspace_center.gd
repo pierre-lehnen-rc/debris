@@ -17,9 +17,11 @@ signal state_changed()
 const QUERY_TAB_SCENE := preload("res://source/ui/database/query_tab.tscn")
 const ENDPOINT_TAB_SCENE := preload("res://source/ui/workspace/endpoint_tab.tscn")
 const JSON_TAB_SCENE := preload("res://source/ui/database/json_tab.tscn")
+const RCMODELS_TAB_SCENE := preload("res://source/ui/workspace/rc_models_tab.tscn")
 const ICON_QUERY := preload("res://source/ui/icons/collection.svg")
 const ICON_ENDPOINT := preload("res://source/ui/icons/api.svg")
 const ICON_JSON := preload("res://source/ui/icons/json.svg")
+const ICON_RCMODELS := preload("res://source/ui/icons/models.svg")
 
 @onready var _tabs: TabContainer = %Tabs
 @onready var _welcome: Control = %Welcome
@@ -37,6 +39,13 @@ var _bound_database := ""
 var _schema: DatabaseSchema = null
 # The Rocket.Chat session endpoint tabs run against (set when an API is attached).
 var _session: WorkspaceSession = null
+# The Server Models console's target: the RC server URL and the local Rocket.Chat
+# repository path, bound when an API is attached, passed to new/restored models tabs.
+var _rc_url := ""
+var _rc_repo_path := ""
+# model name -> the Mongo collection it reads, from the bridge install. Lets a
+# models tab type its results with the schema rules of that collection.
+var _rc_collections: Dictionary = {}
 # Shared per-project recent/favorite query store, handed to every query tab.
 var _history: QueryHistory = null
 
@@ -62,6 +71,35 @@ func bind_session(session: WorkspaceSession) -> void:
 	_session = session
 
 
+## Bind the Server Models target: the workspace's RC server URL and the local
+## Rocket.Chat repository path. Models tabs read these instead of asking per tab.
+func bind_rocketchat_target(url: String, repo_path: String) -> void:
+	_rc_url = url
+	_rc_repo_path = repo_path
+
+
+## Bind the server's model list ({ name, collection } entries, from the bridge
+## install) so models tabs can type their results against the collection each model
+## reads. Open tabs pick up a newly-resolved collection too.
+func bind_rocketchat_models(models: Array) -> void:
+	_rc_collections = {}
+	for entry in models:
+		if entry is Dictionary:
+			var name := String((entry as Dictionary).get("name", ""))
+			if not name.is_empty():
+				_rc_collections[name] = String((entry as Dictionary).get("collection", ""))
+	for child in _tabs.get_children():
+		if child is RcModelsTab:
+			var tab := child as RcModelsTab
+			tab.set_collection(String(_rc_collections.get(tab.model_name(), "")))
+
+
+## The current Server Models target, as { repo_path, url }. Handed to models tabs
+## as a Callable so their Run reads the up-to-date workspace config, not a snapshot.
+func _rc_target() -> Dictionary:
+	return {"repo_path": _rc_repo_path, "url": _rc_url}
+
+
 ## Bind the shared query-history store handed to every query tab (recents +
 ## favorites). Set before tabs are opened/restored so each tab records into it.
 func bind_history(history: QueryHistory) -> void:
@@ -74,6 +112,8 @@ func set_cross_query_enabled(enabled: bool) -> void:
 	for child in _tabs.get_children():
 		if child is EndpointTab:
 			(child as EndpointTab).set_cross_query_enabled(enabled)
+		elif child is RcModelsTab:
+			(child as RcModelsTab).set_cross_query_enabled(enabled)
 
 
 ## Set the active schema and push it to every open query tab, and to endpoint tabs
@@ -85,6 +125,8 @@ func set_schema(schema: DatabaseSchema) -> void:
 			(child as QueryTab).set_schema(schema)
 		elif child is EndpointTab:
 			(child as EndpointTab).set_schema(schema)
+		elif child is RcModelsTab:
+			(child as RcModelsTab).set_schema(schema)
 
 
 # Mongo query tabs ------------------------------------------------------------
@@ -169,6 +211,41 @@ func active_json_tab() -> JsonTab:
 	return _tabs.get_current_tab_control() as JsonTab
 
 
+# Rocket.Chat model tabs ------------------------------------------------------
+## Open a models console tab, optionally pre-filling the RC server URL (the project
+## already knows it) and repository path. Self-contained like a JSON tab — it
+## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
+func open_rcmodels(model: String, method: String, collection := "", signature := "") -> RcModelsTab:
+	# Always a fresh tab (like query tabs): the same function is often run side by
+	# side with different arguments, so duplicates are wanted, not deduplicated.
+	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
+	if collection.is_empty():
+		collection = String(_rc_collections.get(model, ""))
+	tab.configure(model, method, collection, signature)
+	tab.bind_target(_rc_target)
+	tab.set_history(_history)
+	# Connect before add_child so the tab's initial status is captured.
+	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	tab.open_json_requested.connect(_on_open_json_requested)
+	# A schema type action on a result opens a sibling query tab on the DB.
+	tab.open_query_requested.connect(_on_open_query_requested)
+	tab.state_changed.connect(_emit_state_changed)
+	tab.name = "m_%d" % _tab_counter
+	_tab_counter += 1
+
+	_tabs.add_child(tab)
+	# After add_child, so the tab is ready to apply them to its results view.
+	tab.set_schema(_schema)
+	tab.set_cross_query_enabled(not _bound_database.is_empty())
+	var index := _tabs.get_tab_idx_from_control(tab)
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_icon(index, ICON_RCMODELS)
+	_tabs.current_tab = index
+	_update_welcome()
+	_emit_state_changed()
+	return tab
+
+
 # Rocket.Chat endpoint tabs ---------------------------------------------------
 ## Open (or focus) a tab for `endpoint`. When `restore_state` is non-empty the tab
 ## is reopened from the sidecar with its saved user/params (never auto-sending).
@@ -227,6 +304,8 @@ func run_current() -> void:
 		(control as EndpointTab).send_request()
 	elif control is JsonTab:
 		(control as JsonTab).show_json()
+	elif control is RcModelsTab:
+		(control as RcModelsTab).run()
 
 
 ## Close the active source tab. Returns true when one was open to close, so the host
@@ -293,6 +372,8 @@ func capture_tabs() -> Array:
 			out.append((child as EndpointTab).to_state())
 		elif child is JsonTab:
 			out.append((child as JsonTab).to_state())
+		elif child is RcModelsTab:
+			out.append((child as RcModelsTab).to_state())
 	return out
 
 
@@ -315,6 +396,8 @@ func restore_tabs(states: Array, active: int, endpoints_by_id: Dictionary) -> vo
 					open_endpoint(ep, state)
 			"json":
 				_restore_json_tab(state)
+			"rcmodels":
+				_restore_rcmodels_tab(state)
 	_restoring = false
 	var count := _tabs.get_tab_count()
 	if count > 0:
@@ -358,3 +441,26 @@ func _restore_json_tab(state: Dictionary) -> void:
 	var index := _tabs.get_tab_idx_from_control(tab)
 	_tabs.set_tab_title(index, tab.tab_title())
 	_tabs.set_tab_icon(index, ICON_JSON)
+
+
+## Reopen one saved models console tab from the sidecar: its inputs are re-seeded;
+## it does not auto-run (the user presses Run), consistent with the other tabs.
+func _restore_rcmodels_tab(state: Dictionary) -> void:
+	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
+	tab.configure_restore(state)
+	tab.bind_target(_rc_target)
+	tab.set_history(_history)
+	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	tab.open_json_requested.connect(_on_open_json_requested)
+	# A schema type action on a result opens a sibling query tab on the DB.
+	tab.open_query_requested.connect(_on_open_query_requested)
+	tab.state_changed.connect(_emit_state_changed)
+	tab.name = "m_%d" % _tab_counter
+	_tab_counter += 1
+	_tabs.add_child(tab)
+	tab.set_collection(String(_rc_collections.get(tab.model_name(), "")))
+	tab.set_schema(_schema)
+	tab.set_cross_query_enabled(not _bound_database.is_empty())
+	var index := _tabs.get_tab_idx_from_control(tab)
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_icon(index, ICON_RCMODELS)
