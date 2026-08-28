@@ -26,40 +26,18 @@ text = "Run"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Models"
+text = "Model.method"
 
 [node name="Split" type="VSplitContainer" parent="."]
 layout_mode = 2
 size_flags_vertical = 3
-split_offsets = PackedInt32Array(150)
-split_offset = 150
+split_offsets = PackedInt32Array(90)
+split_offset = 90
 
-[node name="Form" type="VBoxContainer" parent="Split"]
-custom_minimum_size = Vector2(0, 100)
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="Call" type="HBoxContainer" parent="Split/Form"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="ModelEdit" type="LineEdit" parent="Split/Form/Call"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Model (e.g. Users)"
-
-[node name="MethodEdit" type="LineEdit" parent="Split/Form/Call"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Method (e.g. findOneByUsername)"
-
-[node name="ArgsEdit" type="CodeEdit" parent="Split/Form"]
+[node name="ArgsEdit" type="CodeEdit" parent="Split"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
-size_flags_vertical = 3
 placeholder_text = "[ ]  — JSON array of arguments, e.g. [\"rocket.cat\"]"
 tab_input_mode = false
 gutters_draw_line_numbers = true

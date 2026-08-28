@@ -143,6 +143,12 @@ func rocketchat_install(target: Dictionary) -> Dictionary:
 	return await _post("/api/rocketchat/install", {"target": target})
 
 
+## List a model's public methods (from @rocket.chat/model-typings). Metadata for the
+## sidebar tree; only the target's meteor dir is used (no running server needed).
+func rocketchat_model_methods(target: Dictionary, model: String) -> Dictionary:
+	return await _post("/api/rocketchat/model-methods", {"target": target, "model": model})
+
+
 ## Convert a stored connection config (name / "host:port" / optional auth) into
 ## the discrete connection spec the server expects.
 static func to_spec(conn: Dictionary) -> Dictionary:
@@ -224,6 +230,9 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 ## endpoint name (path minus the "/api/" prefix); the target is the collection
 ## (or database) the body addressed.
 func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	# Listing a model's methods is metadata for the sidebar tree, not an action.
+	if path == "/api/rocketchat/model-methods":
+		return
 	# Rocket.Chat model-bridge calls aren't Mongo actions; label them accordingly.
 	if path == "/api/rocketchat/call":
 		_log_rocketchat_call(body, outcome, ms)

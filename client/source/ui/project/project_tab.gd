@@ -353,8 +353,9 @@ func _build_users_view() -> void:
 func _build_models_view() -> void:
 	_models_sidebar = RCMODELS_SIDEBAR_SCENE.instantiate()
 	_add_view(VIEW_MODELS, _models_sidebar)
-	_models_sidebar.new_query_requested.connect(_on_new_model_query)
+	_models_sidebar.function_activated.connect(_on_model_function_activated)
 	_models_sidebar.refresh_requested.connect(_on_models_refresh)
+	_models_sidebar.functions_requested.connect(_on_model_functions_requested)
 	_models_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
 	_models_sidebar.set_configured(not _doc.rocketchat_meteor_dir().is_empty())
 	# Inject the bridge on startup so the endpoint is ready before the first query.
@@ -479,16 +480,34 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 	status_changed.emit("Opened %s" % endpoint.label())
 
 
-func _on_new_model_query() -> void:
-	# The console reads the workspace's server URL + meteor dir (bound on the center);
-	# if no meteor dir is configured the sidebar blocks this and shows a message.
-	_center.open_rcmodels()
-	status_changed.emit("Opened a server-models query")
+func _on_model_function_activated(model: String, method: String) -> void:
+	# Double-clicking a function opens (or focuses) a query for model.method. The tab
+	# reads the workspace's server URL + meteor dir live; the user presses Run.
+	_center.open_rcmodels(model, method)
+	status_changed.emit("Opened %s.%s" % [model, method])
 
 
 ## Manual "Refresh" on the Server Models sidebar: reinstall the bridge endpoint.
 func _on_models_refresh() -> void:
 	_install_models_bridge()
+
+
+## A model was expanded in the sidebar: fetch its methods (from model-typings) and
+## hand them back to fill in as child leaves.
+func _on_model_functions_requested(model: String) -> void:
+	if not has_rocketchat() or _doc.rocketchat_meteor_dir().is_empty():
+		return
+	var target := {"meteorDir": _doc.rocketchat_meteor_dir(), "url": _rocketchat_url()}
+	var result: Dictionary = await Backend.rocketchat_model_methods(target, model)
+	if _models_sidebar == null:
+		return
+	var methods: Array = []
+	if result.get("ok", false):
+		var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+		methods = data.get("methods", [])
+	else:
+		status_changed.emit("Couldn't load %s functions: %s" % [model, result.get("error", "error")])
+	_models_sidebar.set_model_functions(model, methods)
 
 
 ## Inject (or refresh) the Server Models bridge into the workspace's Rocket.Chat

@@ -18,7 +18,20 @@ const TARGET := {"meteorDir": "/x/Rocket.Chat/apps/meteor"}
 func _run() -> void:
 	await _check_backend()
 	await _check_install()
+	await _check_model_methods()
 	await _check_panel()
+
+
+func _check_model_methods() -> void:
+	# Listing a model's methods is metadata (from model-typings), returned as an
+	# array and — unlike calls/installs — not recorded in the Activity Log.
+	var before: int = activity_log.entries().size()
+	var result: Dictionary = await backend.rocketchat_model_methods(TARGET, "Users")
+	expect(bool(result.get("ok", false)), "rocketchat_model_methods ok")
+	var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+	expect(data.get("methods", []) is Array and (data["methods"] as Array).size() > 0,
+		"model methods are returned")
+	expect_eq(activity_log.entries().size(), before, "listing methods isn't logged")
 
 
 # 1. The Backend client + mock. ------------------------------------------------
@@ -91,14 +104,6 @@ func _check_panel() -> void:
 	expect(String(events2.back()).contains("array"), "non-array args rejected locally (got '%s')" % events2.back())
 	tab2.queue_free()
 
-	# Missing model/method is caught locally too.
-	var events3: Array = []
-	var tab3: Variant = _tab("", "", "[]", events3)
-	tab3.run()
-	await _settle()
-	expect(String(events3.back()).contains("model"), "missing model rejected locally (got '%s')" % events3.back())
-	tab3.queue_free()
-
 	# An array result (a cursor method) counts its rows and offers the Table mode.
 	var events4: Array = []
 	var tab4: Variant = _tab("Users", "findUsersInRoles", "[\"admin\"]", events4)
@@ -109,12 +114,11 @@ func _check_panel() -> void:
 	tab4.queue_free()
 
 	# No meteor dir configured: the Server Models sidebar shows the message and
-	# disables the New Model Query button; setting one clears both.
+	# disables Refresh; setting one clears both.
 	var sidebar: Variant = load(SIDEBAR_PATH).instantiate()
 	sidebar.set_configured(false)
 	root.add_child(sidebar)
 	await _settle()
-	expect(sidebar._new_btn.disabled, "New Model Query is disabled without a meteor dir")
 	expect(sidebar._refresh_btn.disabled, "Refresh is disabled without a meteor dir")
 	expect(not sidebar._edit_btn.disabled, "Edit workspace stays enabled without a meteor dir (to set one)")
 	expect(sidebar._msg_wrap.visible, "config message is shown without a meteor dir")
@@ -128,7 +132,6 @@ func _check_panel() -> void:
 	# Configured with a model list: the tree shows, with a folder item per model.
 	sidebar.set_configured(true)
 	sidebar.set_models(["Messages", "Rooms", "Users"])
-	expect(not sidebar._new_btn.disabled, "New Model Query enabled once a meteor dir is configured")
 	expect(sidebar._tree.visible, "model tree is shown once configured")
 	expect(not sidebar._msg_wrap.visible, "config message is hidden once configured")
 	var root_item: TreeItem = sidebar._tree.get_root()
@@ -137,6 +140,35 @@ func _check_panel() -> void:
 	expect_eq(first.get_text(0), "Messages", "model items carry the model name")
 	expect_eq((first.get_metadata(0) as Dictionary).get("type"), "model", "model items are tagged type=model")
 	expect(first.get_icon(0) != null, "model items use a folder icon")
+	# Double-clicking a model asks the host for its functions and shows a loader.
+	var requested: Array = [""]
+	sidebar.functions_requested.connect(func(m: String) -> void: requested[0] = m)
+	first.select(0)
+	sidebar._on_item_activated()
+	expect_eq(requested[0], "Messages", "expanding a model requests its functions")
+	expect_eq(first.get_child_count(), 1, "a loading placeholder shows while functions load")
+	# The host returns the methods; they fill in as child leaves.
+	sidebar.set_model_functions("Messages", ["countByRoomId", "findOneById"])
+	expect_eq(first.get_child_count(), 2, "functions fill in as leaves")
+	var leaf: TreeItem = first.get_first_child()
+	expect_eq(leaf.get_text(0), "countByRoomId", "function leaves carry the method name")
+	expect_eq((leaf.get_metadata(0) as Dictionary).get("type"), "function", "leaves are tagged type=function")
+	expect(leaf.get_icon(0) != null, "function leaves have an icon")
+	expect_eq(first.get_button_count(0), 1, "a loaded model shows a reload button")
+	# Double-clicking a function asks the host to open a query for model.method.
+	var activated: Array = ["", ""]
+	sidebar.function_activated.connect(func(m: String, fn: String) -> void:
+		activated[0] = m
+		activated[1] = fn)
+	leaf.select(0)
+	sidebar._on_item_activated()
+	expect_eq(activated[0], "Messages", "activating a function passes its model")
+	expect_eq(activated[1], "countByRoomId", "activating a function passes its method")
+	# The reload button drops and re-requests the model's functions.
+	requested[0] = ""
+	sidebar._on_tree_button_clicked(first, 0, 0, MOUSE_BUTTON_LEFT)
+	expect_eq(requested[0], "Messages", "the reload button re-requests the functions")
+	expect_eq(first.get_child_count(), 1, "reloading shows the loading placeholder again")
 	sidebar.queue_free()
 
 	# Fresh target: a tab opened before a meteor dir exists reads the target live on

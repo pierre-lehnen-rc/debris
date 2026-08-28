@@ -55,6 +55,11 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 				"url": body.get("target", {}).get("url", ""),
 				"models": ["Messages", "Rooms", "Subscriptions", "Users"],
 			})
+		"/api/rocketchat/model-methods":
+			return _ok({
+				"model": body.get("model", ""),
+				"methods": ["countByRole", "findOneById", "findOneByUsername", "updateStatusById"],
+			})
 	# Unknown endpoint: behave like a find so the caller still gets rows.
 	return _ok(_find_docs(collection))
 

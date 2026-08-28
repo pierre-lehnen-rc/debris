@@ -192,13 +192,18 @@ func active_json_tab() -> JsonTab:
 ## Open a models console tab, optionally pre-filling the RC server URL (the project
 ## already knows it) and Meteor directory. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
-func open_rcmodels() -> RcModelsTab:
+func open_rcmodels(model: String, method: String) -> RcModelsTab:
+	# Focus an existing tab for this model.method instead of stacking a duplicate.
+	var existing := _find_rcmodels_tab(model, method)
+	if existing != null:
+		_tabs.current_tab = _tabs.get_tab_idx_from_control(existing)
+		return existing
+
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
-	tab.configure()
+	tab.configure(model, method)
 	tab.bind_target(_rc_target)
 	# Connect before add_child so the tab's initial status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
-	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_json_requested.connect(_on_open_json_requested)
 	tab.state_changed.connect(_emit_state_changed)
 	tab.name = "m_%d" % _tab_counter
@@ -212,6 +217,16 @@ func open_rcmodels() -> RcModelsTab:
 	_update_welcome()
 	_emit_state_changed()
 	return tab
+
+
+## The open models tab for `model`.`method`, or null.
+func _find_rcmodels_tab(model: String, method: String) -> RcModelsTab:
+	var title := "%s.%s" % [model, method]
+	for child in _tabs.get_children():
+		var tab := child as RcModelsTab
+		if tab != null and tab.tab_title() == title:
+			return tab
+	return null
 
 
 # Rocket.Chat endpoint tabs ---------------------------------------------------
@@ -418,7 +433,6 @@ func _restore_rcmodels_tab(state: Dictionary) -> void:
 	tab.configure_restore(state)
 	tab.bind_target(_rc_target)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
-	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_json_requested.connect(_on_open_json_requested)
 	tab.state_changed.connect(_emit_state_changed)
 	tab.name = "m_%d" % _tab_counter

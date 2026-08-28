@@ -1,58 +1,52 @@
 class_name RcModelsTab
 extends VBoxContainer
 
-## A console for calling @rocket.chat/models methods on a running Rocket.Chat dev
-## server, through the Debris server's /api/rocketchat/call bridge. The workspace
-## supplies the target — the server URL and the local apps/meteor directory — so the
-## tab only asks for a model, method and a JSON array of arguments. Run sends
-## { target, model, method, args } to Backend.rocketchat_call and renders the
-## returned value (canonical Extended JSON) in the results view below.
+## A query for one @rocket.chat/models method, opened by double-clicking a function
+## in the Server Models sidebar. The model and method are fixed for the tab (shown in
+## the toolbar); the user supplies a JSON array of arguments and presses Run, which
+## posts { target, model, method, args } to the Debris /api/rocketchat/call bridge and
+## renders the returned value (canonical Extended JSON) below.
 ##
-## The target (meteor dir + server URL) is read live from the workspace on every
-## Run via a provider Callable (bind_target), not captured when the tab opens — so a
-## tab opened before the workspace had a meteor dir starts working the moment one is
-## configured, with no need to reopen it. _run still guards against an empty target.
+## The target (meteor dir + server URL) is read live from the workspace on every Run
+## via a provider Callable (bind_target), not captured when the tab opens. _run guards
+## against an empty target (e.g. a restored tab whose workspace lost its meteor dir).
 ##
-## Like the other center tabs, layout lives in the .tscn and configure()/
-## configure_restore() must be called before the node enters the tree so _ready()
-## can seed the fields. Results are never persisted; a restore re-seeds the inputs
-## and waits for the user to press Run.
+## Layout lives in the .tscn; configure()/configure_restore() must be called before
+## the node enters the tree so _ready() can seed the args editor. Results are never
+## persisted; a restore re-seeds the inputs and waits for the user to press Run.
 
 signal status_changed(text: String)
-## Emitted when the tab's title should change (it adopts "Model.method" after a
-## run), so the workspace center can relabel the tab.
-signal title_changed(title: String)
-## Emitted when persistable state changes (a field edited, or a call run), so the
-## project can save the .debris-workspace sidecar.
+## Emitted when persistable state changes (args edited, or a call run), so the project
+## can save the .debris-workspace sidecar.
 signal state_changed()
-## Bubbled up from the results view when "View JSON in New Tab" is chosen on a
-## nested object/array, asking the owner to open a JSON tab seeded with `text`.
+## Bubbled up from the results view when "View JSON in New Tab" is chosen on a nested
+## object/array, asking the owner to open a JSON tab seeded with `text`.
 signal open_json_requested(text: String)
 
+## The model and method this tab queries (set via configure/restore; fixed after).
+var _model := ""
+var _method := ""
 ## Returns the workspace's current Server Models target as { meteor_dir, url }.
-## Set by bind_target(); called fresh on every Run so config changes take effect
-## without reopening the tab.
+## Set by bind_target(); called fresh on every Run so config changes take effect.
 var _target_provider: Callable = Callable()
-## Field values to seed when the tab first opens (model / method / args text).
-var _initial: Dictionary = {}
-## The tab's display title: "Models" until a call names it "Model.method".
-var _title := "Models"
+## Args editor text to seed when the tab first opens.
+var _initial_args := ""
 ## Set by configure_restore() to reopen a saved tab from the sidecar.
 var _restore_state: Dictionary = {}
 
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
 @onready var _title_label: Label = %TitleLabel
-@onready var _model_edit: LineEdit = %ModelEdit
-@onready var _method_edit: LineEdit = %MethodEdit
 @onready var _args_edit: CodeEdit = %ArgsEdit
 @onready var _results: ResultsView = %Results
 
 
-## Open a fresh models tab, optionally pre-filling the model/method/args. Call
+## Open a tab for `model`.`method`, optionally pre-filling the args editor. Call
 ## before the node enters the tree; pair with bind_target() for the live target.
-func configure(model := "", method := "", args_text := "") -> void:
-	_initial = {"model": model, "method": method, "args": args_text}
+func configure(model: String, method: String, args_text := "") -> void:
+	_model = model
+	_method = method
+	_initial_args = args_text
 
 
 ## Reopen a saved models tab (from the .debris-workspace sidecar): the model/method/
@@ -60,13 +54,9 @@ func configure(model := "", method := "", args_text := "") -> void:
 ## node enters the tree.
 func configure_restore(state: Dictionary) -> void:
 	_restore_state = state
-	_initial = {
-		"model": String(state.get("model", "")),
-		"method": String(state.get("method", "")),
-		"args": String(state.get("args", "")),
-	}
-	var title := String(state.get("title", "Models"))
-	_title = title if not title.is_empty() else "Models"
+	_model = String(state.get("model", ""))
+	_method = String(state.get("method", ""))
+	_initial_args = String(state.get("args", ""))
 
 
 ## Provide the live workspace target: a Callable returning { meteor_dir, url }. Read
@@ -75,20 +65,19 @@ func bind_target(provider: Callable) -> void:
 	_target_provider = provider
 
 
-## Snapshot this tab for the sidecar: the model/method/args (never the results, and
-## not the target — that lives in the workspace document).
+## Snapshot this tab for the sidecar: the model/method and current args (never the
+## results, and not the target — that lives in the workspace document).
 func to_state() -> Dictionary:
 	return {
 		"kind": "rcmodels",
-		"model": _model_edit.text,
-		"method": _method_edit.text,
+		"model": _model,
+		"method": _method,
 		"args": _args_edit.text,
-		"title": _title,
 	}
 
 
 func tab_title() -> String:
-	return _title
+	return "%s.%s" % [_model, _method]
 
 
 ## Public entry point mirroring the Run button (F5).
@@ -111,16 +100,9 @@ func _ready() -> void:
 	_results.set_item_noun("result")
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 
-	_model_edit.text = String(_initial.get("model", ""))
-	_method_edit.text = String(_initial.get("method", ""))
-	_args_edit.text = String(_initial.get("args", ""))
-	_title_label.text = _title
-	# Enter in the model/method fields runs the call, like the query editors.
-	var fields: Array[LineEdit] = [_model_edit, _method_edit]
-	for field in fields:
-		field.text_submitted.connect(func(_t: String) -> void: _run())
-
-	status_changed.emit("Enter a model, method and JSON args, then Run (F5)")
+	_args_edit.text = _initial_args
+	_title_label.text = tab_title()
+	status_changed.emit("Enter JSON args, then Run (F5)")
 
 
 func _apply_style() -> void:
@@ -132,7 +114,7 @@ func _apply_style() -> void:
 	_toolbar.add_theme_stylebox_override("panel", sb)
 	_run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
 	_run_btn.tooltip_text = "Call the model method (F5)"
-	_title_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_title_label.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
 
 
 ## Send { target, model, method, args } to the bridge and render the result. The
@@ -145,11 +127,6 @@ func _run() -> void:
 	var meteor := String(info.get("meteor_dir", "")).strip_edges()
 	if meteor.is_empty():
 		status_changed.emit("Configure a Meteor directory in the workspace settings first")
-		return
-	var model := _model_edit.text.strip_edges()
-	var method := _method_edit.text.strip_edges()
-	if model.is_empty() or method.is_empty():
-		status_changed.emit("Enter both a model (e.g. Users) and a method")
 		return
 
 	var args_result := _parse_args()
@@ -164,14 +141,14 @@ func _run() -> void:
 		target["url"] = url
 
 	_run_btn.disabled = true
-	status_changed.emit("%s.%s…" % [model, method])
-	var result: Dictionary = await Backend.rocketchat_call(target, model, method, args)
+	status_changed.emit("%s.%s…" % [_model, _method])
+	var result: Dictionary = await Backend.rocketchat_call(target, _model, _method, args)
 	_run_btn.disabled = false
 
 	if not result.get("ok", false):
 		# Still show the error body (if any) so the message is inspectable.
 		_results.show_raw(result.get("data"), [], 0)
-		status_changed.emit("%s.%s failed: %s" % [model, method, result.get("error", "request failed")])
+		status_changed.emit("%s.%s failed: %s" % [_model, _method, result.get("error", "request failed")])
 		state_changed.emit()
 		return
 
@@ -181,8 +158,7 @@ func _run() -> void:
 	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
 	var count := (value as Array).size() if value is Array else 0
 	_results.show_raw(value, [], count)
-	_set_title("%s.%s" % [model, method])
-	status_changed.emit("%s.%s — %s" % [model, method, _describe(value, count)])
+	status_changed.emit("%s.%s — %s" % [_model, _method, _describe(value, count)])
 	state_changed.emit()
 
 
@@ -208,13 +184,3 @@ func _describe(value: Variant, count: int) -> String:
 	if value == null:
 		return "no result"
 	return "1 result"
-
-
-## Adopt "Model.method" as the tab title after a run, announcing the change so the
-## center relabels the tab. No-op when unchanged or blank.
-func _set_title(title: String) -> void:
-	if title.is_empty() or title == _title:
-		return
-	_title = title
-	_title_label.text = _title
-	title_changed.emit(_title)
