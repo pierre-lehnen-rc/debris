@@ -188,7 +188,7 @@ export class RcBridge {
   private installing: Promise<void> | null = null;
 
   constructor(
-    private readonly target: Required<RcTarget>,
+    private target: Required<RcTarget>,
     private readonly options: RcBridgeOptions,
   ) {}
 
@@ -198,6 +198,15 @@ export class RcBridge {
 
   get url(): string {
     return this.target.url;
+  }
+
+  /**
+   * Point this bridge at a (possibly new) URL for the same RC server. The bridge is
+   * keyed by its meteor dir — one per server — so the URL is just where to POST; the
+   * latest one wins without disturbing the installed handler or its token.
+   */
+  setUrl(url: string): void {
+    this.target.url = url;
   }
 
   /** Ensure the bridge handler is installed, running the shell install if not. */
@@ -237,16 +246,15 @@ export class RcBridge {
     }
   }
 
-  /** Run a model method inside RC, installing the bridge first if necessary. */
+  /**
+   * Run a model method inside RC by posting to the already-installed endpoint.
+   * Does NOT install — injection is a separate, explicit step (see the /install
+   * route). If the endpoint isn't there (never installed this session, server
+   * restarted, or the token was superseded) this reports that so the caller can
+   * refresh, rather than silently reinstalling.
+   */
   async call(model: string, method: string, args: unknown[]): Promise<unknown> {
-    await this.ensureInstalled();
-
-    let attempt = await this.post(model, method, args);
-    if (attempt.kind === "reinstall") {
-      await this.ensureInstalled(true);
-      attempt = await this.post(model, method, args);
-    }
-
+    const attempt = await this.post(model, method, args);
     switch (attempt.kind) {
       case "ok":
         return attempt.result;
@@ -254,8 +262,9 @@ export class RcBridge {
         throw new RcBridgeError(attempt.message, attempt.status);
       case "reinstall":
         throw new RcBridgeError(
-          `Rocket.Chat bridge is not responding at ${this.target.url}${BRIDGE_PATH} (server restarted or endpoint shadowed)`,
-          502,
+          `Server Models endpoint isn't installed on ${this.target.url}. `
+            + `Use Refresh in the Server Models panel to install it.`,
+          503,
         );
     }
   }
@@ -286,21 +295,24 @@ export class RcBridge {
     }
 
     if (!isBridgeReply(json)) return { kind: "reinstall" };
+    // 403 means the server-side token no longer matches ours — the handler was
+    // reinstalled by someone else. Reinstall to re-assert this bridge's token and
+    // retry, rather than surfacing a spurious "forbidden".
+    if (resp.status === 403) return { kind: "reinstall" };
     if (!json.ok) {
-      return {
-        kind: "error",
-        message: json.error ?? "bridge error",
-        status: resp.status === 403 ? 403 : 400,
-      };
+      return { kind: "error", message: json.error ?? "bridge error", status: 400 };
     }
     return { kind: "ok", result: json.result };
   }
 }
 
 /**
- * Caches one {@link RcBridge} per target so a target's token and install state
- * persist across requests. Bridges hold no open resources (the shell child is
- * short-lived), so there is nothing to sweep or close.
+ * Caches one {@link RcBridge} per RC server (keyed by meteor dir) so its token and
+ * install state persist across requests. Keying by the meteor dir rather than the
+ * URL is deliberate: the meteor dir identifies the server the handler is installed
+ * into and owns the single server-side token, so a changed URL just re-points the
+ * same bridge instead of spawning a rival with a clashing token. Bridges hold no
+ * open resources (the shell child is short-lived), so there is nothing to close.
  */
 export class RcBridgeRegistry {
   private readonly bridges = new Map<string, RcBridge>();
@@ -308,16 +320,15 @@ export class RcBridgeRegistry {
   constructor(private readonly options: RcBridgeOptions) {}
 
   acquire(target: RcTarget): RcBridge {
-    const resolved: Required<RcTarget> = {
-      meteorDir: target.meteorDir,
-      url: (target.url ?? DEFAULT_URL).replace(/\/+$/, ""),
-    };
-    const key = `${resolved.meteorDir}\n${resolved.url}`;
+    const meteorDir = target.meteorDir;
+    const url = (target.url ?? DEFAULT_URL).replace(/\/+$/, "");
 
-    let bridge = this.bridges.get(key);
+    let bridge = this.bridges.get(meteorDir);
     if (!bridge) {
-      bridge = new RcBridge(resolved, this.options);
-      this.bridges.set(key, bridge);
+      bridge = new RcBridge({ meteorDir, url }, this.options);
+      this.bridges.set(meteorDir, bridge);
+    } else {
+      bridge.setUrl(url);
     }
     return bridge;
   }
