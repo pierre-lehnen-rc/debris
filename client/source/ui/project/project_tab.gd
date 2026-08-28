@@ -501,6 +501,10 @@ func _install_models_bridge() -> void:
 	status_changed.emit("Installing Server Models bridge…")
 	var result: Dictionary = await Backend.rocketchat_install(target)
 	if result.get("ok", false):
+		# The install response carries the server's model list for the sidebar tree.
+		var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+		if _models_sidebar != null:
+			_models_sidebar.set_models(data.get("models", []))
 		status_changed.emit("Server Models bridge ready")
 	else:
 		status_changed.emit("Server Models install failed: %s" % result.get("error", "unknown error"))

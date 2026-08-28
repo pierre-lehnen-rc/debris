@@ -47,6 +47,9 @@ func _check_install() -> void:
 	# The install step is its own logged action carrying the meteor dir as target.
 	var result: Dictionary = await backend.rocketchat_install(TARGET)
 	expect(bool(result.get("ok", false)), "rocketchat_install ok")
+	var data: Dictionary = result.get("data", {})
+	expect(data.get("models", []) is Array and (data["models"] as Array).size() > 0,
+		"install returns the server's model list")
 	var entry: Dictionary = activity_log.entries().back()
 	expect_eq(entry.get("source"), "rocketchat", "install logged under source rocketchat")
 	expect_eq(entry.get("action"), "install bridge", "install logged as install bridge")
@@ -114,15 +117,26 @@ func _check_panel() -> void:
 	expect(sidebar._new_btn.disabled, "New Model Query is disabled without a meteor dir")
 	expect(sidebar._refresh_btn.disabled, "Refresh is disabled without a meteor dir")
 	expect(not sidebar._edit_btn.disabled, "Edit workspace stays enabled without a meteor dir (to set one)")
-	expect(String(sidebar._desc.text).contains("Meteor"), "sidebar shows the configure-meteor message")
+	expect(sidebar._msg_wrap.visible, "config message is shown without a meteor dir")
+	expect(not sidebar._tree.visible, "model tree is hidden without a meteor dir")
+	expect(String(sidebar._desc.text).contains("Meteor"), "message mentions the Meteor directory")
 	# The Edit button asks the host to open the workspace editor.
 	var edited: Array = [false]
 	sidebar.edit_requested.connect(func() -> void: edited[0] = true)
 	sidebar._edit_btn.pressed.emit()
 	expect(edited[0], "Edit button emits edit_requested")
+	# Configured with a model list: the tree shows, with a folder item per model.
 	sidebar.set_configured(true)
+	sidebar.set_models(["Messages", "Rooms", "Users"])
 	expect(not sidebar._new_btn.disabled, "New Model Query enabled once a meteor dir is configured")
-	expect(not String(sidebar._desc.text).contains("Meteor"), "message clears once configured")
+	expect(sidebar._tree.visible, "model tree is shown once configured")
+	expect(not sidebar._msg_wrap.visible, "config message is hidden once configured")
+	var root_item: TreeItem = sidebar._tree.get_root()
+	expect_eq(root_item.get_child_count(), 3, "the tree lists one item per model")
+	var first: TreeItem = root_item.get_first_child()
+	expect_eq(first.get_text(0), "Messages", "model items carry the model name")
+	expect_eq((first.get_metadata(0) as Dictionary).get("type"), "model", "model items are tagged type=model")
+	expect(first.get_icon(0) != null, "model items use a folder icon")
 	sidebar.queue_free()
 
 	# Fresh target: a tab opened before a meteor dir exists reads the target live on

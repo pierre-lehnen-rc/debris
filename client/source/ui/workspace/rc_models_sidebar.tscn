@@ -36,24 +36,39 @@ tooltip_text = "Reinstall the Server Models bridge"
 focus_mode = 0
 text = "⟳"
 
-[node name="Body" type="MarginContainer" parent="VBox"]
+[node name="Tree" type="Tree" parent="VBox"]
+unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
+allow_rmb_select = true
+hide_root = true
+select_mode = 1
+
+[node name="MsgWrap" type="MarginContainer" parent="VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="Box" type="VBoxContainer" parent="VBox/Body"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Desc" type="Label" parent="VBox/Body/Box"]
+[node name="Desc" type="Label" parent="VBox/MsgWrap"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Call @rocket.chat/models methods on the running Rocket.Chat server and view the results."
+size_flags_vertical = 0
+text = "No Meteor directory configured."
 autowrap_mode = 3
 
-[node name="NewBtn" type="Button" parent="VBox/Body/Box"]
+[node name="Footer" type="MarginContainer" parent="VBox"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="NewBtn" type="Button" parent="VBox/Footer"]
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
