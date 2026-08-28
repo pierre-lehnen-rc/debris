@@ -71,6 +71,14 @@ function buildInstaller(token: string): string {
   const D = (globalThis.__debris = globalThis.__debris || {});
   D.token = ${tokenLiteral};
   D.handle = async function (body) {
+    // Meta-op: list the model names available in @rocket.chat/models (PascalCase
+    // object exports), for the Server Models sidebar tree.
+    if (body && body.op === 'listModels') {
+      return Object.keys(models).filter(function (k) {
+        if (!/^[A-Z]/.test(k)) return false;
+        try { return models[k] && typeof models[k] === 'object'; } catch (e) { return false; }
+      }).sort();
+    }
     const model = body && body.model;
     const method = body && body.method;
     const args = body && body.args;
@@ -254,7 +262,17 @@ export class RcBridge {
    * refresh, rather than silently reinstalling.
    */
   async call(model: string, method: string, args: unknown[]): Promise<unknown> {
-    const attempt = await this.post(model, method, args);
+    return this.unwrap(await this.post({ model, method, args }));
+  }
+
+  /** List the names of the models available in @rocket.chat/models on this server. */
+  async listModels(): Promise<string[]> {
+    const result = this.unwrap(await this.post({ op: "listModels" }));
+    return Array.isArray(result) ? (result as string[]) : [];
+  }
+
+  /** Map a post outcome to a value or a thrown error (the "not installed" 503). */
+  private unwrap(attempt: PostResult): unknown {
     switch (attempt.kind) {
       case "ok":
         return attempt.result;
@@ -269,7 +287,7 @@ export class RcBridge {
     }
   }
 
-  private async post(model: string, method: string, args: unknown[]): Promise<PostResult> {
+  private async post(payload: Record<string, unknown>): Promise<PostResult> {
     let resp: Response;
     try {
       resp = await fetch(`${this.target.url}${BRIDGE_PATH}`, {
@@ -277,7 +295,7 @@ export class RcBridge {
         headers: { "content-type": "application/json", "x-debris-token": this.token },
         // Forwarded as plain JSON; the bridge EJSON-parses it so args may carry
         // $oid/$date/etc. Values round-trip through the same dialect as ejson.ts.
-        body: JSON.stringify({ model, method, args }),
+        body: JSON.stringify(payload),
       });
     } catch (e) {
       throw new RcBridgeError(

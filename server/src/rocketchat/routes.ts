@@ -44,7 +44,10 @@ export const registerRocketChatRoutes: FastifyPluginAsync<RcRoutesOptions> = asy
     async (req) => {
       const bridge = registry.acquire(req.body.target);
       await bridge.ensureInstalled(true);
-      return { ok: true, installed: bridge.isInstalled, url: bridge.url };
+      // The handler is now installed, so fetch the model list for the sidebar in
+      // the same round-trip. Tolerate a listing failure — the install still stands.
+      const models = await bridge.listModels().catch(() => [] as string[]);
+      return { ok: true, installed: bridge.isInstalled, url: bridge.url, models };
     },
   );
 
