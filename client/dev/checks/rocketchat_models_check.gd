@@ -21,6 +21,7 @@ func _run() -> void:
 	await _check_model_methods()
 	await _check_typing()
 	await _check_duplicate_tabs()
+	await _check_type_action_opens_query()
 	await _check_panel()
 
 
@@ -130,6 +131,22 @@ func _check_duplicate_tabs() -> void:
 	b._args_edit.text = "[\"bob\"]"
 	expect_eq(a.to_state().get("args"), "[\"alice\"]", "the first tab keeps its own args")
 	expect_eq(b.to_state().get("args"), "[\"bob\"]", "the second tab keeps its own args")
+	center.queue_free()
+
+
+## A schema type action ("List Messages", …) on a result row must reach the center
+## and open a query tab on the database — the models tab has to relay the signal.
+func _check_type_action_opens_query() -> void:
+	var center: Variant = load("res://source/ui/project/workspace_center.tscn").instantiate()
+	root.add_child(center)
+	center.bind_mongo({"host": "localhost:27017"}, "rocketchat")
+	var tab: Variant = center.open_rcmodels("Users", "findOneByUsername", "users", "(u: string)")
+	var before: int = center.capture_tabs().size()
+	# Stand in for the results view's action: the tab must bubble it to the center.
+	tab._results.open_query_requested.emit("rocketchat_message", {"u._id": "u1"}, "find")
+	await _settle()
+	expect_eq(center.capture_tabs().size(), before + 1,
+		"a type action on a model result opens a query tab")
 	center.queue_free()
 
 

@@ -23,6 +23,9 @@ signal state_changed()
 ## Bubbled up from the results view when "View JSON in New Tab" is chosen on a nested
 ## object/array, asking the owner to open a JSON tab seeded with `text`.
 signal open_json_requested(text: String)
+## Bubbled up from the results view when a schema type action ("List Messages", …)
+## is chosen on a result value, asking the owner to open a query tab on the database.
+signal open_query_requested(collection: String, filter: Dictionary, function: String)
 
 ## The model and method this tab queries (set via configure/restore; fixed after).
 var _model := ""
@@ -167,6 +170,11 @@ func _ready() -> void:
 	_results.set_pagination_enabled(false)
 	_results.set_item_noun("result")
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
+	# A schema type action on a result row opens a sibling query tab on the database.
+	_results.open_query_requested.connect(
+		func(collection: String, filter: Dictionary, function: String) -> void:
+			open_query_requested.emit(collection, filter, function)
+	)
 
 	_apply_type_context()
 	# The declared signature is a reference for writing the JSON arguments below it.
