@@ -1,34 +1,34 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { RcBridgeError } from "./bridge.js";
+import { meteorDirOf, RcBridgeError } from "./bridge.js";
 
 /**
  * Lists a model's public methods from the `@rocket.chat/model-typings` interfaces
  * (`I<Model>Model`), so Debris shows exactly the API those interfaces declare —
  * including methods inherited from IBaseModel — and none of the raw class's internal
  * helpers. Pure server-side: it reads and type-checks the shipped `.d.ts` files from
- * the workspace's meteor dir, needing neither the RC server running nor the bridge.
+ * the workspace's repository, needing neither the RC server running nor the bridge.
  *
  * TypeScript is loaded from the checkout (not bundled) via a require rooted at the
- * meteor dir, the same place `@rocket.chat/model-typings` resolves from.
+ * repository's Meteor app dir, where `@rocket.chat/model-typings` resolves from.
  */
 export class ModelTypings {
   // meteorDir -> the resolved typescript module + the typings' models directory.
   private readonly envs = new Map<string, { ts: any; modelsDir: string }>();
-  // "meteorDir\nModel" -> sorted method names.
+  // "repoPath\nModel" -> sorted method names.
   private readonly cache = new Map<string, string[]>();
 
   /** The public method names of `<model>`'s interface, sorted; [] when it has none. */
-  methods(meteorDir: string, model: string): string[] {
+  methods(repoPath: string, model: string): string[] {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(model)) {
       throw new RcBridgeError(`invalid model name: ${model}`, 400);
     }
-    const cacheKey = `${meteorDir}\n${model}`;
+    const cacheKey = `${repoPath}\n${model}`;
     const hit = this.cache.get(cacheKey);
     if (hit) return hit;
 
-    const env = this.env(meteorDir);
+    const env = this.env(meteorDirOf(repoPath));
     const file = join(env.modelsDir, `I${model}Model.d.ts`);
     const names = existsSync(file) ? this.extract(env.ts, file, `I${model}Model`) : [];
     this.cache.set(cacheKey, names);
@@ -48,7 +48,9 @@ export class ModelTypings {
       modelsDir = join(dirname(req.resolve("@rocket.chat/model-typings")), "models");
     } catch (e) {
       throw new RcBridgeError(
-        `cannot load model typings from ${meteorDir}: ${(e as Error).message}`,
+        `cannot load model typings from ${meteorDir} `
+          + `(is the Rocket.Chat repository path correct, with dependencies installed?): `
+          + `${(e as Error).message}`,
         400,
       );
     }

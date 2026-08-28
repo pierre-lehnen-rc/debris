@@ -10,10 +10,10 @@ export interface RcRoutesOptions {
 /** JSON schema for the `target` object every request carries. */
 const targetSchema = {
   type: "object",
-  required: ["meteorDir"],
+  required: ["repoPath"],
   additionalProperties: true,
   properties: {
-    meteorDir: { type: "string", minLength: 1 },
+    repoPath: { type: "string", minLength: 1 },
     url: { type: "string" },
   },
 } as const;
@@ -40,12 +40,12 @@ export const registerRocketChatRoutes: FastifyPluginAsync<RcRoutesOptions> = asy
   { registry, typings },
 ) => {
   // List a model's public methods from @rocket.chat/model-typings. Pure metadata
-  // (reads the .d.ts), so it needs only the meteor dir — not a running server.
+  // (reads the .d.ts), so it needs only the repository path — not a running server.
   app.post<{ Body: { target: RcTarget; model: string } }>(
     "/rocketchat/model-methods",
     { schema: { body: withTarget({ model: stringField }, ["model"]) } },
     async (req) => {
-      const methods = typings.methods(req.body.target.meteorDir, req.body.model);
+      const methods = typings.methods(req.body.target.repoPath, req.body.model);
       return { model: req.body.model, methods };
     },
   );

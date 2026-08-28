@@ -50,17 +50,17 @@ layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "https://your.rocket.chat"
 
-[node name="MeteorLabel" type="Label" parent="Margin/Col/Grid"]
+[node name="RepoLabel" type="Label" parent="Margin/Col/Grid"]
 custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
-text = "Meteor dir"
+text = "Rocket.Chat Repository path"
 horizontal_alignment = 2
 
-[node name="MeteorEdit" type="LineEdit" parent="Margin/Col/Grid"]
+[node name="RepoEdit" type="LineEdit" parent="Margin/Col/Grid"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "optional — …/Rocket.Chat/apps/meteor (for Server Models)"
+placeholder_text = "optional — /home/name/Documents/Rocket.Chat (for Server Models)"
 
 [node name="Spacer" type="Control" parent="Margin/Col"]
 layout_mode = 2

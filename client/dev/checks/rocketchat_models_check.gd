@@ -12,7 +12,7 @@ extends "res://dev/check_base.gd"
 # autoload, which isn't registered when this -s main-loop script is compiled.
 const TAB_PATH := "res://source/ui/workspace/rc_models_tab.tscn"
 const SIDEBAR_PATH := "res://source/ui/workspace/rc_models_sidebar.tscn"
-const TARGET := {"meteorDir": "/x/Rocket.Chat/apps/meteor"}
+const TARGET := {"repoPath": "/x/Rocket.Chat"}
 
 
 func _run() -> void:
@@ -47,18 +47,18 @@ func _check_backend() -> void:
 	expect(created is Dictionary and (created as Dictionary).has("$date"), "createdAt kept as an Extended JSON $date")
 
 	# The call is logged under source "rocketchat" with the URL it posted to and the
-	# args — but not the meteor dir, which only the install step uses.
+	# args — but not the repository path, which only the injection step uses.
 	var entry: Dictionary = activity_log.entries().back()
 	expect_eq(entry.get("source"), "rocketchat", "call logged under source rocketchat")
 	expect_eq(entry.get("action"), "model call", "call logged as a model call")
 	expect_eq(entry.get("target"), "Users.findOneByUsername", "log target is Model.method")
 	var params: Dictionary = entry.get("params", {})
 	expect(params.has("url"), "call log carries the url")
-	expect(not params.has("meteorDir"), "call log omits the meteor dir (unused by the call)")
+	expect(not params.has("repoPath"), "call log omits the repository path (unused by the call)")
 
 
 func _check_install() -> void:
-	# The install step is its own logged action carrying the meteor dir as target.
+	# Injection is its own logged action carrying the repository path as target.
 	var result: Dictionary = await backend.rocketchat_install(TARGET)
 	expect(bool(result.get("ok", false)), "rocketchat_install ok")
 	var data: Dictionary = result.get("data", {})
@@ -67,7 +67,7 @@ func _check_install() -> void:
 	var entry: Dictionary = activity_log.entries().back()
 	expect_eq(entry.get("source"), "rocketchat", "install logged under source rocketchat")
 	expect_eq(entry.get("action"), "inject bridge", "injection logged as inject bridge")
-	expect_eq(entry.get("target"), TARGET["meteorDir"], "install log target is the meteor dir")
+	expect_eq(entry.get("target"), TARGET["repoPath"], "injection log target is the repository path")
 
 	var counted: Dictionary = await backend.rocketchat_call(TARGET, "Users", "countByRole", ["admin"])
 	var c_result: Variant = _result_of(counted)
@@ -145,17 +145,17 @@ func _check_panel() -> void:
 	expect(tab4.results()._table_button_shown(), "Table mode is available on the models tab")
 	tab4.queue_free()
 
-	# No meteor dir configured: the Server Models sidebar shows the message and
+	# No repository path configured: the Server Models sidebar shows the message and
 	# disables Refresh; setting one clears both.
 	var sidebar: Variant = load(SIDEBAR_PATH).instantiate()
 	sidebar.set_configured(false)
 	root.add_child(sidebar)
 	await _settle()
-	expect(sidebar._refresh_btn.disabled, "Refresh is disabled without a meteor dir")
-	expect(not sidebar._edit_btn.disabled, "Edit workspace stays enabled without a meteor dir (to set one)")
-	expect(sidebar._msg_wrap.visible, "config message is shown without a meteor dir")
-	expect(not sidebar._tree.visible, "model tree is hidden without a meteor dir")
-	expect(String(sidebar._desc.text).contains("Meteor"), "message mentions the Meteor directory")
+	expect(sidebar._refresh_btn.disabled, "Refresh is disabled without a repo path")
+	expect(not sidebar._edit_btn.disabled, "Edit workspace stays enabled without a repo path (to set one)")
+	expect(sidebar._msg_wrap.visible, "config message is shown without a repo path")
+	expect(not sidebar._tree.visible, "model tree is hidden without a repo path")
+	expect(String(sidebar._desc.text).contains("Repository"), "message mentions the Repository path")
 	# The Edit button asks the host to open the workspace editor.
 	var edited: Array = [false]
 	sidebar.edit_requested.connect(func() -> void: edited[0] = true)
@@ -210,9 +210,9 @@ func _check_panel() -> void:
 	expect_eq(first.get_child_count(), 1, "reloading shows the loading placeholder again")
 	sidebar.queue_free()
 
-	# Fresh target: a tab opened before a meteor dir exists reads the target live on
+	# Fresh target: a tab opened before a repo path exists reads the target live on
 	# every Run, so configuring one makes the SAME open tab work — no reopen needed.
-	var live := {"meteor_dir": "", "url": "http://localhost:3000"}
+	var live := {"repo_path": "", "url": "http://localhost:3000"}
 	var events5: Array = []
 	var tab5: Variant = load(TAB_PATH).instantiate()
 	tab5.configure("Users", "findOneByUsername", "", "[\"rocket.cat\"]")
@@ -222,12 +222,12 @@ func _check_panel() -> void:
 	await _settle()
 	tab5.run()
 	await _settle()
-	expect(String(events5.back()).contains("Meteor"), "run without a meteor dir prompts (got '%s')" % events5.back())
-	# The workspace gets a meteor dir configured; the already-open tab now runs.
-	live["meteor_dir"] = "/x/Rocket.Chat/apps/meteor"
+	expect(String(events5.back()).contains("Repository"), "run without a repo path prompts (got '%s')" % events5.back())
+	# The workspace gets a repository path configured; the already-open tab now runs.
+	live["repo_path"] = "/x/Rocket.Chat"
 	tab5.run()
 	await _settle()
-	expect(String(events5.back()).begins_with("Users.findOneByUsername"), "same tab runs once a meteor dir is set (got '%s')" % events5.back())
+	expect(String(events5.back()).begins_with("Users.findOneByUsername"), "same tab runs once a repo path is set (got '%s')" % events5.back())
 	expect(not String(events5.back()).contains("failed"), "the post-config run succeeded")
 	tab5.queue_free()
 
@@ -245,7 +245,7 @@ func _result_of(outcome: Dictionary) -> Variant:
 func _tab(model: String, method: String, args_text: String, events: Array) -> Variant:
 	var tab = load(TAB_PATH).instantiate()
 	tab.configure(model, method, "", args_text)
-	tab.bind_target(func() -> Dictionary: return {"meteor_dir": "/x/Rocket.Chat/apps/meteor", "url": "http://localhost:3000"})
+	tab.bind_target(func() -> Dictionary: return {"repo_path": "/x/Rocket.Chat", "url": "http://localhost:3000"})
 	tab.status_changed.connect(func(t: String) -> void: events.append(t))
 	root.add_child(tab)
 	return tab

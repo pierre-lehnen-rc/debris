@@ -2,16 +2,16 @@ class_name WorkspaceDialog
 extends Window
 
 ## Add/Edit dialog for a Rocket.Chat workspace: the server URL plus an optional
-## local Meteor directory (the server's apps/meteor checkout) used by the Server
-## Models bridge. Users are managed (and persisted) in the workspace's Users panel,
-## so the config this emits carries { url, meteor_dir }. Emits `saved` (new) /
-## `updated` (edit); the host applies it to the active project.
+## local Rocket.Chat repository path (the checkout root) used by the Server Models
+## bridge. Users are managed (and persisted) in the workspace's Users panel, so the
+## config this emits carries { url, repo_path }. Emits `saved` (new) / `updated`
+## (edit); the host applies it to the active project.
 
 signal saved(config: Dictionary)
 signal updated(index: int, config: Dictionary)
 
 @onready var _url_edit: LineEdit = %UrlEdit
-@onready var _meteor_edit: LineEdit = %MeteorEdit
+@onready var _repo_edit: LineEdit = %RepoEdit
 @onready var _status: Label = %Status
 @onready var _save_btn: Button = %SaveBtn
 
@@ -39,14 +39,14 @@ func open_edit(index: int, config: Dictionary) -> void:
 	_edit_index = index
 	title = "Edit Workspace"
 	_url_edit.text = config.get("url", "")
-	_meteor_edit.text = config.get("meteor_dir", "")
+	_repo_edit.text = config.get("repo_path", "")
 	UiScale.popup_centered(self, Vector2i(600, 240))
 
 
 # Helpers ---------------------------------------------------------------------
 func _reset() -> void:
 	_url_edit.text = ""
-	_meteor_edit.text = ""
+	_repo_edit.text = ""
 	_status.text = ""
 
 
@@ -54,7 +54,7 @@ func _gather() -> Dictionary:
 	# Users live in the project (managed by the Users panel), not in this dialog.
 	return {
 		"url": _url_edit.text.strip_edges(),
-		"meteor_dir": _meteor_edit.text.strip_edges(),
+		"repo_path": _repo_edit.text.strip_edges(),
 	}
 
 

@@ -39,10 +39,10 @@ var _bound_database := ""
 var _schema: DatabaseSchema = null
 # The Rocket.Chat session endpoint tabs run against (set when an API is attached).
 var _session: WorkspaceSession = null
-# The Server Models console's target: the RC server URL and the local apps/meteor
-# path, bound when an API is attached, passed to new and restored models tabs.
+# The Server Models console's target: the RC server URL and the local Rocket.Chat
+# repository path, bound when an API is attached, passed to new/restored models tabs.
 var _rc_url := ""
-var _rc_meteor_dir := ""
+var _rc_repo_path := ""
 # model name -> the Mongo collection it reads, from the bridge install. Lets a
 # models tab type its results with the schema rules of that collection.
 var _rc_collections: Dictionary = {}
@@ -72,10 +72,10 @@ func bind_session(session: WorkspaceSession) -> void:
 
 
 ## Bind the Server Models target: the workspace's RC server URL and the local
-## apps/meteor path. Models tabs read these instead of asking the user per tab.
-func bind_rocketchat_target(url: String, meteor_dir: String) -> void:
+## Rocket.Chat repository path. Models tabs read these instead of asking per tab.
+func bind_rocketchat_target(url: String, repo_path: String) -> void:
 	_rc_url = url
-	_rc_meteor_dir = meteor_dir
+	_rc_repo_path = repo_path
 
 
 ## Bind the server's model list ({ name, collection } entries, from the bridge
@@ -94,10 +94,10 @@ func bind_rocketchat_models(models: Array) -> void:
 			tab.set_collection(String(_rc_collections.get(tab.model_name(), "")))
 
 
-## The current Server Models target, as { meteor_dir, url }. Handed to models tabs
+## The current Server Models target, as { repo_path, url }. Handed to models tabs
 ## as a Callable so their Run reads the up-to-date workspace config, not a snapshot.
 func _rc_target() -> Dictionary:
-	return {"meteor_dir": _rc_meteor_dir, "url": _rc_url}
+	return {"repo_path": _rc_repo_path, "url": _rc_url}
 
 
 ## Bind the shared query-history store handed to every query tab (recents +
@@ -213,7 +213,7 @@ func active_json_tab() -> JsonTab:
 
 # Rocket.Chat model tabs ------------------------------------------------------
 ## Open a models console tab, optionally pre-filling the RC server URL (the project
-## already knows it) and Meteor directory. Self-contained like a JSON tab — it
+## already knows it) and repository path. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
 func open_rcmodels(model: String, method: String, collection := "") -> RcModelsTab:
 	# Focus an existing tab for this model.method instead of stacking a duplicate.

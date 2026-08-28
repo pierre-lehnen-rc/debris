@@ -4,25 +4,26 @@ extends PanelContainer
 ## The Models sidebar view of a project's Rocket.Chat workspace: a tree of the
 ## server's @rocket.chat/models models, listed like the Database panel's collections
 ## (folder icon per model; functions will hang under them later). The model list is
-## supplied by the host after the bridge is installed (set_models). "New Model Query"
-## opens a blank console tab. When the workspace has no Meteor directory the bridge
-## can't be reached, so a message replaces the tree until one is set.
+## supplied by the host after the bridge is injected (set_models). Double-clicking a
+## function opens a query for it. When the workspace has no Rocket.Chat repository
+## path the bridge can't be reached, so a message replaces the tree until one is set.
 
 ## A function leaf was double-clicked — the host should open a query for
 ## model.method (without auto-running it). `collection` is the Mongo collection the
 ## model reads, so the query's results can be typed against the database schema.
 signal function_activated(model: String, method: String, collection: String)
-## Asks the host to (re)install the Server Models bridge into the workspace's server.
+## Asks the host to (re)inject the Server Models bridge into the workspace's server.
 signal refresh_requested()
-## Asks the host to open the workspace editor (to set/change the server URL + meteor dir).
+## Asks the host to open the workspace editor (to set the server URL / repo path).
 signal edit_requested()
 ## A model was expanded for the first time — the host should load its methods and
 ## return them via set_model_functions().
 signal functions_requested(model: String)
 
 const DESC_NEEDS_CONFIG := (
-	"This workspace has no Meteor directory configured. Edit the workspace and set its "
-	+ "Meteor dir — the local …/apps/meteor path — to use Server Models."
+	"This workspace has no Rocket.Chat repository configured. Edit the workspace and "
+	+ "set its Rocket.Chat Repository path — where the server is checked out — to use "
+	+ "Server Models."
 )
 ## Same folder icon the Database panel uses for its collection groups.
 const ICON_MODEL := preload("res://source/ui/icons/group.svg")
@@ -40,7 +41,7 @@ const BTN_RELOAD := 0
 @onready var _msg_wrap: MarginContainer = %MsgWrap
 @onready var _desc: Label = %Desc
 
-## Whether the workspace has a meteor dir; drives the message vs tree and buttons.
+## Whether the workspace has a repository path; drives message-vs-tree and buttons.
 var _configured := true
 ## Model names to list (sorted by the server); rendered as folder items.
 var _models: Array = []
@@ -55,8 +56,8 @@ func _ready() -> void:
 	_render()
 
 
-## Set whether the workspace has a Meteor directory configured. Safe to call before
-## the node is in the tree; applied on _ready.
+## Set whether the workspace has a Rocket.Chat repository path configured. Safe to
+## call before the node is in the tree; applied on _ready.
 func set_configured(configured: bool) -> void:
 	_configured = configured
 	if is_node_ready():
@@ -74,7 +75,7 @@ func set_models(models: Array) -> void:
 func _render() -> void:
 	_msg_wrap.visible = not _configured
 	_tree.visible = _configured
-	# Refresh reinstalls the bridge; pointless without a meteor dir to install from.
+	# Refresh reinjects the bridge; pointless without a repository to inject from.
 	_refresh_btn.disabled = not _configured
 	if not _configured:
 		_desc.text = DESC_NEEDS_CONFIG

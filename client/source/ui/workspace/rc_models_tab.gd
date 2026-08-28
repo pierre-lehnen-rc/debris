@@ -7,9 +7,9 @@ extends VBoxContainer
 ## posts { target, model, method, args } to the Debris /api/rocketchat/call bridge and
 ## renders the returned value (canonical Extended JSON) below.
 ##
-## The target (meteor dir + server URL) is read live from the workspace on every Run
-## via a provider Callable (bind_target), not captured when the tab opens. _run guards
-## against an empty target (e.g. a restored tab whose workspace lost its meteor dir).
+## The target (repository path + server URL) is read live from the workspace on every
+## Run via a provider Callable (bind_target), not captured when the tab opens. _run
+## guards against an empty target (e.g. a restored tab whose workspace lost its path).
 ##
 ## Layout lives in the .tscn; configure()/configure_restore() must be called before
 ## the node enters the tree so _ready() can seed the args editor. Results are never
@@ -34,7 +34,7 @@ var _collection := ""
 ## the project has no database of its own (see _effective_schema).
 var _schema: DatabaseSchema = null
 var _fallback_schema: RocketChatSchema = null
-## Returns the workspace's current Server Models target as { meteor_dir, url }.
+## Returns the workspace's current Server Models target as { repo_path, url }.
 ## Set by bind_target(); called fresh on every Run so config changes take effect.
 var _target_provider: Callable = Callable()
 ## Args editor text to seed when the tab first opens.
@@ -69,8 +69,8 @@ func configure_restore(state: Dictionary) -> void:
 	_initial_args = String(state.get("args", ""))
 
 
-## Provide the live workspace target: a Callable returning { meteor_dir, url }. Read
-## fresh on every Run, so editing the workspace's meteor dir affects already-open tabs.
+## Provide the live workspace target: a Callable returning { repo_path, url }. Read
+## fresh on every Run, so editing the workspace's path affects already-open tabs.
 func bind_target(provider: Callable) -> void:
 	_target_provider = provider
 
@@ -180,12 +180,12 @@ func _apply_style() -> void:
 ## args editor is parsed leniently (LaxJson — the same JSON5-flavoured parser the
 ## query editors use) and must yield a JSON array; an empty editor means no args.
 func _run() -> void:
-	# Read the target fresh from the workspace, so a meteor dir configured after this
-	# tab was opened is picked up without reopening.
+	# Read the target fresh from the workspace, so a repository path configured after
+	# this tab was opened is picked up without reopening.
 	var info: Dictionary = _target_provider.call() if _target_provider.is_valid() else {}
-	var meteor := String(info.get("meteor_dir", "")).strip_edges()
-	if meteor.is_empty():
-		status_changed.emit("Configure a Meteor directory in the workspace settings first")
+	var repo := String(info.get("repo_path", "")).strip_edges()
+	if repo.is_empty():
+		status_changed.emit("Set the Rocket.Chat Repository path in the workspace settings first")
 		return
 
 	var args_result := _parse_args()
@@ -194,7 +194,7 @@ func _run() -> void:
 		return
 	var args: Array = args_result["args"]
 
-	var target := {"meteorDir": meteor}
+	var target := {"repoPath": repo}
 	var url := String(info.get("url", "")).strip_edges()
 	if not url.is_empty():
 		target["url"] = url

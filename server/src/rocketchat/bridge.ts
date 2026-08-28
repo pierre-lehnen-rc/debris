@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 
 /**
  * Where a Rocket.Chat bridge lives. Supplied by the client on each request, the
@@ -7,10 +8,20 @@ import { randomBytes } from "node:crypto";
  * never persists these; they only key a cached {@link RcBridge}.
  */
 export interface RcTarget {
-  /** Absolute path to the Rocket.Chat `apps/meteor` directory (the Meteor app root). */
-  meteorDir: string;
+  /**
+   * Absolute path to the Rocket.Chat repository (the checkout root, e.g.
+   * /home/me/Documents/Rocket.Chat). The Meteor app directory the shell and the
+   * typings are read from is derived with {@link meteorDirOf}, so the user
+   * configures the repository they cloned rather than a path inside it.
+   */
+  repoPath: string;
   /** Base URL of the running Rocket.Chat server. Defaults to http://localhost:3000. */
   url?: string;
+}
+
+/** The Meteor app directory inside a Rocket.Chat checkout. */
+export function meteorDirOf(repoPath: string): string {
+  return join(repoPath, "apps", "meteor");
 }
 
 export interface RcBridgeOptions {
@@ -226,8 +237,8 @@ export class RcBridge {
 
   /**
    * Point this bridge at a (possibly new) URL for the same RC server. The bridge is
-   * keyed by its meteor dir — one per server — so the URL is just where to POST; the
-   * latest one wins without disturbing the installed handler or its token.
+   * keyed by its repository path — one per server — so the URL is just where to
+   * POST; the latest one wins without disturbing the injected handler or its token.
    */
   setUrl(url: string): void {
     this.target.url = url;
@@ -258,7 +269,7 @@ export class RcBridge {
   private async install(): Promise<void> {
     const output = await runMeteorShell(
       this.options.meteorBin,
-      this.target.meteorDir,
+      meteorDirOf(this.target.repoPath),
       buildInstaller(this.token),
       this.options.shellTimeoutMs,
     );
@@ -345,12 +356,13 @@ export class RcBridge {
 }
 
 /**
- * Caches one {@link RcBridge} per RC server (keyed by meteor dir) so its token and
- * install state persist across requests. Keying by the meteor dir rather than the
- * URL is deliberate: the meteor dir identifies the server the handler is installed
- * into and owns the single server-side token, so a changed URL just re-points the
- * same bridge instead of spawning a rival with a clashing token. Bridges hold no
- * open resources (the shell child is short-lived), so there is nothing to close.
+ * Caches one {@link RcBridge} per RC server (keyed by repository path) so its token
+ * and injection state persist across requests. Keying by the repository rather than
+ * the URL is deliberate: the repository identifies the server the handler is
+ * injected into and owns the single server-side token, so a changed URL just
+ * re-points the same bridge instead of spawning a rival with a clashing token.
+ * Bridges hold no open resources (the shell child is short-lived), so there is
+ * nothing to close.
  */
 export class RcBridgeRegistry {
   private readonly bridges = new Map<string, RcBridge>();
@@ -358,13 +370,13 @@ export class RcBridgeRegistry {
   constructor(private readonly options: RcBridgeOptions) {}
 
   acquire(target: RcTarget): RcBridge {
-    const meteorDir = target.meteorDir;
+    const repoPath = target.repoPath;
     const url = (target.url ?? DEFAULT_URL).replace(/\/+$/, "");
 
-    let bridge = this.bridges.get(meteorDir);
+    let bridge = this.bridges.get(repoPath);
     if (!bridge) {
-      bridge = new RcBridge({ meteorDir, url }, this.options);
-      this.bridges.set(meteorDir, bridge);
+      bridge = new RcBridge({ repoPath, url }, this.options);
+      this.bridges.set(repoPath, bridge);
     } else {
       bridge.setUrl(url);
     }
