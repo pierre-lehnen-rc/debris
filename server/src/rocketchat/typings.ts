@@ -3,6 +3,13 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { meteorDirOf, RcBridgeError } from "./bridge.js";
 
+/** One method of a model's interface: its name and a readable signature. */
+export interface RcModelMethod {
+  name: string;
+  /** e.g. `(username: string, options?: O) => Promise<IUser | null>`; "" if unknown. */
+  signature: string;
+}
+
 /**
  * Lists a model's public methods from the `@rocket.chat/model-typings` interfaces
  * (`I<Model>Model`), so Debris shows exactly the API those interfaces declare —
@@ -16,11 +23,11 @@ import { meteorDirOf, RcBridgeError } from "./bridge.js";
 export class ModelTypings {
   // meteorDir -> the resolved typescript module + the typings' models directory.
   private readonly envs = new Map<string, { ts: any; modelsDir: string }>();
-  // "repoPath\nModel" -> sorted method names.
-  private readonly cache = new Map<string, string[]>();
+  // "repoPath\nModel" -> sorted methods.
+  private readonly cache = new Map<string, RcModelMethod[]>();
 
-  /** The public method names of `<model>`'s interface, sorted; [] when it has none. */
-  methods(repoPath: string, model: string): string[] {
+  /** The public methods of `<model>`'s interface, sorted by name; [] when none. */
+  methods(repoPath: string, model: string): RcModelMethod[] {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(model)) {
       throw new RcBridgeError(`invalid model name: ${model}`, 400);
     }
@@ -59,8 +66,8 @@ export class ModelTypings {
     return env;
   }
 
-  /** Type-check one interface file and collect its method property names. */
-  private extract(ts: any, file: string, ifaceName: string): string[] {
+  /** Type-check one interface file and collect its methods with their signatures. */
+  private extract(ts: any, file: string, ifaceName: string): RcModelMethod[] {
     const program = ts.createProgram([file], {
       target: ts.ScriptTarget.Latest,
       skipLibCheck: true,
@@ -79,17 +86,41 @@ export class ModelTypings {
 
     // The type includes inherited members (IBaseModel), which is what we want.
     const type = checker.getTypeAtLocation(iface.name);
-    const names = new Set<string>();
+    const out: RcModelMethod[] = [];
+    const seen = new Set<string>();
     for (const sym of checker.getPropertiesOfType(type)) {
       const decls = sym.getDeclarations() || [];
-      const isMethod = decls.some(
-        (d: any) =>
-          ts.isMethodSignature(d) ||
-          ts.isMethodDeclaration(d) ||
-          (ts.isPropertySignature(d) && d.type && ts.isFunctionTypeNode(d.type)),
+      // A method signature, or a property typed as a function. Overloads declare the
+      // name more than once; the first declaration stands for the method.
+      const method = decls.find((d: any) => ts.isMethodSignature(d) || ts.isMethodDeclaration(d));
+      const fnProp = decls.find(
+        (d: any) => ts.isPropertySignature(d) && d.type && ts.isFunctionTypeNode(d.type),
       );
-      if (isMethod) names.add(sym.getName());
+      const node = method ?? (fnProp ? (fnProp as any).type : null);
+      if (node === null || seen.has(sym.getName())) continue;
+      seen.add(sym.getName());
+      out.push({ name: sym.getName(), signature: this.signatureOf(node) });
     }
-    return Array.from(names).sort();
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  }
+
+  /**
+   * A readable one-line signature for a method declaration: its parameters (names,
+   * optionality, rest, and the types as written) and return type. Generic type
+   * parameters are left off — they add noise without helping someone write the
+   * argument list. The types are taken verbatim from the declaration rather than
+   * resolved, so aliases the author chose (IUser['_id'], UserStatus) survive.
+   */
+  private signatureOf(decl: any): string {
+    const flat = (s: string): string => s.replace(/\s+/g, " ").trim();
+    const params: string[] = (decl.parameters ?? []).map((p: any) => {
+      const rest = p.dotDotDotToken ? "..." : "";
+      const optional = p.questionToken || p.initializer ? "?" : "";
+      const type = p.type ? `: ${flat(p.type.getText())}` : "";
+      return `${rest}${flat(p.name.getText())}${optional}${type}`;
+    });
+    const returns = decl.type ? ` => ${flat(decl.type.getText())}` : "";
+    return `(${params.join(", ")})${returns}`;
   }
 }

@@ -10,8 +10,9 @@ extends PanelContainer
 
 ## A function leaf was double-clicked — the host should open a query for
 ## model.method (without auto-running it). `collection` is the Mongo collection the
-## model reads, so the query's results can be typed against the database schema.
-signal function_activated(model: String, method: String, collection: String)
+## model reads, so the query's results can be typed against the database schema;
+## `signature` is the method's declared parameter list, shown in the query tab.
+signal function_activated(model: String, method: String, collection: String, signature: String)
 ## Asks the host to (re)inject the Server Models bridge into the workspace's server.
 signal refresh_requested()
 ## Asks the host to open the workspace editor (to set the server URL / repo path).
@@ -133,6 +134,7 @@ func _on_item_activated() -> void:
 				String(d.get("model", "")),
 				String(d.get("function", "")),
 				String(d.get("collection", "")),
+				String(d.get("signature", "")),
 			)
 		"model":
 			_activate_model(item, d)
@@ -175,6 +177,7 @@ func _load_functions(item: TreeItem, d: Dictionary) -> void:
 
 
 ## Fill a model's methods in as child leaves (called by the host after fetching).
+## `methods` are { name, signature } dictionaries.
 func set_model_functions(model: String, methods: Array) -> void:
 	var item := _find_model_item(model)
 	if item == null:
@@ -195,14 +198,27 @@ func set_model_functions(model: String, methods: Array) -> void:
 		ph.set_selectable(0, false)
 		return
 	var collection := String(d.get("collection", ""))
-	for fn in methods:
+	for entry in methods:
+		# Each method is { name, signature } (a bare name is tolerated).
+		var fn := ""
+		var signature := ""
+		if entry is Dictionary:
+			fn = String((entry as Dictionary).get("name", ""))
+			signature = String((entry as Dictionary).get("signature", ""))
+		else:
+			fn = String(entry)
+		if fn.is_empty():
+			continue
 		var leaf := _tree.create_item(item)
-		leaf.set_text(0, String(fn))
+		leaf.set_text(0, fn)
 		leaf.set_icon(0, ICON_FUNCTION)
 		leaf.set_icon_max_width(0, ICON_SIZE)
 		leaf.set_icon_modulate(0, AppTheme.TEXT_DIM)
+		if not signature.is_empty():
+			leaf.set_tooltip_text(0, fn + signature)
 		leaf.set_metadata(0, {
-			"type": "function", "model": model, "function": String(fn), "collection": collection,
+			"type": "function", "model": model, "function": fn,
+			"collection": collection, "signature": signature,
 		})
 	item.set_collapsed(false)
 

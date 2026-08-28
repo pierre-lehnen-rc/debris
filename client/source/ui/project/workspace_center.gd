@@ -215,7 +215,7 @@ func active_json_tab() -> JsonTab:
 ## Open a models console tab, optionally pre-filling the RC server URL (the project
 ## already knows it) and repository path. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
-func open_rcmodels(model: String, method: String, collection := "") -> RcModelsTab:
+func open_rcmodels(model: String, method: String, collection := "", signature := "") -> RcModelsTab:
 	# Focus an existing tab for this model.method instead of stacking a duplicate.
 	var existing := _find_rcmodels_tab(model, method)
 	if existing != null:
@@ -225,7 +225,7 @@ func open_rcmodels(model: String, method: String, collection := "") -> RcModelsT
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
 	if collection.is_empty():
 		collection = String(_rc_collections.get(model, ""))
-	tab.configure(model, method, collection)
+	tab.configure(model, method, collection, signature)
 	tab.bind_target(_rc_target)
 	# Connect before add_child so the tab's initial status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))

@@ -3,7 +3,8 @@ extends VBoxContainer
 
 ## A query for one @rocket.chat/models method, opened by double-clicking a function
 ## in the Server Models sidebar. The model and method are fixed for the tab (shown in
-## the toolbar); the user supplies a JSON array of arguments and presses Run, which
+## the toolbar, with the method's declared signature above the editor as a reference
+## for writing the arguments); the user supplies a JSON array of arguments and Run
 ## posts { target, model, method, args } to the Debris /api/rocketchat/call bridge and
 ## renders the returned value (canonical Extended JSON) below.
 ##
@@ -29,6 +30,9 @@ var _method := ""
 ## The Mongo collection this model reads (e.g. "rocketchat_subscription"), used to
 ## type result documents against the database schema. "" leaves results untyped.
 var _collection := ""
+## The method's declared signature, e.g. "(username: string, options?: O) => …",
+## shown above the args editor. "" hides the label.
+var _signature := ""
 ## The project's database schema, when a DB is attached. Model results are
 ## Rocket.Chat documents either way, so a plain Rocket.Chat schema stands in when
 ## the project has no database of its own (see _effective_schema).
@@ -45,16 +49,20 @@ var _restore_state: Dictionary = {}
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
 @onready var _title_label: Label = %TitleLabel
+@onready var _signature_label: Label = %SignatureLabel
 @onready var _args_edit: CodeEdit = %ArgsEdit
 @onready var _results: ResultsView = %Results
 
 
 ## Open a tab for `model`.`method`, optionally pre-filling the args editor. Call
 ## before the node enters the tree; pair with bind_target() for the live target.
-func configure(model: String, method: String, collection := "", args_text := "") -> void:
+func configure(
+	model: String, method: String, collection := "", signature := "", args_text := ""
+) -> void:
 	_model = model
 	_method = method
 	_collection = collection
+	_signature = signature
 	_initial_args = args_text
 
 
@@ -66,6 +74,7 @@ func configure_restore(state: Dictionary) -> void:
 	_model = String(state.get("model", ""))
 	_method = String(state.get("method", ""))
 	_collection = String(state.get("collection", ""))
+	_signature = String(state.get("signature", ""))
 	_initial_args = String(state.get("args", ""))
 
 
@@ -83,6 +92,7 @@ func to_state() -> Dictionary:
 		"model": _model,
 		"method": _method,
 		"collection": _collection,
+		"signature": _signature,
 		"args": _args_edit.text,
 	}
 
@@ -159,6 +169,9 @@ func _ready() -> void:
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 
 	_apply_type_context()
+	# The declared signature is a reference for writing the JSON arguments below it.
+	_signature_label.text = _signature
+	_signature_label.visible = not _signature.is_empty()
 	_args_edit.text = _initial_args
 	_title_label.text = tab_title()
 	status_changed.emit("Enter JSON args, then Run (F5)")
@@ -174,6 +187,8 @@ func _apply_style() -> void:
 	_run_btn.add_theme_color_override("font_color", AppTheme.ACCENT_GREEN)
 	_run_btn.tooltip_text = "Call the model method (F5)"
 	_title_label.add_theme_color_override("font_color", AppTheme.TEXT_BRIGHT)
+	_signature_label.add_theme_color_override("font_color", AppTheme.TEXT_DIM)
+	_signature_label.add_theme_font_size_override("font_size", 12)
 
 
 ## Send { target, model, method, args } to the bridge and render the result. The

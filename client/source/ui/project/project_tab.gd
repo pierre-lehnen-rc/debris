@@ -480,11 +480,13 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 	status_changed.emit("Opened %s" % endpoint.label())
 
 
-func _on_model_function_activated(model: String, method: String, collection: String) -> void:
+func _on_model_function_activated(
+	model: String, method: String, collection: String, signature: String
+) -> void:
 	# Double-clicking a function opens (or focuses) a query for model.method. The tab
 	# reads the workspace's server URL + repository path live; the user presses Run. The
 	# collection types the results against the schema.
-	_center.open_rcmodels(model, method, collection)
+	_center.open_rcmodels(model, method, collection, signature)
 	status_changed.emit("Opened %s.%s" % [model, method])
 
 

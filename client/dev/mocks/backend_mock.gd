@@ -63,7 +63,12 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 		"/api/rocketchat/model-methods":
 			return _ok({
 				"model": body.get("model", ""),
-				"methods": ["countByRole", "findOneById", "findOneByUsername", "updateStatusById"],
+				"methods": [
+					{"name": "countByRole", "signature": "(roleName: string) => Promise<number>"},
+					{"name": "findOneById", "signature": "(_id: string, options?: O) => Promise<IUser | null>"},
+					{"name": "findOneByUsername", "signature": "(username: string, options?: O) => Promise<IUser | null>"},
+					{"name": "updateStatusById", "signature": "(userId: IUser['_id'], status: UserStatus) => Promise<UpdateResult>"},
+				],
 			})
 	# Unknown endpoint: behave like a find so the caller still gets rows.
 	return _ok(_find_docs(collection))

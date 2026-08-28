@@ -30,8 +30,12 @@ func _check_model_methods() -> void:
 	var result: Dictionary = await backend.rocketchat_model_methods(TARGET, "Users")
 	expect(bool(result.get("ok", false)), "rocketchat_model_methods ok")
 	var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
-	expect(data.get("methods", []) is Array and (data["methods"] as Array).size() > 0,
-		"model methods are returned")
+	var methods: Array = data.get("methods", [])
+	expect(methods is Array and methods.size() > 0, "model methods are returned")
+	# Each method carries its declared signature, shown in the query tab.
+	var first: Dictionary = methods[0] if not methods.is_empty() and methods[0] is Dictionary else {}
+	expect(not String(first.get("name", "")).is_empty(), "a method carries its name")
+	expect(String(first.get("signature", "")).begins_with("("), "a method carries its signature")
 	expect_eq(activity_log.entries().size(), before, "listing methods isn't logged")
 
 
@@ -128,6 +132,23 @@ func _check_panel() -> void:
 	expect_eq(st.get("args"), "[\"rocket.cat\"]", "state keeps the args text")
 	tab.queue_free()
 
+	# The declared signature is shown above the args editor (and persisted, so a
+	# restored tab still shows it); a tab without one hides the label.
+	var sig := "(username: string, options?: O) => Promise<IUser | null>"
+	var tabs: Variant = load(TAB_PATH).instantiate()
+	tabs.configure("Users", "findOneByUsername", "users", sig, "[]")
+	root.add_child(tabs)
+	expect_eq(tabs._signature_label.text, sig, "the signature is shown above the args editor")
+	expect(tabs._signature_label.visible, "the signature label is visible when there is one")
+	expect_eq(tabs.to_state().get("signature"), sig, "the signature is persisted for restore")
+	tabs.queue_free()
+
+	var tabn: Variant = load(TAB_PATH).instantiate()
+	tabn.configure("Users", "findOneByUsername", "users", "", "[]")
+	root.add_child(tabn)
+	expect(not tabn._signature_label.visible, "the signature label hides without a signature")
+	tabn.queue_free()
+
 	# Non-array args are caught locally: a clear message, no backend call.
 	var events2: Array = []
 	var tab2: Variant = _tab("Users", "findOneByUsername", "\"rocket.cat\"", events2)
@@ -184,7 +205,10 @@ func _check_panel() -> void:
 	expect_eq(requested[0], "Messages", "expanding a model requests its functions")
 	expect_eq(first.get_child_count(), 1, "a loading placeholder shows while functions load")
 	# The host returns the methods; they fill in as child leaves.
-	sidebar.set_model_functions("Messages", ["countByRoomId", "findOneById"])
+	sidebar.set_model_functions("Messages", [
+		{"name": "countByRoomId", "signature": "(rid: string) => Promise<number>"},
+		{"name": "findOneById", "signature": "(_id: string) => Promise<IMessage | null>"},
+	])
 	expect_eq(first.get_child_count(), 2, "functions fill in as leaves")
 	var leaf: TreeItem = first.get_first_child()
 	expect_eq(leaf.get_text(0), "countByRoomId", "function leaves carry the method name")
@@ -193,16 +217,19 @@ func _check_panel() -> void:
 	expect_eq(first.get_button_count(0), 1, "a loaded model shows a reload button")
 	# Double-clicking a function asks the host to open a query for model.method,
 	# carrying the model's collection so the results can be typed.
-	var activated: Array = ["", "", ""]
-	sidebar.function_activated.connect(func(m: String, fn: String, coll: String) -> void:
+	var activated: Array = ["", "", "", ""]
+	sidebar.function_activated.connect(func(m: String, fn: String, coll: String, sig: String) -> void:
 		activated[0] = m
 		activated[1] = fn
-		activated[2] = coll)
+		activated[2] = coll
+		activated[3] = sig)
 	leaf.select(0)
 	sidebar._on_item_activated()
 	expect_eq(activated[0], "Messages", "activating a function passes its model")
 	expect_eq(activated[1], "countByRoomId", "activating a function passes its method")
 	expect_eq(activated[2], "rocketchat_message", "activating a function passes its collection")
+	expect_eq(activated[3], "(rid: string) => Promise<number>",
+		"activating a function passes its signature")
 	# The reload button drops and re-requests the model's functions.
 	requested[0] = ""
 	sidebar._on_tree_button_clicked(first, 0, 0, MOUSE_BUTTON_LEFT)
@@ -215,7 +242,7 @@ func _check_panel() -> void:
 	var live := {"repo_path": "", "url": "http://localhost:3000"}
 	var events5: Array = []
 	var tab5: Variant = load(TAB_PATH).instantiate()
-	tab5.configure("Users", "findOneByUsername", "", "[\"rocket.cat\"]")
+	tab5.configure("Users", "findOneByUsername", "", "", "[\"rocket.cat\"]")
 	tab5.bind_target(func() -> Dictionary: return live)
 	tab5.status_changed.connect(func(t: String) -> void: events5.append(t))
 	root.add_child(tab5)
@@ -244,7 +271,7 @@ func _result_of(outcome: Dictionary) -> Variant:
 ## this script's compile, which fails before autoloads register).
 func _tab(model: String, method: String, args_text: String, events: Array) -> Variant:
 	var tab = load(TAB_PATH).instantiate()
-	tab.configure(model, method, "", args_text)
+	tab.configure(model, method, "", "", args_text)
 	tab.bind_target(func() -> Dictionary: return {"repo_path": "/x/Rocket.Chat", "url": "http://localhost:3000"})
 	tab.status_changed.connect(func(t: String) -> void: events.append(t))
 	root.add_child(tab)
