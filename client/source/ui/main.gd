@@ -817,10 +817,10 @@ func _apply_api_config(config: Dictionary) -> void:
 		return
 	if _dialog_editing:
 		proj.update_rocketchat(config)
-		_status_label.text = "Updated API connection"
+		_status_label.text = "Updated workspace"
 	else:
 		proj.attach_rocketchat(config)
-		_status_label.text = "Attached API"
+		_status_label.text = "Attached workspace"
 	_update_project_tab_title(proj)
 
 
@@ -964,7 +964,7 @@ func _populate_menus() -> void:
 	_file_menu.add_item("Save JSON…", FILE_SAVE_JSON)
 	_file_menu.add_separator()
 	_file_menu.add_item("Attach Database…", FILE_ATTACH_DATABASE)
-	_file_menu.add_item("Attach API…", FILE_ATTACH_API)
+	_file_menu.add_item("Attach Workspace…", FILE_ATTACH_API)
 	_file_menu.add_separator()
 	_file_menu.add_item("Activity Log", FILE_ACTIVITY_LOG)
 	_file_menu.add_separator()

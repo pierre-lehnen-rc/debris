@@ -26,7 +26,7 @@ text = "ENDPOINTS"
 [node name="EditBtn" type="Button" parent="Box/Header/Row"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Edit API connection"
+tooltip_text = "Edit workspace"
 focus_mode = 0
 text = "✎"
 

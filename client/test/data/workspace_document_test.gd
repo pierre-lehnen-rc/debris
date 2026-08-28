@@ -52,6 +52,7 @@ func test_set_rocketchat() -> void:
 		"name": "work",
 		"url": "https://chat.example",
 		"users": [],
+		"meteor_dir": "",
 	})
 	assert_bool(d.dirty).is_true()
 
@@ -63,7 +64,26 @@ func test_rocketchat_config_when_absent() -> void:
 		"name": "empty",
 		"url": "",
 		"users": [],
+		"meteor_dir": "",
 	})
+
+
+func test_set_rocketchat_with_meteor_dir_round_trips() -> void:
+	var d := _doc()
+	d.set_name("work")
+	d.set_rocketchat("https://chat", [], "/srv/Rocket.Chat/apps/meteor")
+	assert_str(d.rocketchat_meteor_dir()).is_equal("/srv/Rocket.Chat/apps/meteor")
+	assert_str(d.rocketchat_config()["meteor_dir"]).is_equal("/srv/Rocket.Chat/apps/meteor")
+	var data := d.to_dict()
+	assert_str(data["rocketchat"]["meteor_dir"]).is_equal("/srv/Rocket.Chat/apps/meteor")
+	var restored := WorkspaceDoc.from_dict(data)
+	assert_str(restored.rocketchat_meteor_dir()).is_equal("/srv/Rocket.Chat/apps/meteor")
+
+
+func test_to_dict_omits_empty_meteor_dir() -> void:
+	var d := _doc()
+	d.set_rocketchat("https://chat", [])
+	assert_bool(d.to_dict()["rocketchat"].has("meteor_dir")).is_false()
 
 
 func test_set_rocketchat_cleans_users() -> void:

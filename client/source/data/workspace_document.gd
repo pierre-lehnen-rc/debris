@@ -13,7 +13,9 @@ extends RefCounted
 var name: String = ""
 ## { "connection": Dictionary, "database": String }, or {} when no DB is attached.
 var mongo: Dictionary = {}
-## { "url": String, "users": Array }, or {} when no API is attached.
+## { "url": String, "users": Array, "meteor_dir": String }, or {} when no API is
+## attached. `meteor_dir` is the local path to the server's `apps/meteor` checkout,
+## used by the Server Models bridge; "" when not configured.
 var rocketchat: Dictionary = {}
 ## Favorite queries flagged for permanent keeping, per collection:
 ## { collection: Array[query-entry] }, newest first. Unlike the sidecar's recents
@@ -46,14 +48,21 @@ func mongo_database() -> String:
 	return mongo.get("database", "")
 
 
-## The workspace dict WorkspaceSession/RocketChat expect: { name, url, users }.
-## The project name doubles as the workspace display name.
+## The workspace dict WorkspaceSession/RocketChat expect, plus the Server Models
+## meteor dir: { name, url, users, meteor_dir }. The project name doubles as the
+## workspace display name.
 func rocketchat_config() -> Dictionary:
 	return {
 		"name": name,
 		"url": rocketchat.get("url", ""),
 		"users": rocketchat.get("users", []),
+		"meteor_dir": rocketchat.get("meteor_dir", ""),
 	}
+
+
+## The local `apps/meteor` path for the Server Models bridge, or "" when unset.
+func rocketchat_meteor_dir() -> String:
+	return rocketchat.get("meteor_dir", "")
 
 
 # Mutations (mark the document dirty) -----------------------------------------
@@ -67,8 +76,8 @@ func clear_mongo() -> void:
 	dirty = true
 
 
-func set_rocketchat(url: String, users: Array) -> void:
-	rocketchat = {"url": url, "users": _clean_users(users)}
+func set_rocketchat(url: String, users: Array, meteor_dir := "") -> void:
+	rocketchat = {"url": url, "users": _clean_users(users), "meteor_dir": meteor_dir}
 	dirty = true
 
 
@@ -146,10 +155,14 @@ func to_dict() -> Dictionary:
 			"database": mongo.get("database", ""),
 		}
 	if has_rocketchat():
-		data["rocketchat"] = {
+		var rc := {
 			"url": rocketchat.get("url", ""),
 			"users": _clean_users(rocketchat.get("users", [])),
 		}
+		var meteor_dir := String(rocketchat.get("meteor_dir", ""))
+		if not meteor_dir.is_empty():
+			rc["meteor_dir"] = meteor_dir
+		data["rocketchat"] = rc
 	if not favorite_queries.is_empty():
 		data["favorites"] = favorite_queries
 	return data
@@ -172,6 +185,7 @@ static func from_dict(data: Dictionary) -> WorkspaceDoc:
 		doc.rocketchat = {
 			"url": String(rd.get("url", "")),
 			"users": _clean_users(rd.get("users", [])),
+			"meteor_dir": String(rd.get("meteor_dir", "")),
 		}
 	var fav: Variant = data.get("favorites", {})
 	doc.favorite_queries = fav if fav is Dictionary else {}

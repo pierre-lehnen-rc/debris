@@ -5,12 +5,12 @@
 
 [node name="WorkspaceDialog" type="Window"]
 title = "New Workspace"
-size = Vector2i(560, 180)
+size = Vector2i(600, 240)
 visible = false
 transient = true
 transient_to_focused = true
 exclusive = true
-min_size = Vector2i(460, 160)
+min_size = Vector2i(500, 220)
 theme = ExtResource("1_theme")
 script = ExtResource("2_wsdlg")
 
@@ -49,6 +49,18 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "https://your.rocket.chat"
+
+[node name="MeteorLabel" type="Label" parent="Margin/Col/Grid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Meteor dir"
+horizontal_alignment = 2
+
+[node name="MeteorEdit" type="LineEdit" parent="Margin/Col/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "optional — …/Rocket.Chat/apps/meteor (for Server Models)"
 
 [node name="Spacer" type="Control" parent="Margin/Col"]
 layout_mode = 2

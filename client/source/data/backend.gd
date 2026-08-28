@@ -136,6 +136,13 @@ func rocketchat_call(target: Dictionary, model: String, method: String, args: Ar
 	})
 
 
+## Inject (or refresh) the Server Models bridge endpoint into the running Rocket.Chat
+## server named by `target` ({ meteorDir, url }). This is the only step that uses the
+## meteor dir; queries then post to the installed endpoint. Logged as its own action.
+func rocketchat_install(target: Dictionary) -> Dictionary:
+	return await _post("/api/rocketchat/install", {"target": target})
+
+
 ## Convert a stored connection config (name / "host:port" / optional auth) into
 ## the discrete connection spec the server expects.
 static func to_spec(conn: Dictionary) -> Dictionary:
@@ -221,6 +228,9 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 	if path == "/api/rocketchat/call":
 		_log_rocketchat_call(body, outcome, ms)
 		return
+	if path == "/api/rocketchat/install":
+		_log_rocketchat_install(body, outcome, ms)
+		return
 	var target: String = body.get("database", "")
 	if body.has("collection"):
 		target = "%s.%s" % [target, body["collection"]]
@@ -241,13 +251,35 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 func _log_rocketchat_call(body: Dictionary, outcome: Dictionary, ms: int) -> void:
 	var data: Variant = outcome.get("data")
 	var value: Variant = data.get("result") if (data is Dictionary and (data as Dictionary).has("result")) else data
+	# The call posts to the endpoint's server URL (the meteor dir isn't used here — it
+	# only drives the separate install step), so log the URL alongside the args.
+	var call_target: Dictionary = body.get("target", {})
 	ActivityLog.record({
 		"source": "rocketchat",
 		"action": "model call",
 		"target": "%s.%s" % [body.get("model", ""), body.get("method", "")],
-		"params": {"args": body.get("args", [])},
+		"params": {
+			"url": call_target.get("url", ""),
+			"args": body.get("args", []),
+		},
 		"ok": outcome.get("ok", false),
 		"result": _summarize(value) if outcome.get("ok", false) else "",
+		"error": outcome.get("error", ""),
+		"ms": ms,
+	})
+
+
+## Record a Server Models bridge install (startup / meteor-dir change / manual
+## refresh): the meteor dir is the target here, since injection is what uses it.
+func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int) -> void:
+	var target: Dictionary = body.get("target", {})
+	ActivityLog.record({
+		"source": "rocketchat",
+		"action": "install bridge",
+		"target": String(target.get("meteorDir", "")),
+		"params": {"url": target.get("url", "")},
+		"ok": outcome.get("ok", false),
+		"result": "installed" if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
 	})

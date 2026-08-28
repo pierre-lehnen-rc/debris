@@ -11,11 +11,13 @@ extends "res://dev/check_base.gd"
 # Loaded at runtime, not preloaded: the tab's script references the Backend
 # autoload, which isn't registered when this -s main-loop script is compiled.
 const TAB_PATH := "res://source/ui/workspace/rc_models_tab.tscn"
+const SIDEBAR_PATH := "res://source/ui/workspace/rc_models_sidebar.tscn"
 const TARGET := {"meteorDir": "/x/Rocket.Chat/apps/meteor"}
 
 
 func _run() -> void:
 	await _check_backend()
+	await _check_install()
 	await _check_panel()
 
 
@@ -29,6 +31,26 @@ func _check_backend() -> void:
 	# Extended JSON survives as plain nested dicts (no special client decoding).
 	var created: Variant = (result as Dictionary).get("createdAt") if result is Dictionary else null
 	expect(created is Dictionary and (created as Dictionary).has("$date"), "createdAt kept as an Extended JSON $date")
+
+	# The call is logged under source "rocketchat" with the URL it posted to and the
+	# args — but not the meteor dir, which only the install step uses.
+	var entry: Dictionary = activity_log.entries().back()
+	expect_eq(entry.get("source"), "rocketchat", "call logged under source rocketchat")
+	expect_eq(entry.get("action"), "model call", "call logged as a model call")
+	expect_eq(entry.get("target"), "Users.findOneByUsername", "log target is Model.method")
+	var params: Dictionary = entry.get("params", {})
+	expect(params.has("url"), "call log carries the url")
+	expect(not params.has("meteorDir"), "call log omits the meteor dir (unused by the call)")
+
+
+func _check_install() -> void:
+	# The install step is its own logged action carrying the meteor dir as target.
+	var result: Dictionary = await backend.rocketchat_install(TARGET)
+	expect(bool(result.get("ok", false)), "rocketchat_install ok")
+	var entry: Dictionary = activity_log.entries().back()
+	expect_eq(entry.get("source"), "rocketchat", "install logged under source rocketchat")
+	expect_eq(entry.get("action"), "install bridge", "install logged as install bridge")
+	expect_eq(entry.get("target"), TARGET["meteorDir"], "install log target is the meteor dir")
 
 	var counted: Dictionary = await backend.rocketchat_call(TARGET, "Users", "countByRole", ["admin"])
 	var c_result: Variant = _result_of(counted)
@@ -83,6 +105,47 @@ func _check_panel() -> void:
 	expect(tab4.results()._table_button_shown(), "Table mode is available on the models tab")
 	tab4.queue_free()
 
+	# No meteor dir configured: the Server Models sidebar shows the message and
+	# disables the New Model Query button; setting one clears both.
+	var sidebar: Variant = load(SIDEBAR_PATH).instantiate()
+	sidebar.set_configured(false)
+	root.add_child(sidebar)
+	await _settle()
+	expect(sidebar._new_btn.disabled, "New Model Query is disabled without a meteor dir")
+	expect(sidebar._refresh_btn.disabled, "Refresh is disabled without a meteor dir")
+	expect(not sidebar._edit_btn.disabled, "Edit workspace stays enabled without a meteor dir (to set one)")
+	expect(String(sidebar._desc.text).contains("Meteor"), "sidebar shows the configure-meteor message")
+	# The Edit button asks the host to open the workspace editor.
+	var edited: Array = [false]
+	sidebar.edit_requested.connect(func() -> void: edited[0] = true)
+	sidebar._edit_btn.pressed.emit()
+	expect(edited[0], "Edit button emits edit_requested")
+	sidebar.set_configured(true)
+	expect(not sidebar._new_btn.disabled, "New Model Query enabled once a meteor dir is configured")
+	expect(not String(sidebar._desc.text).contains("Meteor"), "message clears once configured")
+	sidebar.queue_free()
+
+	# Fresh target: a tab opened before a meteor dir exists reads the target live on
+	# every Run, so configuring one makes the SAME open tab work — no reopen needed.
+	var live := {"meteor_dir": "", "url": "http://localhost:3000"}
+	var events5: Array = []
+	var tab5: Variant = load(TAB_PATH).instantiate()
+	tab5.configure("Users", "findOneByUsername", "[\"rocket.cat\"]")
+	tab5.bind_target(func() -> Dictionary: return live)
+	tab5.status_changed.connect(func(t: String) -> void: events5.append(t))
+	root.add_child(tab5)
+	await _settle()
+	tab5.run()
+	await _settle()
+	expect(String(events5.back()).contains("Meteor"), "run without a meteor dir prompts (got '%s')" % events5.back())
+	# The workspace gets a meteor dir configured; the already-open tab now runs.
+	live["meteor_dir"] = "/x/Rocket.Chat/apps/meteor"
+	tab5.run()
+	await _settle()
+	expect(String(events5.back()).begins_with("Users.findOneByUsername"), "same tab runs once a meteor dir is set (got '%s')" % events5.back())
+	expect(not String(events5.back()).contains("failed"), "the post-config run succeeded")
+	tab5.queue_free()
+
 
 # Helpers ---------------------------------------------------------------------
 ## Unwrap Backend's { ok, data } where data is the bridge's { result } envelope.
@@ -96,7 +159,8 @@ func _result_of(outcome: Dictionary) -> Variant:
 ## this script's compile, which fails before autoloads register).
 func _tab(model: String, method: String, args_text: String, events: Array) -> Variant:
 	var tab = load(TAB_PATH).instantiate()
-	tab.configure("/x/Rocket.Chat/apps/meteor", "http://localhost:3000", model, method, args_text)
+	tab.configure(model, method, args_text)
+	tab.bind_target(func() -> Dictionary: return {"meteor_dir": "/x/Rocket.Chat/apps/meteor", "url": "http://localhost:3000"})
 	tab.status_changed.connect(func(t: String) -> void: events.append(t))
 	root.add_child(tab)
 	return tab

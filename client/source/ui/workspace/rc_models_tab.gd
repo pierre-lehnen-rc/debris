@@ -2,16 +2,21 @@ class_name RcModelsTab
 extends VBoxContainer
 
 ## A console for calling @rocket.chat/models methods on a running Rocket.Chat dev
-## server, through the Debris server's /api/rocketchat/call bridge. The user names
-## a model and method and supplies a JSON array of arguments; Run sends
+## server, through the Debris server's /api/rocketchat/call bridge. The workspace
+## supplies the target — the server URL and the local apps/meteor directory — so the
+## tab only asks for a model, method and a JSON array of arguments. Run sends
 ## { target, model, method, args } to Backend.rocketchat_call and renders the
-## returned value (canonical Extended JSON) in the results view below, exactly as
-## query/endpoint tabs do. The bridge is installed into the RC server on first call.
+## returned value (canonical Extended JSON) in the results view below.
+##
+## The target (meteor dir + server URL) is read live from the workspace on every
+## Run via a provider Callable (bind_target), not captured when the tab opens — so a
+## tab opened before the workspace had a meteor dir starts working the moment one is
+## configured, with no need to reopen it. _run still guards against an empty target.
 ##
 ## Like the other center tabs, layout lives in the .tscn and configure()/
 ## configure_restore() must be called before the node enters the tree so _ready()
-## can seed the fields. Results are never persisted — a restore re-seeds the inputs
-## and waits for the user to press Run (no auto-send), matching endpoint tabs.
+## can seed the fields. Results are never persisted; a restore re-seeds the inputs
+## and waits for the user to press Run.
 
 signal status_changed(text: String)
 ## Emitted when the tab's title should change (it adopts "Model.method" after a
@@ -24,7 +29,11 @@ signal state_changed()
 ## nested object/array, asking the owner to open a JSON tab seeded with `text`.
 signal open_json_requested(text: String)
 
-## Field values to seed when the tab first opens (set via configure()/restore).
+## Returns the workspace's current Server Models target as { meteor_dir, url }.
+## Set by bind_target(); called fresh on every Run so config changes take effect
+## without reopening the tab.
+var _target_provider: Callable = Callable()
+## Field values to seed when the tab first opens (model / method / args text).
 var _initial: Dictionary = {}
 ## The tab's display title: "Models" until a call names it "Model.method".
 var _title := "Models"
@@ -34,34 +43,24 @@ var _restore_state: Dictionary = {}
 @onready var _toolbar: PanelContainer = %Toolbar
 @onready var _run_btn: Button = %RunBtn
 @onready var _title_label: Label = %TitleLabel
-@onready var _meteor_edit: LineEdit = %MeteorEdit
-@onready var _url_edit: LineEdit = %UrlEdit
 @onready var _model_edit: LineEdit = %ModelEdit
 @onready var _method_edit: LineEdit = %MethodEdit
 @onready var _args_edit: CodeEdit = %ArgsEdit
 @onready var _results: ResultsView = %Results
 
 
-## Open a fresh models tab, optionally pre-filling the RC server URL and Meteor
-## directory (the project supplies the URL it already knows). Call before the node
-## enters the tree.
-func configure(meteor_dir := "", url := "", model := "", method := "", args_text := "") -> void:
-	_initial = {
-		"meteor_dir": meteor_dir,
-		"url": url,
-		"model": model,
-		"method": method,
-		"args": args_text,
-	}
+## Open a fresh models tab, optionally pre-filling the model/method/args. Call
+## before the node enters the tree; pair with bind_target() for the live target.
+func configure(model := "", method := "", args_text := "") -> void:
+	_initial = {"model": model, "method": method, "args": args_text}
 
 
-## Reopen a saved models tab (from the .debris-workspace sidecar). `state` is a dict
-## from to_state(). Call before the node enters the tree.
+## Reopen a saved models tab (from the .debris-workspace sidecar): the model/method/
+## args come from `state`; the target comes live from bind_target(). Call before the
+## node enters the tree.
 func configure_restore(state: Dictionary) -> void:
 	_restore_state = state
 	_initial = {
-		"meteor_dir": String(state.get("meteor_dir", "")),
-		"url": String(state.get("url", "")),
 		"model": String(state.get("model", "")),
 		"method": String(state.get("method", "")),
 		"args": String(state.get("args", "")),
@@ -70,14 +69,17 @@ func configure_restore(state: Dictionary) -> void:
 	_title = title if not title.is_empty() else "Models"
 
 
-## Snapshot this tab for the sidecar: the inputs (never the results). The Meteor
-## path is a local machine path, which is why it rides in the per-user sidecar
-## rather than the shared project document.
+## Provide the live workspace target: a Callable returning { meteor_dir, url }. Read
+## fresh on every Run, so editing the workspace's meteor dir affects already-open tabs.
+func bind_target(provider: Callable) -> void:
+	_target_provider = provider
+
+
+## Snapshot this tab for the sidecar: the model/method/args (never the results, and
+## not the target — that lives in the workspace document).
 func to_state() -> Dictionary:
 	return {
 		"kind": "rcmodels",
-		"meteor_dir": _meteor_edit.text,
-		"url": _url_edit.text,
 		"model": _model_edit.text,
 		"method": _method_edit.text,
 		"args": _args_edit.text,
@@ -89,8 +91,7 @@ func tab_title() -> String:
 	return _title
 
 
-## Public entry point mirroring the Run button, so the host can trigger it for the
-## active tab (F5).
+## Public entry point mirroring the Run button (F5).
 func run() -> void:
 	_run()
 
@@ -104,20 +105,18 @@ func _ready() -> void:
 	_apply_style()
 	# Model results, like endpoint responses, carry no schema and aren't paginated —
 	# but they're very often an array (any cursor method), so keep the Table mode
-	# available and let array results default to it.
+	# available.
 	_results.set_raw_mode(true, true)
 	_results.set_pagination_enabled(false)
 	_results.set_item_noun("result")
 	_results.open_json_requested.connect(func(text: String) -> void: open_json_requested.emit(text))
 
-	_meteor_edit.text = String(_initial.get("meteor_dir", ""))
-	_url_edit.text = String(_initial.get("url", ""))
 	_model_edit.text = String(_initial.get("model", ""))
 	_method_edit.text = String(_initial.get("method", ""))
 	_args_edit.text = String(_initial.get("args", ""))
 	_title_label.text = _title
-	# Enter in any of the single-line fields runs the call, like the query editors.
-	var fields: Array[LineEdit] = [_meteor_edit, _url_edit, _model_edit, _method_edit]
+	# Enter in the model/method fields runs the call, like the query editors.
+	var fields: Array[LineEdit] = [_model_edit, _method_edit]
 	for field in fields:
 		field.text_submitted.connect(func(_t: String) -> void: _run())
 
@@ -140,12 +139,15 @@ func _apply_style() -> void:
 ## args editor is parsed leniently (LaxJson — the same JSON5-flavoured parser the
 ## query editors use) and must yield a JSON array; an empty editor means no args.
 func _run() -> void:
-	var meteor := _meteor_edit.text.strip_edges()
+	# Read the target fresh from the workspace, so a meteor dir configured after this
+	# tab was opened is picked up without reopening.
+	var info: Dictionary = _target_provider.call() if _target_provider.is_valid() else {}
+	var meteor := String(info.get("meteor_dir", "")).strip_edges()
+	if meteor.is_empty():
+		status_changed.emit("Configure a Meteor directory in the workspace settings first")
+		return
 	var model := _model_edit.text.strip_edges()
 	var method := _method_edit.text.strip_edges()
-	if meteor.is_empty():
-		status_changed.emit("Set the Meteor app directory (…/Rocket.Chat/apps/meteor)")
-		return
 	if model.is_empty() or method.is_empty():
 		status_changed.emit("Enter both a model (e.g. Users) and a method")
 		return
@@ -157,7 +159,7 @@ func _run() -> void:
 	var args: Array = args_result["args"]
 
 	var target := {"meteorDir": meteor}
-	var url := _url_edit.text.strip_edges()
+	var url := String(info.get("url", "")).strip_edges()
 	if not url.is_empty():
 		target["url"] = url
 

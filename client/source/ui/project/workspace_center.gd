@@ -39,6 +39,10 @@ var _bound_database := ""
 var _schema: DatabaseSchema = null
 # The Rocket.Chat session endpoint tabs run against (set when an API is attached).
 var _session: WorkspaceSession = null
+# The Server Models console's target: the RC server URL and the local apps/meteor
+# path, bound when an API is attached, passed to new and restored models tabs.
+var _rc_url := ""
+var _rc_meteor_dir := ""
 # Shared per-project recent/favorite query store, handed to every query tab.
 var _history: QueryHistory = null
 
@@ -62,6 +66,19 @@ func bind_mongo(connection: Dictionary, database: String) -> void:
 ## Bind the Rocket.Chat session that endpoint tabs run against.
 func bind_session(session: WorkspaceSession) -> void:
 	_session = session
+
+
+## Bind the Server Models target: the workspace's RC server URL and the local
+## apps/meteor path. Models tabs read these instead of asking the user per tab.
+func bind_rocketchat_target(url: String, meteor_dir: String) -> void:
+	_rc_url = url
+	_rc_meteor_dir = meteor_dir
+
+
+## The current Server Models target, as { meteor_dir, url }. Handed to models tabs
+## as a Callable so their Run reads the up-to-date workspace config, not a snapshot.
+func _rc_target() -> Dictionary:
+	return {"meteor_dir": _rc_meteor_dir, "url": _rc_url}
 
 
 ## Bind the shared query-history store handed to every query tab (recents +
@@ -175,9 +192,10 @@ func active_json_tab() -> JsonTab:
 ## Open a models console tab, optionally pre-filling the RC server URL (the project
 ## already knows it) and Meteor directory. Self-contained like a JSON tab — it
 ## targets the Debris server's bridge, not the bound Mongo DB or endpoint session.
-func open_rcmodels(default_url := "", default_meteor_dir := "") -> RcModelsTab:
+func open_rcmodels() -> RcModelsTab:
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
-	tab.configure(default_meteor_dir, default_url)
+	tab.configure()
+	tab.bind_target(_rc_target)
 	# Connect before add_child so the tab's initial status is captured.
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
@@ -398,6 +416,7 @@ func _restore_json_tab(state: Dictionary) -> void:
 func _restore_rcmodels_tab(state: Dictionary) -> void:
 	var tab: RcModelsTab = RCMODELS_TAB_SCENE.instantiate()
 	tab.configure_restore(state)
+	tab.bind_target(_rc_target)
 	tab.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
 	tab.title_changed.connect(_on_tab_title_changed.bind(tab))
 	tab.open_json_requested.connect(_on_open_json_requested)

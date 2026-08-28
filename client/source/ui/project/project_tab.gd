@@ -245,7 +245,9 @@ func attach_mongo(connection: Dictionary, database: String) -> void:
 func attach_rocketchat(config: Dictionary) -> void:
 	if has_rocketchat():
 		return
-	_doc.set_rocketchat(String(config.get("url", "")), config.get("users", []))
+	_doc.set_rocketchat(
+		String(config.get("url", "")), config.get("users", []), String(config.get("meteor_dir", ""))
+	)
 	_remove_view(VIEW_ENDPOINTS)
 	_build_endpoints_view()
 	_build_users_view()
@@ -275,8 +277,9 @@ func update_mongo_connection(connection: Dictionary) -> void:
 func update_rocketchat(config: Dictionary) -> void:
 	if not has_rocketchat():
 		return
+	var old_meteor := _doc.rocketchat_meteor_dir()
 	var users: Array = _doc.rocketchat.get("users", [])
-	_doc.set_rocketchat(String(config.get("url", "")), users)
+	_doc.set_rocketchat(String(config.get("url", "")), users, String(config.get("meteor_dir", "")))
 	_set_session(_doc.rocketchat_config())
 	if _endpoint_sidebar != null:
 		# Re-seed the cache for the (possibly new) URL — cached_endpoints returns []
@@ -285,6 +288,12 @@ func update_rocketchat(config: Dictionary) -> void:
 		_endpoint_sidebar.configure(_doc.rocketchat_config())
 	if _users_panel != null:
 		_users_panel.configure(_session)
+	if _models_sidebar != null:
+		_models_sidebar.set_configured(not _doc.rocketchat_meteor_dir().is_empty())
+	# Reinstall the Server Models bridge only when the meteor dir actually changed
+	# (a new URL reaches the same installed endpoint, so it needs no reinstall).
+	if _doc.rocketchat_meteor_dir() != old_meteor and not _doc.rocketchat_meteor_dir().is_empty():
+		_install_models_bridge()
 
 
 # View building ---------------------------------------------------------------
@@ -315,7 +324,7 @@ func _build_collections_view() -> void:
 func _build_endpoints_view() -> void:
 	if not _doc.has_rocketchat():
 		_add_view(VIEW_ENDPOINTS, _make_attach_placeholder(
-			"api", "No API in this project.", "Attach API…"
+			"api", "No workspace in this project.", "Attach Workspace…"
 		))
 		return
 	_ensure_session()
@@ -345,6 +354,11 @@ func _build_models_view() -> void:
 	_models_sidebar = RCMODELS_SIDEBAR_SCENE.instantiate()
 	_add_view(VIEW_MODELS, _models_sidebar)
 	_models_sidebar.new_query_requested.connect(_on_new_model_query)
+	_models_sidebar.refresh_requested.connect(_on_models_refresh)
+	_models_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
+	_models_sidebar.set_configured(not _doc.rocketchat_meteor_dir().is_empty())
+	# Inject the bridge on startup so the endpoint is ready before the first query.
+	_install_models_bridge()
 
 
 ## Create the shared Rocket.Chat session once, binding it to the center.
@@ -359,6 +373,9 @@ func _set_session(config: Dictionary) -> void:
 	_session = WorkspaceSession.new(config)
 	_session.changed.connect(_on_session_changed)
 	_center.bind_session(_session)
+	# The Server Models console targets the Debris bridge, not the RC REST session,
+	# so give the center the server URL + local meteor dir it needs directly.
+	_center.bind_rocketchat_target(String(config.get("url", "")), String(config.get("meteor_dir", "")))
 
 
 ## The session changed (a user was added/removed/edited, or logged in/out). Persist
@@ -463,10 +480,30 @@ func _on_endpoint_activated(endpoint: ApiEndpoint) -> void:
 
 
 func _on_new_model_query() -> void:
-	# Pre-fill the console with the project's known RC URL; the Meteor dir is entered
-	# per tab (it's a local path we don't store in the project document).
-	_center.open_rcmodels(_rocketchat_url())
+	# The console reads the workspace's server URL + meteor dir (bound on the center);
+	# if no meteor dir is configured the sidebar blocks this and shows a message.
+	_center.open_rcmodels()
 	status_changed.emit("Opened a server-models query")
+
+
+## Manual "Refresh" on the Server Models sidebar: reinstall the bridge endpoint.
+func _on_models_refresh() -> void:
+	_install_models_bridge()
+
+
+## Inject (or refresh) the Server Models bridge into the workspace's Rocket.Chat
+## server. A no-op without a meteor dir. Its own Activity Log entry is recorded by
+## Backend. Fire-and-forget: the status line reflects the outcome.
+func _install_models_bridge() -> void:
+	if not has_rocketchat() or _doc.rocketchat_meteor_dir().is_empty():
+		return
+	var target := {"meteorDir": _doc.rocketchat_meteor_dir(), "url": _rocketchat_url()}
+	status_changed.emit("Installing Server Models bridge…")
+	var result: Dictionary = await Backend.rocketchat_install(target)
+	if result.get("ok", false):
+		status_changed.emit("Server Models bridge ready")
+	else:
+		status_changed.emit("Server Models install failed: %s" % result.get("error", "unknown error"))
 
 
 func _on_status_changed(text: String) -> void:

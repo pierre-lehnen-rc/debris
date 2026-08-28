@@ -13,10 +13,28 @@ theme_override_constants/separation = 0
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Title" type="Label" parent="VBox/Header"]
+[node name="Row" type="HBoxContainer" parent="VBox/Header"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="VBox/Header/Row"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "SERVER MODELS"
+
+[node name="EditBtn" type="Button" parent="VBox/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Edit workspace"
+focus_mode = 0
+text = "✎"
+
+[node name="RefreshBtn" type="Button" parent="VBox/Header/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Reinstall the Server Models bridge"
+focus_mode = 0
+text = "⟳"
 
 [node name="Body" type="MarginContainer" parent="VBox"]
 layout_mode = 2
