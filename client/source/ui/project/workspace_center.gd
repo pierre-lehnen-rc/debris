@@ -247,15 +247,11 @@ func open_rcmodels(model: String, method: String, collection := "", signature :=
 
 
 # Rocket.Chat endpoint tabs ---------------------------------------------------
-## Open (or focus) a tab for `endpoint`. When `restore_state` is non-empty the tab
-## is reopened from the sidecar with its saved user/params (never auto-sending).
+## Open a tab for `endpoint`. When `restore_state` is non-empty the tab is reopened
+## from the sidecar with its saved user/params (never auto-sending).
 func open_endpoint(endpoint: ApiEndpoint, restore_state: Dictionary = {}) -> EndpointTab:
-	# Focus an existing tab for this endpoint instead of stacking a duplicate.
-	var existing := _find_endpoint_tab(endpoint)
-	if existing != null:
-		_tabs.current_tab = _tabs.get_tab_idx_from_control(existing)
-		return existing
-
+	# Always a fresh tab (like query and models tabs): the same endpoint is often
+	# called side by side with different users or params, so duplicates are wanted.
 	var tab: EndpointTab = ENDPOINT_TAB_SCENE.instantiate()
 	if restore_state.is_empty():
 		tab.configure(_session, endpoint)
@@ -282,15 +278,6 @@ func open_endpoint(endpoint: ApiEndpoint, restore_state: Dictionary = {}) -> End
 	_update_welcome()
 	_emit_state_changed()
 	return tab
-
-
-## The open tab for `endpoint` (matched by id), or null.
-func _find_endpoint_tab(endpoint: ApiEndpoint) -> EndpointTab:
-	for child in _tabs.get_children():
-		var tab := child as EndpointTab
-		if tab != null and tab.endpoint() != null and tab.endpoint().id == endpoint.id:
-			return tab
-	return null
 
 
 # Shared ----------------------------------------------------------------------
