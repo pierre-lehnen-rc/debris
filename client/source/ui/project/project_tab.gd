@@ -28,6 +28,7 @@ const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_si
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
 const USERS_PANEL_SCENE := preload("res://source/ui/workspace/users_panel.tscn")
 const RCMODELS_SIDEBAR_SCENE := preload("res://source/ui/workspace/rc_models_sidebar.tscn")
+const SERVER_BAR_SCENE := preload("res://source/ui/widgets/server_status_bar.tscn")
 const CENTER_SCENE := preload("res://source/ui/project/workspace_center.tscn")
 
 const ICON_COLLECTIONS := preload("res://source/ui/icons/database.svg")
@@ -306,8 +307,12 @@ func update_rocketchat(config: Dictionary) -> void:
 ## attach placeholder inviting the user to attach one.
 func _build_collections_view() -> void:
 	if not _doc.has_mongo():
+		# The server panel belongs to the Collections view whether or not a database
+		# is attached: there's still a server to see, start and stop, and this is
+		# where the user looks for it. The real sidebar carries its own copy.
 		_add_view(VIEW_COLLECTIONS, _make_attach_placeholder(
-			"mongo", "No database in this project.", "Attach Database…"
+			"mongo", "No database in this project.", "Attach Database…",
+			SERVER_BAR_SCENE.instantiate()
 		))
 		return
 	var connection := _doc.mongo_connection()
@@ -393,13 +398,22 @@ func _on_session_changed() -> void:
 
 
 ## A placeholder panel shown in the sidebar for an unattached source: a message and
-## a button that asks the host to attach that source.
-func _make_attach_placeholder(source: String, message: String, button_text: String) -> Control:
+## a button that asks the host to attach that source. `footer`, when given, is
+## pinned along the bottom with the message centred in the space left above it —
+## the Collections view uses it for the server panel.
+func _make_attach_placeholder(
+	source: String, message: String, button_text: String, footer: Control = null
+) -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", AppTheme._flat(AppTheme.BG_DARKEST, 0))
 
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 0)
+	panel.add_child(column)
+
 	var center := CenterContainer.new()
-	panel.add_child(center)
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(center)
 
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -417,6 +431,9 @@ func _make_attach_placeholder(source: String, message: String, button_text: Stri
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.pressed.connect(func() -> void: attach_requested.emit(source))
 	box.add_child(btn)
+
+	if footer != null:
+		column.add_child(footer)
 	return panel
 
 

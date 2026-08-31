@@ -213,7 +213,7 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 	var bytes: PackedByteArray = result[3]
 
 	if outcome != HTTPRequest.RESULT_SUCCESS:
-		return {"ok": false, "data": null, "error": "Cannot reach server at %s" % base_url}
+		return {"ok": false, "data": null, "error": _transport_error(outcome)}
 
 	var parsed: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 
@@ -224,6 +224,22 @@ func _do_post(path: String, body: Dictionary) -> Dictionary:
 	if parsed is Dictionary and parsed.get("error") is Dictionary:
 		message = parsed["error"].get("message", message)
 	return {"ok": false, "data": parsed, "error": message}
+
+
+## Why a request never reached the Debris server. Failing to connect at all means
+## nothing is listening on the port — the server isn't running, and the user has a
+## button for that, so say so instead of leaving them with a bare address. Every
+## other transport failure is a different problem (a host that won't resolve, a
+## server that accepted the connection but never answered) and keeps the message
+## it always had, so a real fault isn't misreported as a stopped server.
+##
+## Errors from a server that *did* answer — a refused MongoDB connection, a bad
+## query — never come through here; they arrive as HTTP status codes below, and
+## are reported with the server's own message.
+func _transport_error(outcome: int) -> String:
+	if outcome == HTTPRequest.RESULT_CANT_CONNECT:
+		return "The Debris server is not running — use Connect in the Collections footer to start it"
+	return "Cannot reach server at %s" % base_url
 
 
 ## Record a completed MongoDB action in the shared ActivityLog. The action is the

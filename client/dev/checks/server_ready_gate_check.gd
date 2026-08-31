@@ -20,6 +20,7 @@ func _run() -> void:
 	await _resolves_false_when_unavailable()
 	await _is_idempotent()
 	await _pending_waiter_unblocks_on_resolve()
+	await _tracks_availability_after_startup()
 
 
 ## Once startup resolves as available, await_ready() returns true immediately.
@@ -62,6 +63,20 @@ func _pending_waiter_unblocks_on_resolve() -> void:
 	await create_timer(0.05).timeout
 	expect(box["done"] == true, "pending waiter unblocks once startup resolves")
 	expect(box["value"] == true, "pending waiter receives the resolved value")
+	sm.free()
+
+
+## Once the gate has resolved, the server can still come and go — the footer
+## panel's connect and stop actions do exactly that. await_ready() then reports
+## the current availability rather than the startup outcome, so a request made
+## after the server was stopped isn't told it's still there.
+func _tracks_availability_after_startup() -> void:
+	var sm: Object = _script.new()
+	sm._finish_startup(true)
+	sm._set_available(false)
+	expect(await sm.await_ready() == false, "a server stopped after startup reads as unavailable")
+	sm._set_available(true)
+	expect(await sm.await_ready() == true, "reconnecting makes it available again")
 	sm.free()
 
 

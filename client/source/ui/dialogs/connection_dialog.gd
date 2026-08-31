@@ -246,6 +246,9 @@ func _on_fetch_databases() -> void:
 		return
 	_status.text = "Fetching databases…"
 	_fetch_db_btn.disabled = true
+	# Both this and Test go through the Debris server, so make sure one is running
+	# — joining the attempt _begin_mongo_dialog started when this dialog opened.
+	await ServerManager.ensure_connected()
 	var result: Dictionary = await Backend.list_databases(_spec_from_fields())
 	_fetch_db_btn.disabled = false
 	if not result.get("ok", false):
@@ -283,6 +286,7 @@ func _on_test() -> void:
 		return
 	_status.text = "Testing…"
 	_test_btn.disabled = true
+	await ServerManager.ensure_connected()
 	var result: Dictionary = await Backend.ping(_spec_from_fields())
 	_test_btn.disabled = false
 	if result.get("ok", false):

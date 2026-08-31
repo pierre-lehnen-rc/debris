@@ -3,7 +3,8 @@ import { buildApp } from "./server.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const { app, cache, apps } = await buildApp(config);
+  const context = await buildApp(config);
+  const { app, cache, apps } = context;
 
   let shuttingDown = false;
   const shutdown = async (reason: string): Promise<void> => {
@@ -21,6 +22,12 @@ async function main(): Promise<void> {
       void shutdown(signal);
     });
   }
+
+  // Let a connected app stop this server on request (its server panel's "Stop"
+  // action), whether or not the server manages its own lifetime.
+  context.onStop = (reason) => {
+    void shutdown(reason);
+  };
 
   // A managed server (launched by the app) stops itself once the last connected
   // app disconnects, so runs don't leave an orphaned server behind. A server the

@@ -347,6 +347,10 @@ func _begin_mongo_dialog(proj: ProjectTab, editing: bool) -> void:
 		return
 	_dialog_project = proj
 	_dialog_editing = editing
+	# Warm a server up while the user fills the form: the dialog's Test and Fetch
+	# Databases both need one. Not awaited — the dialog opens now, and those two
+	# actions wait on this same attempt if the user is quicker than the server.
+	ServerManager.ensure_connected()
 	if editing:
 		# Carry the project's actual bound database into the dialog so it pre-selects
 		# even before the database list is fetched.

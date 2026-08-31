@@ -1,0 +1,53 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://source/ui/widgets/server_status_bar.gd" id="1_srvbar"]
+
+[node name="ServerStatusBar" type="PanelContainer"]
+script = ExtResource("1_srvbar")
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Status" type="Label" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "Checking the server…"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="ConnectBtn" type="Button" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Connect to the Debris server, starting it if it isn't running"
+focus_mode = 0
+text = "Connect"
+
+[node name="DisconnectBtn" type="Button" parent="Row"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+tooltip_text = "Disconnect from the server (one the app started then stops itself)"
+focus_mode = 0
+text = "Disconnect"
+
+[node name="StopBtn" type="Button" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Stop the server"
+focus_mode = 0
+text = "Stop"
+
+[node name="RefreshBtn" type="Button" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Re-read the server's state"
+focus_mode = 0
+text = "⟳"
+
+[connection signal="pressed" from="Row/ConnectBtn" to="." method="_on_connect_pressed"]
+[connection signal="pressed" from="Row/DisconnectBtn" to="." method="_on_disconnect_pressed"]
+[connection signal="pressed" from="Row/StopBtn" to="." method="_on_stop_pressed"]
+[connection signal="pressed" from="Row/RefreshBtn" to="." method="_on_refresh_pressed"]

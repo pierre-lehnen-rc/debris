@@ -141,12 +141,25 @@ godot --path client
 ```
 
 On launch the app checks whether a server is already answering at
-`http://127.0.0.1:4020`; if not, it locates `node`, extracts the bundled server,
-and starts it as a **quiet background process** (no console window). While the
-app runs it heartbeats the server every 30s and sends a disconnect on close, so
-the server knows who is connected. A server the app launched stops itself once
-the last connected app goes away (so runs never leave an orphaned server behind);
-a server you started by hand keeps running and is simply reused.
+`http://127.0.0.1:4020` and attaches to it if one is — but launching the app
+never starts one on its own. A server is started when you actually need it:
+opening a project that has a database, configuring a database connection, or
+pressing **Connect** in the Collections footer (below). Starting one locates
+`node`, extracts the bundled server, and runs it as a **quiet background
+process** (no console window). While attached, the app heartbeats the server
+every 30s and sends a disconnect on close, so the server knows who is connected.
+A server the app launched stops itself once the last connected app goes away (so
+runs never leave an orphaned server behind); a server you started by hand keeps
+running and is simply reused.
+
+The footer of the **Collections** view puts that server in reach: one line
+reporting whether it's running and whether this app is attached to it, with
+buttons to **Connect** (starting a server if none is answering), **Disconnect**,
+**Stop**, and re-read the state. Reading the state registers nothing, so the
+panel can report on a server the app is deliberately detached from. Disconnecting
+sends the same signal closing the app does, so a server the app launched stops
+itself once nothing is connected; **Stop** is how you end one you started by
+hand.
 
 Useful environment overrides:
 

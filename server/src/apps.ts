@@ -44,6 +44,20 @@ export class AppRegistry {
     if (this.apps.delete(id)) this.maybeEmpty();
   }
 
+  /** Whether the app with this id is currently registered. */
+  has(id: string): boolean {
+    return this.apps.has(id);
+  }
+
+  /**
+   * Whether this server will stop itself once the last app goes away — true for a
+   * managed server (one whose owner wired up {@link onEmpty}), false for one
+   * started by hand.
+   */
+  get stopsWhenEmpty(): boolean {
+    return this.onEmpty !== null;
+  }
+
   /** Drop apps whose last heartbeat is older than the timeout. */
   private sweep(): void {
     const now = Date.now();

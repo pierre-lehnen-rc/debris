@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://source/ui/sidebar/collection_sidebar.gd" id="1_coll"]
 [ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="3_filter"]
+[ext_resource type="PackedScene" path="res://source/ui/widgets/server_status_bar.tscn" id="4_srvbar"]
 
 [node name="CollectionSidebar" type="PanelContainer"]
 script = ExtResource("1_coll")
@@ -83,6 +84,9 @@ focus_neighbor_bottom = NodePath(".")
 allow_rmb_select = true
 hide_root = true
 select_mode = 1
+
+[node name="Footer" parent="Box" instance=ExtResource("4_srvbar")]
+layout_mode = 2
 
 [node name="ContextMenu" type="PopupMenu" parent="."]
 unique_name_in_owner = true

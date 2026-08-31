@@ -148,6 +148,11 @@ func _load() -> void:
 		return
 	_loading = true
 	status_changed.emit("Loading collections for %s…" % _database)
+	# Opening a project that has a database is the point it needs a server to
+	# query through, so make sure one is running — starting the bundled one when
+	# nothing is answering. The outcome isn't gated on: with no server the request
+	# below still runs and fails with a clear error, as it would have anyway.
+	await ServerManager.ensure_connected()
 	var result: Dictionary = await Backend.list_collections(Backend.to_spec(_connection), _database)
 	_loading = false
 
