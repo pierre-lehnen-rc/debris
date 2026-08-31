@@ -114,7 +114,11 @@ by contrast, is called directly by the client.
 - **[Yarn](https://yarnpkg.com/) 4** — only needed to build the server bundle
   from source.
 - **A Rocket.Chat checkout and `meteor`** — only for the Server Models view; the
-  bridge is installed into your running dev server through `meteor shell`.
+  bridge is installed into your running dev server through `meteor shell`. The
+  server looks for `meteor` on `PATH` and then in the usual install locations
+  (`/usr/local/bin`, `~/.meteor`, Homebrew), which matters because an app opened
+  from a desktop inherits a minimal `PATH`. Set `DEBRIS_RC_METEOR_BIN` if yours
+  lives somewhere else.
 
 ### 1. Build the server bundle
 
@@ -187,7 +191,7 @@ Useful environment overrides:
 | `DEBRIS_NODE`           | Path to a specific `node` binary.                    |
 | `DEBRIS_SERVER_URL`     | Point the client at an already-running server.       |
 | `PORT` / `HOST`         | Where the server listens (default `4020` / `127.0.0.1`). |
-| `DEBRIS_RC_METEOR_BIN`  | The `meteor` executable used to install the model bridge. |
+| `DEBRIS_RC_METEOR_BIN`  | The `meteor` executable used to install the model bridge. Only needed when it isn't on `PATH` or in the usual install locations. |
 
 ## Using the app
 

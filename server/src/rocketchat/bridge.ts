@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
+import { meteorEnv, meteorSearchDirs, resolveMeteorBin } from "./meteor.js";
 
 /**
  * Where a Rocket.Chat bridge lives. Supplied by the client on each request, the
@@ -26,8 +27,9 @@ export function meteorDirOf(repoPath: string): string {
 
 export interface RcBridgeOptions {
   /**
-   * Executable used to open a Meteor shell. Comes from server config, never the
-   * request body — it is spawned as a command, so client-supplied would be RCE.
+   * Executable used to open a Meteor shell — a bare command name to look up, or a
+   * path to a specific binary. Comes from server config, never the request body:
+   * it is spawned as a command, so client-supplied would be RCE.
    */
   meteorBin: string;
   /** Max time (ms) to wait for a `meteor shell` install to complete. */
@@ -165,7 +167,11 @@ function runMeteorShell(
   timeoutMs: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, ["shell"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(bin, ["shell"], {
+      cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: meteorEnv(),
+    });
     let out = "";
     let err = "";
     let settled = false;
@@ -280,7 +286,7 @@ export class RcBridge {
 
   private async install(): Promise<void> {
     const output = await runMeteorShell(
-      this.options.meteorBin,
+      await this.meteorBin(),
       meteorDirOf(this.target.repoPath),
       buildInstaller(this.token),
       this.options.shellTimeoutMs,
@@ -291,6 +297,24 @@ export class RcBridge {
         502,
       );
     }
+  }
+
+  /**
+   * The `meteor` executable to spawn, resolved against PATH and the usual install
+   * locations. Resolving here rather than trusting PATH matters because the server
+   * is normally started by the app, which — launched from a desktop rather than a
+   * shell — passes on a PATH that often has none of the directories Meteor lives in.
+   */
+  private async meteorBin(): Promise<string> {
+    const configured = this.options.meteorBin;
+    const resolved = await resolveMeteorBin(configured);
+    if (resolved) return resolved;
+    throw new RcBridgeError(
+      `could not find the '${configured}' executable. Looked in PATH and in `
+        + `${meteorSearchDirs().join(", ")}. Set DEBRIS_RC_METEOR_BIN to its full `
+        + `path (\`which meteor\` shows it) and restart the server.`,
+      500,
+    );
   }
 
   /**
