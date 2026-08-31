@@ -42,6 +42,17 @@ func test_is_newer() -> void:
 	assert_bool(UpdateChecker.is_newer("0.1.4", "0.1.5")).is_false()
 
 
+# Translocation ---------------------------------------------------------------
+func test_is_translocated() -> void:
+	# The read-only copy macOS runs when launched from Downloads.
+	assert_bool(UpdateChecker.is_translocated(
+		"/private/var/folders/a9/abc123/AppTranslocation/E1B2-.../d/Debris.app/Contents/MacOS/Debris"
+	)).is_true()
+	# Real bundle locations are not translocated.
+	assert_bool(UpdateChecker.is_translocated("/Applications/Debris.app/Contents/MacOS/Debris")).is_false()
+	assert_bool(UpdateChecker.is_translocated("/Users/x/Downloads/Debris.app/Contents/MacOS/Debris")).is_false()
+
+
 # Asset selection -------------------------------------------------------------
 func _assets() -> Array:
 	return [

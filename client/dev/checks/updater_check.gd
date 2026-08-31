@@ -22,8 +22,10 @@ func _run() -> void:
 	# run can never swap the binary or relaunch.
 	expect(not updater.can_self_update(), "can_self_update() is false under headless")
 
-	# install() on a bogus path is a safe no-op here (can_self_update is false).
+	# install() on a bogus path is a safe no-op here (can_self_update is false),
+	# and it leaves a reason for the UI to show.
 	expect(not updater.install("user://updates/nope.bin"), "install() refuses when self-update unsupported")
+	expect(not String(updater.last_install_error()).is_empty(), "install() failure sets last_install_error")
 
 	# A download with no asset URL reports failure via the signal, not a crash.
 	var failed := [false]

@@ -142,11 +142,13 @@ func _on_cancel_download() -> void:
 
 func _on_install() -> void:
 	if not Updater.install(_downloaded_path):
-		# Shouldn't happen (the button is only shown when self-update is possible),
-		# but fall back gracefully rather than leaving the user stuck.
-		_subheading.text = "Couldn't install the update automatically. Opening the release page."
+		# Couldn't apply in place (e.g. macOS App Translocation when run from
+		# Downloads). Show why and leave the release page as a manual fallback,
+		# rather than pretending it worked.
+		var reason := Updater.last_install_error()
+		_subheading.text = reason if not reason.is_empty() \
+			else "Couldn't install the update automatically."
 		_set_state(State.ERROR)
-		_on_open_release()
 
 
 func _on_close() -> void:
@@ -202,7 +204,7 @@ func _set_state(state: State) -> void:
 			_later_btn.text = "Close"
 			_later_btn.visible = true
 		State.ERROR:
-			_heading.text = "Update check failed"
+			_heading.text = "Couldn't update"
 			_later_btn.text = "Close"
 			_later_btn.visible = true
 			# Offer the page as a manual fallback if we know where it is.

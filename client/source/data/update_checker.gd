@@ -63,6 +63,16 @@ static func is_newer(release_version: String, current: String) -> bool:
 	return compare_versions(release_version, current) > 0
 
 
+## True when `path` is a macOS App Translocation mount — the read-only randomized
+## copy macOS runs when a quarantined app is launched from an untrusted spot
+## (typically Downloads). An app running from there can't replace itself: its
+## executable path points at the throwaway copy, not the real bundle. Detecting
+## this lets the updater tell the user to move the app to Applications instead of
+## silently "updating" a copy that gets discarded.
+static func is_translocated(path: String) -> bool:
+	return path.contains("/AppTranslocation/")
+
+
 ## Find this platform's asset in a release's `assets` array (each entry a
 ## Dictionary with at least "name" and "browser_download_url"). Prefers an exact
 ## filename match, then falls back to the platform's suffix so a future rename

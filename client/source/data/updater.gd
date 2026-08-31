@@ -46,6 +46,8 @@ var _dl_http: HTTPRequest
 var _checking := false
 var _downloading := false
 var _dl_info: Dictionary = {}
+# Why the last install() returned false, for the UI to show. "" when none.
+var _last_install_error := ""
 
 
 func _ready() -> void:
@@ -191,14 +193,19 @@ func _on_download_completed(
 
 ## Replace the running build with the file previously downloaded to `path`, then
 ## quit and relaunch via a detached helper. Returns false without side effects if
-## self-update isn't supported here (editor / headless / other OS) or the file is
-## missing — the UI then falls back to the release page. On success the app is on
-## its way down; the helper finishes the swap once it exits.
+## the update can't be applied in place — self-update unsupported (editor /
+## headless / other OS), the file is missing, or the app is running from a spot it
+## can't replace (e.g. macOS App Translocation from Downloads). On false, read
+## last_install_error() for a message to show. On success the app is on its way
+## down; the helper finishes the swap once it exits.
 func install(path: String) -> bool:
+	_last_install_error = ""
 	if not can_self_update():
+		_last_install_error = "Automatic install isn't supported for this build."
 		return false
 	var abs := ProjectSettings.globalize_path(path)
 	if not FileAccess.file_exists(abs):
+		_last_install_error = "The downloaded file is no longer available."
 		return false
 
 	var spawned := false
@@ -214,6 +221,11 @@ func install(path: String) -> bool:
 	# already waiting on our PID and swaps + relaunches once we're down.
 	ServerManager.quit()
 	return true
+
+
+## A human-readable reason the last install() call returned false, or "".
+func last_install_error() -> String:
+	return _last_install_error
 
 
 # Launch a detached helper that waits for this app (PID) to exit, then moves the
@@ -239,8 +251,34 @@ nohup "$TARGET" >/dev/null 2>&1 &
 func _install_macos(zip_path: String) -> bool:
 	var app := _macos_app_path()
 	if app.is_empty():
+		_last_install_error = "Couldn't locate the Debris app bundle to replace."
 		return false
+
+	# App Translocation: launched from a quarantined spot (typically Downloads),
+	# macOS runs a read-only randomized copy, so get_executable_path() points at a
+	# throwaway — replacing it would leave the real bundle untouched (the app would
+	# keep reopening the old version). Can't be reversed from a shell, so guide the
+	# user to move it out, which strips the quarantine flag and fixes it for good.
+	if UpdateChecker.is_translocated(app):
+		_last_install_error = (
+			"Debris is running from a temporary read-only copy because it was opened "
+			+ "from Downloads (macOS App Translocation). Move Debris to your Applications "
+			+ "folder, reopen it, and check for updates again."
+		)
+		return false
+
+	# Anywhere else we can't write (e.g. a read-only mount) can't be updated either.
+	if not _dir_writable(app.get_base_dir()):
+		_last_install_error = (
+			"Debris can't update itself where it is (%s). Move it to your Applications "
+			+ "folder and try again."
+		) % app.get_base_dir()
+		return false
+
 	var work := ProjectSettings.globalize_path(STAGE_DIR)
+	# Non-destructive swap: move the old bundle aside first, and only delete it once
+	# the new one is in place; if anything fails, restore it and reopen — so a failed
+	# update can never leave the user with no app.
 	var script := """#!/bin/sh
 # args: PID ZIP APP_BUNDLE WORK_DIR
 PID="$1"; ZIP="$2"; APP="$3"; WORK="$4"
@@ -253,12 +291,31 @@ mkdir -p "$WORK/extract"
 ditto -x -k "$ZIP" "$WORK/extract" 2>/dev/null || unzip -o "$ZIP" -d "$WORK/extract"
 NEWAPP=$(find "$WORK/extract" -maxdepth 2 -name '*.app' | head -n1)
 [ -z "$NEWAPP" ] && exit 1
-rm -rf "$APP"
-mv "$NEWAPP" "$APP"
-xattr -dr com.apple.quarantine "$APP" 2>/dev/null
-open "$APP"
+BACKUP="$APP.old-$$"
+mv "$APP" "$BACKUP" || { open "$APP"; exit 1; }
+if mv "$NEWAPP" "$APP"; then
+	rm -rf "$BACKUP"
+	xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+	open "$APP"
+else
+	rm -rf "$APP"
+	mv "$BACKUP" "$APP"
+	open "$APP"
+fi
 """
 	return _spawn_helper(script, [str(OS.get_process_id()), zip_path, app, work])
+
+
+# Whether we can create (and remove) a file in `dir` — the permission the .app
+# swap needs. `dir` is a real filesystem path (from OS.get_executable_path()).
+func _dir_writable(dir: String) -> bool:
+	var probe := dir.path_join(".debris-write-test")
+	var f := FileAccess.open(probe, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.close()
+	DirAccess.remove_absolute(probe)
+	return true
 
 
 # Walk up from the executable (.../Debris.app/Contents/MacOS/Debris) to the
