@@ -1,7 +1,8 @@
 # dev/ — headless validation kit
 
-Tools for validating logic changes without a real backend or the editor. Two
-layers, fastest first.
+Tools for validating logic changes without a real backend or the editor. Three
+layers, fastest first — plus the screenshot capture, which runs on the same
+mocks but is a documentation tool rather than a check.
 
 ## 1. Compile check — `dev/check.sh`
 
@@ -66,6 +67,39 @@ lifecycle, `auto_free`, `create_temp_dir`, and `monitor_signals` /
 `assert_signal`. [`test/runner.gd`](../test/runner.gd) discovers the suites,
 runs each `test_*` method, and exits non-zero if anything fails (a suite that
 fails to compile is reported and skipped rather than aborting the run).
+
+## Screenshots — `dev/shots.sh`
+
+Regenerates the README's images in [`docs/screenshots/`](../../docs/screenshots)
+from the real UI, so they can be refreshed at a release instead of being
+re-staged by hand.
+
+```bash
+dev/shots.sh                              # every shot under dev/shots/
+dev/shots.sh dev/shots/database_shot.gd   # just one
+```
+
+A shot extends [`shot_base.gd`](shot_base.gd), implements `_run()`, and calls
+`shoot("name.png")` once the UI is in the state it wants. It drives the app
+through the same public entry points the mouse does — a sidebar's `*_activated`
+signal, the center's `open_*` methods — so the pictures are of real code paths,
+and `expand_rows` / `find_one` cover the tree-fiddling in between. Every shot
+opens the same project (`shot_base.demo_doc`).
+
+Two things differ from the checks:
+
+- **It needs a display.** The engine can only read back a frame it has actually
+  rendered, so this is not a `--headless` run: a window opens for a second or
+  two per shot. Don't type into it.
+- **`HOME` is a throwaway directory**, so `user://` is empty — no recent
+  projects, no reopened tabs, none of your preferences. With the fixtures and a
+  fixed window size (`DEBRIS_SHOT_SIZE`, default `1400x900`, pinned at 1:1
+  regardless of the display's DPI scale), that is what makes a shot reproducible.
+
+Everything in the images is what the app did with the fixtures, bar one staged
+widget: the Collections footer is painted with an ordinary server state, because
+`DEBRIS_HEADLESS` silences `ServerManager` and the panel would otherwise report
+the harness's own "Server not running". See `shot_base.stage_server_panel`.
 
 ## Mocks
 

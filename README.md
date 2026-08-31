@@ -12,17 +12,28 @@ proxy server it launches for you.
 
 ## Screenshots
 
-**Browsing a MongoDB collection** — the connection sidebar (databases ▸
-collections) on the left, a query tab with a JSON filter editor over a results
-tree on the right.
+**Browsing a MongoDB collection** — the collection sidebar (grouped by name
+prefix, filterable) on the left over the bundled server's panel, and a query tab
+with a JSON filter editor above a results tree on the right.
 
 ![Database browser](docs/screenshots/database.png)
 
 **Browsing a Rocket.Chat REST API** — the endpoint sidebar (grouped by resource,
 driven by the server's OpenAPI spec), a per-endpoint request form with a user
-selector, and the response.
+selector, and the response, in a tab next to a query on the project's database.
+The line under the sidebar reports whether the workspace is answering.
 
 ![API browser](docs/screenshots/api.png)
+
+**Calling a server model** — the models the Server Models bridge found in the
+running Rocket.Chat, each model's functions grouped under it, and a function tab
+whose results are typed against the collection the model reads. The two footer
+lines separate the workspace from the bridge injected into it.
+
+![Server models](docs/screenshots/models.png)
+
+The screenshots are captured from the real UI against the fixture data, by
+[`client/dev/shots.sh`](client/dev/shots.sh).
 
 ## What it's good for
 
@@ -80,7 +91,8 @@ queries you **favorite** are stored in the project file and travel with it.
 ```
 client/      Godot 4.7 project — the desktop app (GDScript, source/ui + source/data)
   server/    the bundled server, embedded into the app (produced by `yarn bundle`)
-  dev/       headless validation kit (compile checks, mocked harness, fixtures)
+  dev/       headless validation kit (compile checks, mocked harness, fixtures,
+             and the screenshot capture)
   test/      logic-layer unit tests (addon-free runner)
 server/      Node/TypeScript source for the bundled server
 deploy.sh    build the Linux + macOS release artifacts
@@ -275,14 +287,18 @@ cd client
 dev/check.sh source/data/*.gd          # fast GDScript compile/type check
 dev/harness.sh dev/checks/mock_smoke_check.gd   # boot headless against mocks
 test/run.sh                            # logic-layer unit tests
+dev/shots.sh                           # regenerate the screenshots above
 ```
 
 `dev/checks/` holds the behavior checks — the mock smoke test plus focused ones
 for the endpoint cache, project autosave, query history, sidebar filtering, JSON
 tabs, the server-ready gate, the Rocket.Chat model bridge, and the updater.
 `dev/probe.sh` is the exploratory counterpart, for looking at real behavior
-before writing assertions. The scripts invoke `godot` from your `PATH`; override
-with `GODOT=/path/to/godot` if your binary is named or located differently.
+before writing assertions. `dev/shots.sh` boots the same mocked app with a
+window and captures the README's screenshots from it, so they can be refreshed
+at a release rather than staged by hand. The scripts invoke `godot` from your
+`PATH`; override with `GODOT=/path/to/godot` if your binary is named or located
+differently.
 
 For the server:
 

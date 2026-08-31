@@ -1,0 +1,14 @@
+{
+  "user": {
+    "_id": "rocket.cat",
+    "username": "rocket.cat",
+    "name": "Rocket.Cat",
+    "status": "online",
+    "active": true,
+    "type": "bot",
+    "roles": ["bot"],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "emails": [{ "address": "rocket.cat@example.com", "verified": true }]
+  },
+  "success": true
+}
