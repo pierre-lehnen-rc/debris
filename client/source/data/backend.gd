@@ -138,15 +138,33 @@ func rocketchat_call(target: Dictionary, model: String, method: String, args: Ar
 
 ## Inject (or refresh) the Server Models bridge endpoint into the running Rocket.Chat
 ## server named by `target` ({ repoPath, url }). This is the only step that uses the
-## repository path; queries then post to the injected endpoint. Logged as its own action.
-func rocketchat_install(target: Dictionary) -> Dictionary:
-	return await _post("/api/rocketchat/install", {"target": target})
+## repository path; queries then post to the injected endpoint. Logged as its own
+## action. `quiet` marks an injection nobody asked for — the one attempted when a
+## project opens — so a failure is recorded without interrupting with a dialog.
+func rocketchat_install(target: Dictionary, quiet := false) -> Dictionary:
+	return await _post("/api/rocketchat/install", {"target": target}, quiet)
+
+
+## Re-read the model list from the bridge already injected into `target`. Injects
+## nothing: a reload that installed on the way would never be able to report the
+## endpoint as missing. Fails with the server's "isn't injected" message when
+## there's nothing there to read.
+func rocketchat_models(target: Dictionary) -> Dictionary:
+	return await _post("/api/rocketchat/models", {"target": target})
 
 
 ## List a model's public methods (from @rocket.chat/model-typings). Metadata for the
 ## sidebar tree; only the target's repository path is used (no running server needed).
 func rocketchat_model_methods(target: Dictionary, model: String) -> Dictionary:
 	return await _post("/api/rocketchat/model-methods", {"target": target, "model": model})
+
+
+## The state of the Server Models bridge for `target` ({ repoPath, url }): whether
+## Rocket.Chat is up, and whether the injected endpoint answers. Asked live, and
+## it injects nothing — a status check that installed the thing it reports on
+## would never be able to say "not injected".
+func rocketchat_status(target: Dictionary) -> Dictionary:
+	return await _post("/api/rocketchat/status", {"target": target})
 
 
 ## Convert a stored connection config (name / "host:port" / optional auth) into
@@ -178,10 +196,10 @@ static func to_spec(conn: Dictionary) -> Dictionary:
 
 
 # Internals -------------------------------------------------------------------
-func _post(path: String, body: Dictionary) -> Dictionary:
+func _post(path: String, body: Dictionary, quiet := false) -> Dictionary:
 	var started := Time.get_ticks_msec()
 	var outcome := await _do_post(path, body)
-	_log(path, body, outcome, Time.get_ticks_msec() - started)
+	_log(path, body, outcome, Time.get_ticks_msec() - started, quiet)
 	return outcome
 
 
@@ -245,16 +263,18 @@ func _transport_error(outcome: int) -> String:
 ## Record a completed MongoDB action in the shared ActivityLog. The action is the
 ## endpoint name (path minus the "/api/" prefix); the target is the collection
 ## (or database) the body addressed.
-func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
-	# Listing a model's methods is metadata for the sidebar tree, not an action.
-	if path == "/api/rocketchat/model-methods":
+func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int, quiet := false) -> void:
+	# Listing a model's methods is metadata for the sidebar tree, not an action;
+	# a bridge status check is the panel watching on its own. Neither is something
+	# the user did, and logging them would bury what they did do.
+	if path == "/api/rocketchat/model-methods" or path == "/api/rocketchat/status":
 		return
 	# Rocket.Chat model-bridge calls aren't Mongo actions; label them accordingly.
 	if path == "/api/rocketchat/call":
 		_log_rocketchat_call(body, outcome, ms)
 		return
 	if path == "/api/rocketchat/install":
-		_log_rocketchat_install(body, outcome, ms)
+		_log_rocketchat_install(body, outcome, ms, quiet)
 		return
 	var target: String = body.get("database", "")
 	if body.has("collection"):
@@ -268,6 +288,7 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int) -> void:
 		"result": _summarize(outcome.get("data")) if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
+		"quiet": quiet,
 	})
 
 
@@ -296,7 +317,7 @@ func _log_rocketchat_call(body: Dictionary, outcome: Dictionary, ms: int) -> voi
 
 ## Record a Server Models bridge injection (startup / repository-path change /
 ## manual refresh): the repository path is the target, since injection is what uses it.
-func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int) -> void:
+func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int, quiet: bool) -> void:
 	var target: Dictionary = body.get("target", {})
 	ActivityLog.record({
 		"source": "rocketchat",
@@ -307,6 +328,7 @@ func _log_rocketchat_install(body: Dictionary, outcome: Dictionary, ms: int) -> 
 		"result": "installed" if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": ms,
+		"quiet": quiet,
 	})
 
 

@@ -64,13 +64,29 @@ export const registerRocketChatRoutes: FastifyPluginAsync<RcRoutesOptions> = asy
     },
   );
 
-  // Report whether this server has installed the bridge for a target yet.
+  // Re-read the model list from the already-injected bridge. Installs nothing —
+  // reloading the list and injecting the endpoint are separate actions, and a
+  // reload that silently injected could never report the endpoint as missing.
+  app.post<{ Body: { target: RcTarget } }>(
+    "/rocketchat/models",
+    { schema: { body: withTarget() } },
+    async (req) => {
+      const bridge = registry.acquire(req.body.target);
+      return { ok: true, url: bridge.url, models: await bridge.listModels() };
+    },
+  );
+
+  // Report the state of the bridge for a target: whether Rocket.Chat is up and
+  // whether the injected endpoint is answering, asked live rather than read off
+  // this process's memory of having injected — RC drops the handler when it
+  // restarts, so `installed` alone would claim a bridge that isn't there.
   app.post<{ Body: { target: RcTarget } }>(
     "/rocketchat/status",
     { schema: { body: withTarget() } },
     async (req) => {
       const bridge = registry.acquire(req.body.target);
-      return { ok: true, installed: bridge.isInstalled, url: bridge.url };
+      const status = await bridge.probe();
+      return { ok: true, url: bridge.url, installed: bridge.isInstalled, ...status };
     },
   );
 

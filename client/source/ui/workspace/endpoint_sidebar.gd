@@ -33,7 +33,11 @@ enum Action { OPEN, COPY_PATH }
 @onready var _title: Label = %Title
 @onready var _tree: Tree = %Tree
 @onready var _context_menu: PopupMenu = %ContextMenu
-@onready var _footer: WorkspaceStatusBar = %Footer
+# Typed as PanelContainer, not by the widget's class name: naming it would make
+# this script compile-time-dependent on a script that reaches for an autoload,
+# which the isolated-compile checks (dev/check.sh, `-s` harness scripts) can't
+# resolve. See client/dev/README.md.
+@onready var _footer: PanelContainer = %Footer
 
 var _workspace: Dictionary = {}
 var _endpoints: Array = []

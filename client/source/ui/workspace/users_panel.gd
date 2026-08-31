@@ -16,7 +16,11 @@ const SESSION_USER_DIALOG := preload("res://source/ui/dialogs/session_user_dialo
 @onready var _title: Label = %Title
 @onready var _list: VBoxContainer = %List
 @onready var _empty: Label = %Empty
-@onready var _footer: WorkspaceStatusBar = %Footer
+# Typed as PanelContainer, not by the widget's class name: naming it would make
+# this script compile-time-dependent on a script that reaches for an autoload,
+# which the isolated-compile checks (dev/check.sh, `-s` harness scripts) can't
+# resolve. See client/dev/README.md.
+@onready var _footer: PanelContainer = %Footer
 
 var _session: WorkspaceSession = null
 var _dialog: SessionUserDialog = null

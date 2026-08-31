@@ -169,6 +169,17 @@ it. The endpoint catalog still loads by itself when a project opens; if the
 workspace is down that goes to the activity log without a popup, and the list
 falls back to the cached or built-in catalog.
 
+**Server Models** carries a second line below that one for the injected bridge:
+whether the models endpoint is answering and how many models it reports, with
+**Inject** to run it into the running server. The two are separate facts — the
+workspace can be up with nothing injected — and the bridge is asked about live,
+since Rocket.Chat drops the handler when it restarts. The header's ⟳ only
+re-reads the model list from the endpoint that's already there; injecting runs
+`meteor shell` and is its own button. Opening a project still tries the
+injection, but quietly: nothing is running yet is the ordinary state of a project
+you just opened, so it goes to the activity log and the panel rather than a
+dialog.
+
 Useful environment overrides:
 
 | Variable                | Purpose                                              |

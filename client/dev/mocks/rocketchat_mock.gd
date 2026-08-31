@@ -20,7 +20,15 @@ var _cache := {}
 
 
 ## Answer a RocketChat request. `method` is an HTTPClient.METHOD_* constant.
-func respond(_method: int, path: String, _query: Dictionary, _body: Dictionary) -> Dictionary:
+## Put "offline" in a workspace's URL to make every call to it fail, the way an
+## unreachable server does — the counterpart of the backend mock's "force-error"
+## host, and how the checks exercise a workspace that isn't there.
+func respond(
+	workspace: Dictionary, _method: int, path: String, _query: Dictionary, _body: Dictionary
+) -> Dictionary:
+	var url := String(workspace.get("url", ""))
+	if url.contains("offline"):
+		return {"ok": false, "data": null, "error": "Cannot reach %s" % url, "status": 0}
 	if path == "/api/docs/json":
 		return _ok(_load("openapi.json"))
 	if path == "/api/info":

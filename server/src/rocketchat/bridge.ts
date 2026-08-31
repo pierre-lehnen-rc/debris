@@ -38,6 +38,18 @@ const DEFAULT_URL = "http://localhost:3000";
 const BRIDGE_PATH = "/debris/call";
 
 /** One model exposed by @rocket.chat/models, and the collection it reads. */
+/** What {@link RcBridge.probe} found when it asked the server. */
+export interface RcBridgeStatus {
+  /** Whether Rocket.Chat itself answered at all. */
+  reachable: boolean;
+  /** Whether the endpoint answered as our injected handler. */
+  injected: boolean;
+  /** Models the bridge reported, when it answered. */
+  models: number;
+  /** Why it didn't, when something went wrong. */
+  error: string;
+}
+
 export interface RcModelInfo {
   name: string;
   collection: string;
@@ -302,6 +314,45 @@ export class RcBridge {
     return Array.isArray(result) ? (result as RcModelInfo[]) : [];
   }
 
+  /**
+   * Report whether the injected endpoint is answering right now, installing
+   * nothing. Distinct from {@link isInstalled}, which is only this process's
+   * memory of having injected once: Rocket.Chat drops the in-memory handler when
+   * it restarts, and another Debris server can supersede the token, so a status
+   * panel has to ask the server rather than trust a flag.
+   *
+   * Never throws — every way this can go wrong is a state worth showing.
+   */
+  async probe(): Promise<RcBridgeStatus> {
+    let attempt: PostResult;
+    try {
+      attempt = await this.post({ op: "listModels" });
+    } catch (e) {
+      // post() throws only when Rocket.Chat itself couldn't be reached.
+      return {
+        reachable: false,
+        injected: false,
+        models: 0,
+        error: (e as Error).message,
+      };
+    }
+    switch (attempt.kind) {
+      case "ok":
+        return {
+          reachable: true,
+          injected: true,
+          models: Array.isArray(attempt.result) ? attempt.result.length : 0,
+          error: "",
+        };
+      // The server answered, but not as our handler: never injected, dropped on
+      // restart, or another bridge's token now holds the path.
+      case "reinstall":
+        return { reachable: true, injected: false, models: 0, error: "" };
+      case "error":
+        return { reachable: true, injected: false, models: 0, error: attempt.message };
+    }
+  }
+
   /** Map a post outcome to a value or a thrown error (the "not installed" 503). */
   private unwrap(attempt: PostResult): unknown {
     switch (attempt.kind) {
@@ -312,7 +363,7 @@ export class RcBridge {
       case "reinstall":
         throw new RcBridgeError(
           `Server Models endpoint isn't injected on ${this.target.url}. `
-            + `Use the ⟳ button in the Server Models panel to inject it.`,
+            + `Use Inject in the Server Models footer to inject it.`,
           503,
         );
     }

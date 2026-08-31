@@ -209,7 +209,7 @@ func _do_request(
 	workspace: Dictionary, method: int, path: String, query: Dictionary, body: Dictionary
 ) -> Dictionary:
 	if _mock != null:
-		return _mock.respond(method, path, query, body)
+		return _mock.respond(workspace, method, path, query, body)
 
 	var base := _base_url(workspace)
 	if base.is_empty():

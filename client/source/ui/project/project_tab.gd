@@ -300,7 +300,7 @@ func update_rocketchat(config: Dictionary) -> void:
 	# Reinject the Server Models bridge only when the repository path actually
 	# changed (a new URL reaches the same injected endpoint, so it needs no reinject).
 	if _doc.rocketchat_repo_path() != old_repo and not _doc.rocketchat_repo_path().is_empty():
-		_install_models_bridge()
+		_install_models_bridge(true)
 
 
 # View building ---------------------------------------------------------------
@@ -366,12 +366,16 @@ func _build_models_view() -> void:
 	_add_view(VIEW_MODELS, _models_sidebar)
 	_models_sidebar.function_activated.connect(_on_model_function_activated)
 	_models_sidebar.refresh_requested.connect(_on_models_refresh)
+	_models_sidebar.inject_requested.connect(_on_models_inject)
 	_models_sidebar.functions_requested.connect(_on_model_functions_requested)
 	_models_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
 	_models_sidebar.set_workspace(_doc.rocketchat_config())
 	_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
 	# Inject the bridge on startup so the endpoint is ready before the first query.
-	_install_models_bridge()
+	# Quietly: opening a project isn't a request to inject, and a Rocket.Chat that
+	# isn't running is the ordinary state of a project you haven't started yet. The
+	# failure is logged, and the footer's bridge panel says so in place.
+	_install_models_bridge(true)
 
 
 ## Create the shared Rocket.Chat session once, binding it to the center.
@@ -514,9 +518,35 @@ func _on_model_function_activated(
 	status_changed.emit("Opened %s.%s" % [model, method])
 
 
-## Manual "Refresh" on the Server Models sidebar: reinstall the bridge endpoint.
+## The header's ⟳: re-read the model list from the bridge that's already there,
+## without running `meteor shell` again. Fails with the server's "isn't injected"
+## message when nothing is — which is the honest answer, and points at Inject.
+## The user pressed this, so a failure is theirs to see.
 func _on_models_refresh() -> void:
-	_install_models_bridge()
+	if not has_rocketchat() or _doc.rocketchat_repo_path().is_empty():
+		return
+	var target := {"repoPath": _doc.rocketchat_repo_path(), "url": _rocketchat_url()}
+	status_changed.emit("Reloading Server Models…")
+	# Everything the console does goes through the Debris server, including this.
+	await ServerManager.ensure_connected()
+	var result: Dictionary = await Backend.rocketchat_models(target)
+	if _models_sidebar != null:
+		_models_sidebar.refresh_bridge_status()
+	if not result.get("ok", false):
+		status_changed.emit("Couldn't reload the models: %s" % result.get("error", "unknown error"))
+		return
+	var data: Dictionary = result.get("data", {}) if result.get("data") is Dictionary else {}
+	var models: Array = data.get("models", [])
+	if _models_sidebar != null:
+		_models_sidebar.set_models(models)
+	_center.bind_rocketchat_models(models)
+	status_changed.emit("Reloaded %d Server Models" % models.size())
+
+
+## The footer's Inject button: run the bridge into the server. Explicitly asked
+## for, so a failure is worth a dialog.
+func _on_models_inject() -> void:
+	_install_models_bridge(false)
 
 
 ## A model was expanded in the sidebar: fetch its methods (from model-typings) and
@@ -540,12 +570,30 @@ func _on_model_functions_requested(model: String) -> void:
 ## Inject (or refresh) the Server Models bridge into the workspace's Rocket.Chat
 ## server. A no-op without a repository path. Its own Activity Log entry is recorded
 ## by Backend. Fire-and-forget: the status line reflects the outcome.
-func _install_models_bridge() -> void:
+##
+## `automatic` marks an injection the app started by itself — opening a project,
+## or a repository path that changed. Those are skipped when the workspace isn't
+## answering, since there is nothing to inject into and `meteor shell` is a slow
+## way to find that out; and their failures are logged without a dialog, since
+## nobody asked. The injection the user asks for, from the footer's Inject button,
+## always runs and always reports.
+func _install_models_bridge(automatic: bool) -> void:
 	if not has_rocketchat() or _doc.rocketchat_repo_path().is_empty():
+		return
+	if automatic and not await _workspace_is_reachable():
+		status_changed.emit("Server Models bridge left alone — %s isn't answering" % _rocketchat_url())
 		return
 	var target := {"repoPath": _doc.rocketchat_repo_path(), "url": _rocketchat_url()}
 	status_changed.emit("Injecting Server Models bridge…")
-	var result: Dictionary = await Backend.rocketchat_install(target)
+	# The injection is run by the Debris server, so it needs one — a project with
+	# only a workspace attached has no other reason to have started one.
+	await ServerManager.ensure_connected()
+	var result: Dictionary = await Backend.rocketchat_install(target, automatic)
+	# Repaint the bridge panel from what the server says now, not from what this
+	# call asked for — an injection that reported success can still have left
+	# nothing answering.
+	if _models_sidebar != null:
+		_models_sidebar.refresh_bridge_status()
 	if result.get("ok", false):
 		# The install response carries the server's models ({ name, collection }) for
 		# the sidebar tree and for typing model results against their collections.
@@ -616,6 +664,14 @@ func persist_state() -> void:
 	var result := WorkspaceStateFile.save(_state, WorkspaceStateFile.path_for(_doc.file_path))
 	if not result.get("ok", false):
 		status_changed.emit("Couldn't save workspace state: %s" % result.get("error", ""))
+
+
+## Whether the project's Rocket.Chat server is answering. The same probe the
+## footer panels make, so on project open this joins the one already in flight
+## rather than adding a request of its own.
+func _workspace_is_reachable() -> bool:
+	var state: Dictionary = await RocketChat.probe(_doc.rocketchat_config())
+	return bool(state.get("running", false))
 
 
 ## The project's Rocket.Chat URL, or "" when no API is attached.

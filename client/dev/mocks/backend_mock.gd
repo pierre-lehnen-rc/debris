@@ -60,6 +60,32 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 					{"name": "Users", "collection": "users"},
 				],
 			})
+		"/api/rocketchat/models":
+			# Re-reading the list from an injected bridge. A target whose repository
+			# path says "not-injected" has nothing to read, as the real server would.
+			if String(body.get("target", {}).get("repoPath", "")).contains("not-injected"):
+				return _err("Server Models endpoint isn't injected. Use Inject in the Server Models footer to inject it.")
+			return _ok({
+				"url": body.get("target", {}).get("url", ""),
+				"models": [
+					{"name": "Messages", "collection": "rocketchat_message"},
+					{"name": "Rooms", "collection": "rocketchat_room"},
+					{"name": "Subscriptions", "collection": "rocketchat_subscription"},
+					{"name": "Users", "collection": "users"},
+				],
+			})
+		"/api/rocketchat/status":
+			# A bridge that is injected and answering — the state the console needs.
+			# Point the target at "not-injected" to exercise the other branch.
+			var injected: bool = not String(body.get("target", {}).get("repoPath", "")).contains("not-injected")
+			return _ok({
+				"url": body.get("target", {}).get("url", ""),
+				"installed": injected,
+				"reachable": true,
+				"injected": injected,
+				"models": 4 if injected else 0,
+				"error": "",
+			})
 		"/api/rocketchat/model-methods":
 			return _ok({
 				"model": body.get("model", ""),

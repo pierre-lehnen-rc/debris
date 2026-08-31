@@ -17,8 +17,14 @@ extends PanelContainer
 ## model reads, so the query's results can be typed against the database schema;
 ## `signature` is the method's declared parameter list, shown in the query tab.
 signal function_activated(model: String, method: String, collection: String, signature: String)
-## Asks the host to (re)inject the Server Models bridge into the workspace's server.
+## The header's ⟳ was pressed — the host should re-read the model list from the
+## bridge already injected into the workspace's server.
 signal refresh_requested()
+## The footer's Inject button was pressed — the host should run the injection.
+## Kept apart from refresh_requested because they cost very different things:
+## injecting runs `meteor shell` against the local checkout and takes seconds,
+## while reloading just re-reads a list from an endpoint that's already there.
+signal inject_requested()
 ## Asks the host to open the workspace editor (to set the server URL / repo path).
 signal edit_requested()
 ## A model was expanded for the first time — the host should load its methods and
@@ -57,7 +63,12 @@ const GROUP_OTHERS := "others"
 @onready var _tree: Tree = %Tree
 @onready var _msg_wrap: MarginContainer = %MsgWrap
 @onready var _desc: Label = %Desc
-@onready var _footer: WorkspaceStatusBar = %Footer
+# Typed as PanelContainer, not by the widget's class name: naming it would make
+# this script compile-time-dependent on a script that reaches for an autoload,
+# which the isolated-compile checks (dev/check.sh, `-s` harness scripts) can't
+# resolve. See client/dev/README.md.
+@onready var _footer: PanelContainer = %Footer
+@onready var _bridge_footer: PanelContainer = %BridgeFooter
 
 ## Whether the workspace has a repository path; drives message-vs-tree and buttons.
 var _configured := true
@@ -86,15 +97,27 @@ func _ready() -> void:
 	_tree.item_activated.connect(_on_item_activated)
 	_tree.button_clicked.connect(_on_tree_button_clicked)
 	_tree.item_collapsed.connect(_on_item_collapsed)
+	_bridge_footer.inject_requested.connect(func() -> void: inject_requested.emit())
 	_render()
 
 
-## Point the footer's workspace panel at the project's workspace. The models
-## console runs its calls against that same Rocket.Chat server, so whether it is
-## up belongs here as much as it does under Endpoints. Call once the node is in
-## the tree (the footer is an @onready child).
+## Point the two footer panels at the project's workspace: the upper one at the
+## Rocket.Chat server (the models console runs its calls against that same server,
+## so whether it is up belongs here as much as under Endpoints), the lower one at
+## the bridge injected into it. Call once the node is in the tree (both footers
+## are @onready children).
 func set_workspace(workspace: Dictionary) -> void:
 	_footer.configure(workspace)
+	_bridge_footer.configure(
+		String(workspace.get("repo_path", "")), String(workspace.get("url", ""))
+	)
+
+
+## Re-check the bridge and repaint its panel. The host calls this once an
+## injection it ran has finished, so the line reflects what actually happened
+## rather than what was asked for.
+func refresh_bridge_status() -> void:
+	_bridge_footer.refresh()
 
 
 ## Set whether the workspace has a Rocket.Chat repository path configured. Safe to
