@@ -18,6 +18,8 @@ extends Node
 ##     result: String,   # human summary of the payload ("28 results", …)
 ##     error: String,    # error message when ok is false, else ""
 ##     ms: int,          # wall-clock duration in milliseconds
+##     quiet: bool,      # a background side effect of opening a project: logged
+##                       # like anything else, but a failure doesn't pop a dialog
 ##   }
 
 ## Emitted whenever a new entry is recorded, so open log tabs can append live.
@@ -43,6 +45,7 @@ func record(entry: Dictionary) -> void:
 		"result": entry.get("result", ""),
 		"error": entry.get("error", ""),
 		"ms": entry.get("ms", 0),
+		"quiet": entry.get("quiet", false),
 	}
 	_entries.append(stamped)
 	if _entries.size() > MAX_ENTRIES:

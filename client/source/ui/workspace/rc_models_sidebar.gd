@@ -57,6 +57,7 @@ const GROUP_OTHERS := "others"
 @onready var _tree: Tree = %Tree
 @onready var _msg_wrap: MarginContainer = %MsgWrap
 @onready var _desc: Label = %Desc
+@onready var _footer: WorkspaceStatusBar = %Footer
 
 ## Whether the workspace has a repository path; drives message-vs-tree and buttons.
 var _configured := true
@@ -86,6 +87,14 @@ func _ready() -> void:
 	_tree.button_clicked.connect(_on_tree_button_clicked)
 	_tree.item_collapsed.connect(_on_item_collapsed)
 	_render()
+
+
+## Point the footer's workspace panel at the project's workspace. The models
+## console runs its calls against that same Rocket.Chat server, so whether it is
+## up belongs here as much as it does under Endpoints. Call once the node is in
+## the tree (the footer is an @onready child).
+func set_workspace(workspace: Dictionary) -> void:
+	_footer.configure(workspace)
 
 
 ## Set whether the workspace has a Rocket.Chat repository path configured. Safe to

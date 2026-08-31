@@ -23,6 +23,10 @@ var _cache := {}
 func respond(_method: int, path: String, _query: Dictionary, _body: Dictionary) -> Dictionary:
 	if path == "/api/docs/json":
 		return _ok(_load("openapi.json"))
+	if path == "/api/info":
+		# What an unauthenticated caller gets from a real workspace: the version,
+		# and nothing else.
+		return _ok({"version": "7.4.0", "success": true})
 	if path == "/api/v1/login":
 		# Shape mirrors Rocket.Chat: { status, data: { authToken, userId, me } }.
 		return _ok({

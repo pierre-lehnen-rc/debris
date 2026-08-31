@@ -33,6 +33,7 @@ enum Action { OPEN, COPY_PATH }
 @onready var _title: Label = %Title
 @onready var _tree: Tree = %Tree
 @onready var _context_menu: PopupMenu = %ContextMenu
+@onready var _footer: WorkspaceStatusBar = %Footer
 
 var _workspace: Dictionary = {}
 var _endpoints: Array = []
@@ -62,6 +63,9 @@ func set_cache(endpoint_list: Array) -> void:
 func configure(workspace: Dictionary) -> void:
 	_workspace = workspace
 	if is_node_ready():
+		# The footer watches the same workspace, on its own request — the endpoint
+		# list can come from cache while the workspace itself is down.
+		_footer.configure(workspace)
 		_load()
 
 
@@ -105,9 +109,13 @@ func _load() -> void:
 		_render_message("(loading…)")
 	status_changed.emit("Loading endpoints from %s…" % _workspace.get("url", ""))
 
-	# 2. Refresh from the live spec.
+	# 2. Refresh from the live spec. Logged quietly: nobody asked for this fetch —
+	#    it rides along with opening a project — and a workspace that's down is
+	#    already handled below by falling back to the cache or the built-in
+	#    catalog, and said out loud in the status line. The footer panel reports
+	#    the workspace itself.
 	_loading = true
-	var result: Dictionary = await RocketChat.fetch_openapi(_workspace)
+	var result: Dictionary = await RocketChat.fetch_openapi(_workspace, true)
 	_loading = false
 
 	if result.get("ok", false) and result.get("data") is Dictionary:

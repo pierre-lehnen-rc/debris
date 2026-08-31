@@ -295,6 +295,7 @@ func update_rocketchat(config: Dictionary) -> void:
 	if _users_panel != null:
 		_users_panel.configure(_session)
 	if _models_sidebar != null:
+		_models_sidebar.set_workspace(_doc.rocketchat_config())
 		_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
 	# Reinject the Server Models bridge only when the repository path actually
 	# changed (a new URL reaches the same injected endpoint, so it needs no reinject).
@@ -367,6 +368,7 @@ func _build_models_view() -> void:
 	_models_sidebar.refresh_requested.connect(_on_models_refresh)
 	_models_sidebar.functions_requested.connect(_on_model_functions_requested)
 	_models_sidebar.edit_requested.connect(func() -> void: edit_source_requested.emit("api"))
+	_models_sidebar.set_workspace(_doc.rocketchat_config())
 	_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
 	# Inject the bridge on startup so the endpoint is ready before the first query.
 	_install_models_bridge()

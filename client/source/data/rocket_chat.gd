@@ -12,6 +12,21 @@ extends Node
 const REQUEST_TIMEOUT_SECONDS := 20.0
 const OPENAPI_PATH := "/api/docs/json"
 const LOGIN_PATH := "/api/v1/login"
+## Public, unauthenticated: answers with the server's version. Used to see whether
+## a workspace is up at all.
+const INFO_PATH := "/api/info"
+
+## Emitted when a probe result lands, carrying the workspace URL it was about and
+## the state (see probe). A project shows this same line under Endpoints, Users
+## and Server Models, so they all listen and move together — re-checking from any
+## one of them repaints the rest. Keyed by URL because separate project tabs watch
+## separate workspaces; match it with workspace_url().
+signal workspace_probed(url: String, state: Dictionary)
+
+## Probes in flight, keyed by workspace URL. Opening a project configures all
+## three of its workspace views in the same frame and each asks; they share one
+## request rather than making three identical ones.
+var _probes: Dictionary = {}
 
 ## When set, requests are answered from local fixtures instead of the network.
 ## Auto-enabled under the headless validation runner (DEBRIS_HEADLESS); the dev
@@ -26,8 +41,85 @@ func _ready() -> void:
 
 # Public API ------------------------------------------------------------------
 ## Fetch the workspace's OpenAPI document (the source of the endpoint catalog).
-func fetch_openapi(workspace: Dictionary) -> Dictionary:
-	return await _request(workspace, HTTPClient.METHOD_GET, OPENAPI_PATH, {}, {})
+## `quiet` marks the call as a background side effect of opening a project rather
+## than something the user asked for: still recorded in the Activity Log, but a
+## failure won't interrupt them with an error popup.
+func fetch_openapi(workspace: Dictionary, quiet := false) -> Dictionary:
+	return await _request(workspace, HTTPClient.METHOD_GET, OPENAPI_PATH, {}, {}, quiet)
+
+
+## Probe the workspace: GET /api/info, which needs no auth, purely to see whether
+## the server is answering. Returns { running, version, url, error } — `running`
+## is whether it answered at all, `version` what it reported (empty on a server
+## that withholds it), `error` why it didn't when it didn't.
+##
+## Deliberately not recorded in the Activity Log: this is a status check the UI
+## runs for itself on a timer of the user's choosing, not an action they took —
+## logging it would bury their real requests and pop dialogs for a dead workspace
+## they can already see is dead.
+##
+## The result is also broadcast on workspace_probed, so every panel showing this
+## workspace repaints from one check; simultaneous asks share a single request.
+func probe(workspace: Dictionary) -> Dictionary:
+	var url := workspace_url(workspace)
+	# One in flight for this workspace already: take its answer rather than asking
+	# the same question again.
+	if _probes.has(url):
+		return await _joined_probe(url)
+	_probes[url] = true
+	var state := await _run_probe(workspace, url)
+	_probes.erase(url)
+	workspace_probed.emit(url, state)
+	return state
+
+
+## The workspace's base URL, trailing slash removed — the form probe results and
+## workspace_probed are keyed by. Listeners use it to tell whether a broadcast is
+## about the workspace they're showing.
+func workspace_url(workspace: Dictionary) -> String:
+	return _base_url(workspace)
+
+
+## Wait for the probe already running against `url` and take its answer. The
+## signal carries every workspace, so results meant for others are skipped.
+func _joined_probe(url: String) -> Dictionary:
+	var state: Dictionary = {}
+	while true:
+		var probed: Array = await workspace_probed
+		if String(probed[0]) == url:
+			state = probed[1]
+			break
+	return state
+
+
+## Ask the workspace, and shape the answer. See probe() for the contract.
+func _run_probe(workspace: Dictionary, url: String) -> Dictionary:
+	var state := {"running": false, "version": "", "url": url, "error": ""}
+	if url.is_empty():
+		state["error"] = "Workspace has no URL"
+		return state
+	var result := await _do_request(workspace, HTTPClient.METHOD_GET, INFO_PATH, {}, {})
+	if not result.get("ok", false):
+		state["error"] = result.get("error", "")
+		return state
+	state["running"] = true
+	state["version"] = _version_from(result.get("data"))
+	return state
+
+
+## The version out of an /api/info payload. Answered flat ({ version }) to an
+## anonymous caller; an authenticated one gets the whole build under { info }.
+## Neither is guaranteed — a workspace may withhold it, and "" reads as unknown.
+static func _version_from(data: Variant) -> String:
+	if not (data is Dictionary):
+		return ""
+	var payload: Dictionary = data
+	if payload.get("version") is String:
+		return payload["version"]
+	var info: Variant = payload.get("info")
+	if info is Dictionary and (info as Dictionary).get("version") is String:
+		return (info as Dictionary)["version"]
+	return ""
 
 
 ## Exchange a username/email + password for a temporary access token via the
@@ -74,7 +166,12 @@ func request(
 
 # Internals -------------------------------------------------------------------
 func _request(
-	workspace: Dictionary, method: int, path: String, query: Dictionary, body: Dictionary
+	workspace: Dictionary,
+	method: int,
+	path: String,
+	query: Dictionary,
+	body: Dictionary,
+	quiet := false,
 ) -> Dictionary:
 	var started := Time.get_ticks_msec()
 	var outcome := await _do_request(workspace, method, path, query, body)
@@ -92,6 +189,7 @@ func _request(
 		"result": "HTTP %d" % outcome.get("status", 0) if outcome.get("ok", false) else "",
 		"error": outcome.get("error", ""),
 		"ms": Time.get_ticks_msec() - started,
+		"quiet": quiet,
 	})
 	return outcome
 

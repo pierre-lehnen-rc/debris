@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://source/ui/workspace/rc_models_sidebar.gd" id="1_rcs0"]
 [ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="2_filter"]
+[ext_resource type="PackedScene" path="res://source/ui/widgets/workspace_status_bar.tscn" id="3_wsbar"]
 
 [node name="RcModelsSidebar" type="PanelContainer"]
 script = ExtResource("1_rcs0")
@@ -72,3 +73,7 @@ layout_mode = 2
 size_flags_vertical = 0
 text = "No Rocket.Chat repository configured."
 autowrap_mode = 3
+
+[node name="Footer" parent="VBox" instance=ExtResource("3_wsbar")]
+unique_name_in_owner = true
+layout_mode = 2

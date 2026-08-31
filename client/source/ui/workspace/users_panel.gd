@@ -16,6 +16,7 @@ const SESSION_USER_DIALOG := preload("res://source/ui/dialogs/session_user_dialo
 @onready var _title: Label = %Title
 @onready var _list: VBoxContainer = %List
 @onready var _empty: Label = %Empty
+@onready var _footer: WorkspaceStatusBar = %Footer
 
 var _session: WorkspaceSession = null
 var _dialog: SessionUserDialog = null
@@ -27,6 +28,12 @@ func _ready() -> void:
 
 func configure(session: WorkspaceSession) -> void:
 	_session = session
+	if is_node_ready():
+		# The users listed here belong to this workspace, so the footer reports
+		# whether it's up — logging in against a workspace that's down is the
+		# confusing case this answers. Set before the early return below: a
+		# re-configure carries a session that may point at a different URL.
+		_footer.configure(session.workspace)
 	if _session.changed.is_connected(_render):
 		return
 	_session.changed.connect(_render)

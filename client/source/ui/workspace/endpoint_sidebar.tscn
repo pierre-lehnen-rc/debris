@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://source/ui/workspace/endpoint_sidebar.gd" id="1_epside"]
 [ext_resource type="Theme" path="res://source/ui/theme/app_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://source/ui/widgets/filter_field.gd" id="3_filter"]
+[ext_resource type="PackedScene" path="res://source/ui/widgets/workspace_status_bar.tscn" id="4_wsbar"]
 
 [node name="EndpointSidebar" type="PanelContainer"]
 script = ExtResource("1_epside")
@@ -49,6 +50,10 @@ size_flags_vertical = 3
 allow_rmb_select = true
 hide_root = true
 select_mode = 1
+
+[node name="Footer" parent="Box" instance=ExtResource("4_wsbar")]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="ContextMenu" type="PopupMenu" parent="."]
 unique_name_in_owner = true

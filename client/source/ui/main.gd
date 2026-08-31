@@ -709,7 +709,11 @@ func _restore_open_projects() -> void:
 ## A logged action failed — surface a small error popup. The user can dismiss it
 ## or open the activity log from there; we never open the log on our own.
 func _on_activity_log_entry(entry: Dictionary) -> void:
-	if not entry.get("ok", false):
+	# Quiet entries are background side effects of opening a project — nobody
+	# asked for them, the caller already copes with the failure and says so in the
+	# status line, and a dialog on every project open would be noise. They're still
+	# recorded, so the Activity Log has the full story.
+	if not entry.get("ok", false) and not entry.get("quiet", false):
 		_error_dialog.show_error(entry)
 
 

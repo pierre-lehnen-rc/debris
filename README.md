@@ -161,6 +161,14 @@ sends the same signal closing the app does, so a server the app launched stops
 itself once nothing is connected; **Stop** is how you end one you started by
 hand.
 
+The **Endpoints**, **Users** and **Server Models** views carry the matching line
+for the project's Rocket.Chat workspace — whether it's answering, and which
+version — but read-only: a workspace runs wherever it runs, so there's only a
+refresh to re-check it. All three act on that one server, so all three report on
+it. The endpoint catalog still loads by itself when a project opens; if the
+workspace is down that goes to the activity log without a popup, and the list
+falls back to the cached or built-in catalog.
+
 Useful environment overrides:
 
 | Variable                | Purpose                                              |
