@@ -23,6 +23,9 @@ signal sort_requested(field: String, direction: int)
 ## Bubbled up from a sub-view's "View JSON in New Tab" / "Unknown Type › JSON"
 ## action, asking the owner to open a new JSON tab seeded with `text`.
 signal open_json_requested(text: String)
+## Bubbled up from the Table view when a column title is right-clicked in server-log
+## mode: the owning LogsTab opens its Columns filter at `at_position` (screen coords).
+signal log_column_menu_requested(at_position: Vector2)
 
 enum ViewMode { TREE, TABLE, TEXT }
 
@@ -75,6 +78,10 @@ func _ready() -> void:
 	# rect in an exported binary (.scn), which collapsed the views to a tiny box.
 	for view in [_tree_view, _table_view, _text_view] as Array[Control]:
 		view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Relay the Table's server-log column-title right-click up to the owning tab.
+	_table_view.log_column_menu_requested.connect(
+		func(at_position: Vector2) -> void: log_column_menu_requested.emit(at_position)
+	)
 	_set_mode(ViewMode.TREE)
 	_update_pager()
 
@@ -152,6 +159,22 @@ func set_log_mode(enabled: bool) -> void:
 	_table_view.set_log_mode(enabled)
 
 
+## Render as server-log entries: the tree's top-level rows show index/time/level/name
+## and msg (or dynamic attributes), and the table groups common fields into columns
+## with the per-log inline attributes in one "(other)" JSON column. Read-only.
+func set_server_log_mode(enabled: bool) -> void:
+	_tree_view.set_server_log_mode(enabled)
+	_table_view.set_server_log_mode(enabled)
+
+
+## Set which attributes the server-log Table shows (the Columns filter's selection).
+## Re-renders if the Table is the current view.
+func set_server_log_columns(selection: Dictionary) -> void:
+	_table_view.set_server_log_columns(selection)
+	if _mode == ViewMode.TABLE:
+		_rebuild()
+
+
 ## Enable the cross-query search actions on the tree/table views. Set by the
 ## workspace center on an endpoint results view when the project has a DB.
 func set_cross_query_enabled(enabled: bool) -> void:
@@ -209,6 +232,30 @@ func show_page(documents: Array) -> void:
 	_update_count()
 	_update_pager()
 	_rebuild()
+
+
+## Cap on the rows a live log view retains, so a long tail can't grow without bound.
+const LOG_ROW_CAP := 5000
+
+
+## Add newly-arrived log documents (newest first) to the top. In the Tree view the
+## rows are inserted in place — existing rows, their expanded state, and the
+## selection are left untouched — so the tail can flow while the user reads. The
+## Table/Text views are rebuilt (they carry no per-row expansion). Server-log only.
+func add_log_documents(new_docs: Array) -> void:
+	if new_docs.is_empty():
+		return
+	_documents = new_docs + _documents
+	var trimmed := _documents.size() > LOG_ROW_CAP
+	if trimmed:
+		_documents = _documents.slice(0, LOG_ROW_CAP)
+	_update_count()
+	if _mode == ViewMode.TREE and _tree_view.get_root() != null:
+		_tree_view.insert_server_log_rows(new_docs)
+		if trimmed:
+			_tree_view.trim_server_log_rows(LOG_ROW_CAP)
+	else:
+		_rebuild()
 
 
 ## Rows currently shown: the raw page's row count in raw mode, else the document

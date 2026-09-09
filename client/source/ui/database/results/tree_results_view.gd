@@ -34,6 +34,8 @@ func _ready_view() -> void:
 
 func display(documents: Array, start_index: int) -> void:
 	clear()
+	if _server_log:
+		_setup_server_log_columns()
 	var root := create_item()
 	for i in documents.size():
 		var doc_index := start_index + i
@@ -41,7 +43,9 @@ func display(documents: Array, start_index: int) -> void:
 		_current_doc = doc
 		var item := create_item(root)
 		var label: String = str(doc.get("_id", "(document)"))
-		if _log_mode:
+		if _server_log:
+			_style_server_log_row(item, doc_index, doc)
+		elif _log_mode:
 			_style_log_row(item, doc_index, doc)
 		else:
 			item.set_text(0, "(%d) %s" % [doc_index + 1, label])
@@ -57,7 +61,9 @@ func display(documents: Array, start_index: int) -> void:
 		# Top-level item carries the document index plus name/value for copy actions.
 		item.set_metadata(0, {"doc_index": doc_index, "key": "", "name": label, "value": doc})
 		_add_dict_children(item, doc, "")
-		item.set_collapsed(i != 0)  # expand the first document on the page
+		# Expand the first document on a normal page; keep log rows collapsed — they
+		# read as a flat, scannable list, expanded on demand.
+		item.set_collapsed(_server_log or i != 0)
 
 
 ## Render an endpoint's raw response body verbatim (no array coercion), so the
@@ -150,6 +156,150 @@ func _is_entity_root(value: Variant) -> bool:
 ## Value shows the result (or the error for a failed action), Type shows the
 ## duration, and failures get a red-tinted background across all columns. Nested
 ## field rows keep the default key/value/type rendering.
+## Fields given their own top-level column, so the Message's dynamic-attributes
+## fallback doesn't repeat them. Order matches the SERVER_LOG_COLUMNS layout.
+const SERVER_LOG_KEY_FIELDS := ["time", "level", "name"]
+## The server-log tree's columns, in display order. Each value gets its own column so
+## it can be coloured independently (a single Tree cell can't be multi-coloured). The
+## Message column expands; the rest are fixed, so the tree scrolls horizontally when
+## the pane is narrower than their total. Level sits last so its colour-coded severity
+## reads as a trailing status flag.
+const SERVER_LOG_COLUMNS := [
+	{"title": "Key", "width": 200},
+	{"title": "Time", "width": 230},
+	{"title": "Name", "width": 150},
+	{"title": "Message", "width": 400, "expand": true},
+	{"title": "Level", "width": 80},
+]
+## Column indices into SERVER_LOG_COLUMNS, by role.
+const SERVER_LOG_COL_INDEX := 0
+const SERVER_LOG_COL_TIME := 1
+const SERVER_LOG_COL_NAME := 2
+const SERVER_LOG_COL_MSG := 3
+const SERVER_LOG_COL_LEVEL := 4
+
+
+## Configure the tree for server-log rows: one column per log field (see
+## SERVER_LOG_COLUMNS). Idempotent — called on each display().
+func _setup_server_log_columns() -> void:
+	columns = SERVER_LOG_COLUMNS.size()
+	for c in SERVER_LOG_COLUMNS.size():
+		var spec: Dictionary = SERVER_LOG_COLUMNS[c]
+		set_column_title(c, str(spec["title"]))
+		set_column_custom_minimum_width(c, int(spec["width"]))
+		set_column_expand(c, bool(spec.get("expand", false)))
+		set_column_clip_content(c, true)
+
+
+## Insert newly-arrived log entries (newest first) at the top of the tree in place,
+## leaving every existing row — its expanded state, its selection — untouched, then
+## renumber the index column. Requires the tree to already hold a server-log page.
+func insert_server_log_rows(new_docs: Array) -> void:
+	var root := get_root()
+	if root == null:
+		return
+	for i in new_docs.size():
+		var doc: Dictionary = new_docs[i]
+		_current_doc = doc
+		var item := create_item(root, i)  # index i from the top, keeping new_docs' order
+		_style_server_log_row(item, i, doc)
+		item.set_metadata(0, {"doc_index": i, "key": "", "name": "", "value": doc})
+		_add_dict_children(item, doc, "")
+		item.set_collapsed(true)
+	_renumber_server_log_rows()
+
+
+## Renumber the top-level rows' index column ("(1)" newest, downward). Only the index
+## text changes, so expansion and selection are preserved.
+func _renumber_server_log_rows() -> void:
+	var root := get_root()
+	if root == null:
+		return
+	var index := 0
+	var row := root.get_first_child()
+	while row != null:
+		row.set_text(0, "(%d)" % (index + 1))
+		index += 1
+		row = row.get_next()
+
+
+## Drop rows past `cap` from the bottom (the oldest), keeping the retained tail bounded.
+func trim_server_log_rows(cap: int) -> void:
+	var root := get_root()
+	if root == null:
+		return
+	var rows := root.get_children()
+	for i in range(cap, rows.size()):
+		rows[i].free()
+
+
+## Render a server-log entry's top-level row across its columns: index, time, level
+## (coloured by severity), name, and the message (msg, or a JSON of the dynamic
+## attributes). Nested field rows still expand below. Error/fatal rows are backed.
+func _style_server_log_row(item: TreeItem, doc_index: int, entry: Dictionary) -> void:
+	item.set_text(SERVER_LOG_COL_INDEX, "(%d)" % (doc_index + 1))
+	item.set_custom_color(SERVER_LOG_COL_INDEX, AppTheme.TEXT_DIM)
+	if entry.has("time"):
+		item.set_text(SERVER_LOG_COL_TIME, str(entry["time"]))
+		item.set_custom_color(SERVER_LOG_COL_TIME, AppTheme.TEXT_DIM)
+	if entry.has("name"):
+		item.set_text(SERVER_LOG_COL_NAME, str(entry["name"]))
+		item.set_custom_color(SERVER_LOG_COL_NAME, AppTheme.ACCENT)
+	item.set_text(SERVER_LOG_COL_MSG, server_log_value(entry))
+	item.set_custom_color(SERVER_LOG_COL_MSG, AppTheme.TEXT if entry.has("msg") else AppTheme.TEXT_DIM)
+	var level := _server_log_level(entry)
+	if entry.has("level"):
+		item.set_text(SERVER_LOG_COL_LEVEL, LogEntry.level_label(level))
+		item.set_custom_color(SERVER_LOG_COL_LEVEL, LogEntry.level_color(level))
+
+	if level >= 50:  # error / fatal
+		for c in SERVER_LOG_COLUMNS.size():
+			item.set_custom_bg_color(c, AppTheme.BG_ERROR)
+
+
+## A server-log field row (child of a log entry): the field key in the (wide) Key
+## column and its value under the Message column, nested objects/arrays expanding
+## below. No type column — a log record's fields aren't schema-typed.
+func _add_server_log_field(parent: TreeItem, key: String, value: Variant) -> void:
+	var msg_col := SERVER_LOG_COL_MSG
+	var item := create_item(parent)
+	item.set_text(0, key)
+	item.set_custom_color(0, AppTheme.TEXT)
+	item.set_metadata(0, {"key": key, "name": key, "value": value})
+	if value is Dictionary and _ejson_scalar(value).is_empty():
+		item.set_text(msg_col, "{%d fields}" % value.size())
+		item.set_custom_color(msg_col, AppTheme.TEXT_DIM)
+		for k in value:
+			_add_server_log_field(item, str(k), value[k])
+		item.set_collapsed(true)
+	elif value is Array:
+		item.set_text(msg_col, "[%d elements]" % value.size())
+		item.set_custom_color(msg_col, AppTheme.TEXT_DIM)
+		for i in value.size():
+			_add_server_log_field(item, "[%d]" % i, value[i])
+		item.set_collapsed(true)
+	else:
+		item.set_text(msg_col, _preview(value))
+		item.set_custom_color(msg_col, _value_color(value))
+
+
+## The Message text for a server-log row: the `msg` attribute if present, else a JSON
+## string of the entry's dynamic attributes (everything not in its own column).
+static func server_log_value(entry: Dictionary) -> String:
+	if entry.has("msg"):
+		return str(entry["msg"])
+	var dynamic := entry.duplicate()
+	for field in SERVER_LOG_KEY_FIELDS:
+		dynamic.erase(field)
+	return JSON.stringify(dynamic)
+
+
+## The numeric pino level of an entry, or 0 when it carries none.
+static func _server_log_level(entry: Dictionary) -> int:
+	var value: Variant = entry.get("level")
+	return int(value) if (value is int or value is float) else 0
+
+
 func _style_log_row(item: TreeItem, doc_index: int, entry: Dictionary) -> void:
 	var ok: bool = entry.get("ok", false)
 	var source: String = str(entry.get("source", ""))
@@ -184,6 +334,9 @@ func _add_dict_children(parent: TreeItem, dict: Dictionary, prefix: String) -> v
 
 
 func _add_value_item(parent: TreeItem, key: String, value: Variant, path: String) -> void:
+	if _server_log:
+		_add_server_log_field(parent, key, value)
+		return
 	var item := create_item(parent)
 	item.set_text(0, key)
 	item.set_custom_color(0, AppTheme.TEXT)

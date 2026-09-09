@@ -95,6 +95,15 @@ static func _style_buttons(theme: Theme) -> void:
 	theme.set_color("font_pressed_color", "Button", TEXT_BRIGHT)
 	theme.set_color("font_disabled_color", "Button", TEXT_DIM)
 
+	# MenuButton (multi-select filter dropdowns) mirrors Button; its popup is a
+	# PopupMenu, styled separately.
+	theme.set_stylebox("normal", "MenuButton", _flat(BG_PANEL, 4, 1))
+	theme.set_stylebox("hover", "MenuButton", _flat(BG_HOVER, 4, 1))
+	theme.set_stylebox("pressed", "MenuButton", _flat(BG_PRESSED, 4, 1, ACCENT))
+	theme.set_stylebox("disabled", "MenuButton", _flat(BG_DARK, 4, 1))
+	theme.set_color("font_color", "MenuButton", TEXT)
+	theme.set_color("font_hover_color", "MenuButton", TEXT_BRIGHT)
+
 
 static func _style_tree(theme: Theme) -> void:
 	theme.set_stylebox("panel", "Tree", _flat(BG_DARK, 0))

@@ -159,6 +159,15 @@ func rocketchat_model_methods(target: Dictionary, model: String) -> Dictionary:
 	return await _post("/api/rocketchat/model-methods", {"target": target, "model": model})
 
 
+## Poll the server-log tap installed alongside the Server Models bridge. `since` is
+## the last sequence number seen (0 for the retained buffer); the result's `data`
+## carries `{ seq, error, entries }` — the new raw lines, the high-water `seq` to
+## poll from next, and any tap-side error. Injects nothing (the bridge must already
+## be there). Not logged as an action — it's a poll the log view runs on a timer.
+func rocketchat_logs(target: Dictionary, since := 0) -> Dictionary:
+	return await _post("/api/rocketchat/logs", {"target": target, "since": since})
+
+
 ## The state of the Server Models bridge for `target` ({ repoPath, url }): whether
 ## Rocket.Chat is up, and whether the injected endpoint answers. Asked live, and
 ## it injects nothing — a status check that installed the thing it reports on
@@ -268,6 +277,10 @@ func _log(path: String, body: Dictionary, outcome: Dictionary, ms: int, quiet :=
 	# a bridge status check is the panel watching on its own. Neither is something
 	# the user did, and logging them would bury what they did do.
 	if path == "/api/rocketchat/model-methods" or path == "/api/rocketchat/status":
+		return
+	# The log view polls this on a timer; each poll is the view watching, not an
+	# action the user took, so recording them would bury the actual actions.
+	if path == "/api/rocketchat/logs":
 		return
 	# Rocket.Chat model-bridge calls aren't Mongo actions; label them accordingly.
 	if path == "/api/rocketchat/call":

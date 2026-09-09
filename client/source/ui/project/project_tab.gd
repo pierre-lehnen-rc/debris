@@ -28,6 +28,7 @@ const COLLECTION_SIDEBAR_SCENE := preload("res://source/ui/sidebar/collection_si
 const ENDPOINT_SIDEBAR_SCENE := preload("res://source/ui/workspace/endpoint_sidebar.tscn")
 const USERS_PANEL_SCENE := preload("res://source/ui/workspace/users_panel.tscn")
 const RCMODELS_SIDEBAR_SCENE := preload("res://source/ui/workspace/rc_models_sidebar.tscn")
+const LOG_SOURCE_PANEL_SCRIPT := preload("res://source/ui/workspace/log_source_panel.gd")
 const SERVER_BAR_SCENE := preload("res://source/ui/widgets/server_status_bar.tscn")
 const CENTER_SCENE := preload("res://source/ui/project/workspace_center.tscn")
 
@@ -35,11 +36,13 @@ const ICON_COLLECTIONS := preload("res://source/ui/icons/database.svg")
 const ICON_ENDPOINTS := preload("res://source/ui/icons/api.svg")
 const ICON_USERS := preload("res://source/ui/icons/users.svg")
 const ICON_MODELS := preload("res://source/ui/icons/models.svg")
+const ICON_LOGS := preload("res://source/ui/icons/logs.svg")
 
 const VIEW_COLLECTIONS := "collections"
 const VIEW_ENDPOINTS := "endpoints"
 const VIEW_USERS := "users"
 const VIEW_MODELS := "models"
+const VIEW_LOGS := "logs"
 
 # Default sidebar width matches the old database tab (split_offset 360, 180 floor),
 # which is the width the sidebar reference was taken from.
@@ -69,6 +72,14 @@ var _collection_sidebar: CollectionSidebar = null
 var _endpoint_sidebar: EndpointSidebar = null
 var _users_panel: UsersPanel = null
 var _models_sidebar: RcModelsSidebar = null
+var _logs_panel: LogSourcePanel = null
+# The project's single server-log tail, driven by the logs panel and rendered by any
+# Server Logs tabs. Created with the logs view; a Node child for its poll timer.
+var _log_stream: LogStream = null
+# The project's saved Server-Logs filter sets (in the project file), shared across
+# log tabs — one store per kind.
+var _log_name_sets: SavedSets = null
+var _log_column_sets: SavedSets = null
 # view id -> sidebar Control, so a view selection can show exactly one.
 var _views: Dictionary = {}
 
@@ -189,6 +200,7 @@ func _setup() -> void:
 	if _doc.has_rocketchat():
 		_build_users_view()
 		_build_models_view()
+		_build_logs_view()
 	_refresh_activity()
 	# With an API attached, tab restore waits for the endpoint list (cache or live)
 	# so endpoint tabs can be matched to their definitions; _on_endpoints_loaded
@@ -258,6 +270,7 @@ func attach_rocketchat(config: Dictionary) -> void:
 	_build_endpoints_view()
 	_build_users_view()
 	_build_models_view()
+	_build_logs_view()
 	_refresh_activity(VIEW_ENDPOINTS)
 
 
@@ -297,6 +310,9 @@ func update_rocketchat(config: Dictionary) -> void:
 	if _models_sidebar != null:
 		_models_sidebar.set_workspace(_doc.rocketchat_config())
 		_models_sidebar.set_configured(not _doc.rocketchat_repo_path().is_empty())
+	if _logs_panel != null:
+		_logs_panel.configure_workspace(_doc.rocketchat_config())
+		_logs_panel.set_configured(not _doc.rocketchat_repo_path().is_empty())
 	# Reinject the Server Models bridge only when the repository path actually
 	# changed (a new URL reaches the same injected endpoint, so it needs no reinject).
 	if _doc.rocketchat_repo_path() != old_repo and not _doc.rocketchat_repo_path().is_empty():
@@ -378,6 +394,71 @@ func _build_models_view() -> void:
 	_install_models_bridge(true)
 
 
+## The Server Logs view: the shared tail (LogStream) plus the sidebar panel that
+## drives it. The panel carries the source controls (start/stop) and the same two
+## status footers the Models view has; the lines and per-view filters live in the
+## Server Logs tabs the panel opens. Present whenever an API is attached.
+func _build_logs_view() -> void:
+	_log_stream = LogStream.new()
+	_log_stream.bind_target(_logs_target)
+	# Seed the Names filter from the cache, and cache any newly-seen names so they're
+	# offered next session before a line for one arrives.
+	_log_stream.seed_known_names(_state.cached_log_names(_rocketchat_url()))
+	_log_stream.names_discovered.connect(_on_log_names_discovered)
+	_log_stream.reachability_changed.connect(_on_log_reachability_changed)
+	add_child(_log_stream)
+
+	# The saved filter sets live in the project file; changes auto-save it. Bind before
+	# the stream so a restored/fresh tab's default sets are in place when it binds.
+	_log_name_sets = SavedSets.new()
+	_log_name_sets.setup(_doc, "names")
+	_log_name_sets.changed.connect(_on_log_sets_changed)
+	_log_column_sets = SavedSets.new()
+	_log_column_sets.setup(_doc, "columns")
+	_log_column_sets.changed.connect(_on_log_sets_changed)
+	_center.bind_log_filter_sets(_log_name_sets, _log_column_sets)
+	_center.bind_log_stream(_log_stream)
+
+	_logs_panel = LOG_SOURCE_PANEL_SCRIPT.new()
+	_add_view(VIEW_LOGS, _logs_panel)
+	_logs_panel.bind_stream(_log_stream)
+	_logs_panel.new_tab_requested.connect(func() -> void: _center.open_logs())
+	_logs_panel.inject_requested.connect(_on_models_inject)
+	_logs_panel.configure_workspace(_doc.rocketchat_config())
+	_logs_panel.set_configured(not _doc.rocketchat_repo_path().is_empty())
+
+
+## New logger names appeared in the tail: cache the full set for `url` and persist,
+## so the Names filter offers them next session.
+func _on_log_names_discovered(_new_names: Array) -> void:
+	_state.set_log_names(_rocketchat_url(), _log_stream.known_names())
+	persist_state()
+
+
+## A filter set was saved/removed/defaulted: it lives in the project file, so persist
+## (silent auto-save when the project has a file, else flag dirty).
+func _on_log_sets_changed() -> void:
+	_persist_or_flag_dirty()
+
+
+## The tail's reach flipped (the server went down or came back mid-stream): repaint
+## the workspace + bridge status footers so they reflect it without a manual refresh.
+func _on_log_reachability_changed(_reachable: bool) -> void:
+	if _logs_panel != null:
+		_logs_panel.refresh_status()
+	if _models_sidebar != null:
+		_models_sidebar.refresh_bridge_status()
+
+
+## The Server Models target for the log tail, read live so a repository path or URL
+## changed after the stream was created is picked up. { repo_path, url }.
+func _logs_target() -> Dictionary:
+	return {
+		"repo_path": _doc.rocketchat_repo_path() if _doc != null else "",
+		"url": _rocketchat_url(),
+	}
+
+
 ## Create the shared Rocket.Chat session once, binding it to the center.
 func _ensure_session() -> void:
 	if _session == null:
@@ -453,6 +534,7 @@ func _refresh_activity(select_view: String = "") -> void:
 	if _doc.has_rocketchat():
 		views.append({"id": VIEW_USERS, "icon": ICON_USERS, "tooltip": "Users"})
 		views.append({"id": VIEW_MODELS, "icon": ICON_MODELS, "tooltip": "Server Models"})
+		views.append({"id": VIEW_LOGS, "icon": ICON_LOGS, "tooltip": "Server Logs"})
 	_activity.set_views(views, select_view)
 
 
@@ -480,6 +562,12 @@ func _remove_view(view: String) -> void:
 func _on_view_selected(view: String) -> void:
 	for id in _views:
 		(_views[id] as Control).visible = (id == view)
+	# Selecting Server Logs surfaces a tab in the center too — the controls in the
+	# sidebar act on the tail shown there, so the two belong on screen together. Only
+	# when none is open, so revisiting the view doesn't stack fresh tabs; more are
+	# opened deliberately with the panel's New tab button.
+	if view == VIEW_LOGS and not _center.has_logs_tab():
+		_center.open_logs()
 
 
 # Sidebar signal handlers -----------------------------------------------------
@@ -532,6 +620,8 @@ func _on_models_refresh() -> void:
 	var result: Dictionary = await Backend.rocketchat_models(target)
 	if _models_sidebar != null:
 		_models_sidebar.refresh_bridge_status()
+	if _logs_panel != null:
+		_logs_panel.refresh_bridge_status()
 	if not result.get("ok", false):
 		status_changed.emit("Couldn't reload the models: %s" % result.get("error", "unknown error"))
 		return
@@ -547,6 +637,8 @@ func _on_models_refresh() -> void:
 ## for, so a failure is worth a dialog.
 func _on_models_inject() -> void:
 	_install_models_bridge(false)
+
+
 
 
 ## A model was expanded in the sidebar: fetch its methods (from model-typings) and
@@ -594,6 +686,8 @@ func _install_models_bridge(automatic: bool) -> void:
 	# nothing answering.
 	if _models_sidebar != null:
 		_models_sidebar.refresh_bridge_status()
+	if _logs_panel != null:
+		_logs_panel.refresh_bridge_status()
 	if result.get("ok", false):
 		# The install response carries the server's models ({ name, collection }) for
 		# the sidebar tree and for typing model results against their collections.
@@ -602,6 +696,10 @@ func _install_models_bridge(automatic: bool) -> void:
 		if _models_sidebar != null:
 			_models_sidebar.set_models(models)
 		_center.bind_rocketchat_models(models)
+		# With the bridge in, the log tap is live — start tailing right away, even
+		# with no Server Logs tab open (the shared stream buffers until one is).
+		if _log_stream != null:
+			_log_stream.start()
 		status_changed.emit("Server Models bridge ready")
 	else:
 		status_changed.emit("Server Models injection failed: %s" % result.get("error", "unknown error"))

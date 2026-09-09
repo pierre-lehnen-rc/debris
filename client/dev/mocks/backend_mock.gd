@@ -74,6 +74,8 @@ func respond(path: String, body: Dictionary) -> Dictionary:
 					{"name": "Users", "collection": "users"},
 				],
 			})
+		"/api/rocketchat/logs":
+			return _rc_logs(body)
 		"/api/rocketchat/status":
 			# A bridge that is injected and answering — the state the console needs.
 			# Point the target at "not-injected" to exercise the other branch.
@@ -119,6 +121,31 @@ func _rc_call(body: Dictionary) -> Dictionary:
 			{"_id": "user1", "username": "user1", "roles": ["user"]},
 		]})
 	return _ok({"result": _load("rocketchat_user.json")})
+
+
+## The log tap's response: a fixed set of captured lines, returned as { seq, error,
+## entries } with only the lines past `since`, so the cursor semantics the tab
+## relies on are exercised. The set deliberately mixes pino NDJSON records (varied
+## levels, a section, a custom level) with one non-JSON line, so the parser's
+## dual path — structured vs raw — is covered. A "not-injected" target errors, as
+## the real bridge does when nothing is there to read.
+func _rc_logs(body: Dictionary) -> Dictionary:
+	if String(body.get("target", {}).get("repoPath", "")).contains("not-injected"):
+		return _err("Server Models endpoint isn't injected. Use Inject in the Server Models footer to inject it.")
+	var lines := [
+		JSON.stringify({"level": 30, "time": "2026-09-01T12:00:01.123Z", "name": "Meteor", "msg": "Server started"}),
+		JSON.stringify({"level": 40, "time": "2026-09-01T12:00:02.200Z", "name": "Migrations", "msg": "3 pending"}),
+		JSON.stringify({"level": 50, "time": "2026-09-01T12:00:03.300Z", "name": "Rooms", "section": "sync", "msg": "boom"}),
+		"==> Rocket.Chat is ready",
+		JSON.stringify({"level": 35, "time": "2026-09-01T12:00:04.400Z", "name": "API", "msg": "GET /api/info 200"}),
+	]
+	var since: int = int(body.get("since", 0))
+	var entries: Array = []
+	for i in lines.size():
+		var seq := i + 1
+		if seq > since:
+			entries.append({"seq": seq, "line": lines[i]})
+	return _ok({"seq": lines.size(), "error": "", "entries": entries})
 
 
 ## Documents for a collection: its own fixture (find/<collection>.json) when

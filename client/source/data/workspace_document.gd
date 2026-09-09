@@ -22,6 +22,9 @@ var rocketchat: Dictionary = {}
 ## these travel with the project file and are never evicted. Each entry is a
 ## QueryHistory saved-query dict.
 var favorite_queries: Dictionary = {}
+## Saved Server-Logs filter sets, in the project file, keyed by kind ("names" |
+## "columns"). Each value is an Array of { name, selection: { key -> bool }, default }.
+var log_filter_sets: Dictionary = {}
 
 # Runtime-only, never serialized ----------------------------------------------
 ## Absolute path this project was loaded from / last saved to; "" for Untitled.
@@ -148,6 +151,59 @@ func remove_favorite_query(collection: String, entry: Dictionary) -> bool:
 # Serialization ---------------------------------------------------------------
 ## The persisted form: only non-empty blocks are written, and users are reduced to
 ## their config shape (session-only fields like acquired tokens are dropped).
+# Server-log filter sets -----------------------------------------------------
+# Saved sets for the Server Logs filters, keyed by `kind` ("names" | "columns").
+# Each set is { name, selection: { key -> bool }, default: bool }; the one flagged
+# default seeds new tabs. See SavedSets (the shared store) and CheckFilter.
+func _filter_sets_of(kind: String) -> Array:
+	if not log_filter_sets.has(kind):
+		log_filter_sets[kind] = []
+	return log_filter_sets[kind]
+
+
+## A copy of the saved sets for `kind`.
+func filter_set_list(kind: String) -> Array:
+	return (log_filter_sets.get(kind, []) as Array).duplicate(true)
+
+
+## Add or replace (by name) a set of `kind` with the given selection, keeping its flag.
+func save_filter_set(kind: String, set_name: String, selection: Dictionary) -> void:
+	var sets := _filter_sets_of(kind)
+	for s in sets:
+		if s is Dictionary and str(s.get("name", "")) == set_name:
+			s["selection"] = selection.duplicate()
+			return
+	sets.append({"name": set_name, "selection": selection.duplicate(), "default": false})
+
+
+func remove_filter_set(kind: String, set_name: String) -> void:
+	var sets := _filter_sets_of(kind)
+	for i in sets.size():
+		if sets[i] is Dictionary and str(sets[i].get("name", "")) == set_name:
+			sets.remove_at(i)
+			return
+
+
+## Flag one set of `kind` as the default for new tabs (at most one); clears the rest.
+func set_default_filter_set(kind: String, set_name: String, is_default: bool) -> void:
+	for s in _filter_sets_of(kind):
+		if not (s is Dictionary):
+			continue
+		if str(s.get("name", "")) == set_name:
+			s["default"] = is_default
+		elif is_default:
+			s["default"] = false
+
+
+## The default set's selection for `kind`, or {} when none is flagged.
+func default_filter_selection(kind: String) -> Dictionary:
+	for s in _filter_sets_of(kind):
+		if s is Dictionary and bool(s.get("default", false)):
+			var sel: Variant = s.get("selection", {})
+			return (sel as Dictionary).duplicate() if sel is Dictionary else {}
+	return {}
+
+
 func to_dict() -> Dictionary:
 	var data: Dictionary = {"name": name}
 	if has_mongo():
@@ -166,6 +222,8 @@ func to_dict() -> Dictionary:
 		data["rocketchat"] = rc
 	if not favorite_queries.is_empty():
 		data["favorites"] = favorite_queries
+	if not log_filter_sets.is_empty():
+		data["log_filter_sets"] = log_filter_sets
 	return data
 
 
@@ -190,6 +248,12 @@ static func from_dict(data: Dictionary) -> WorkspaceDoc:
 		}
 	var fav: Variant = data.get("favorites", {})
 	doc.favorite_queries = fav if fav is Dictionary else {}
+	var sets: Variant = data.get("log_filter_sets", {})
+	doc.log_filter_sets = sets if sets is Dictionary else {}
+	# Migrate the earlier flat name-sets field.
+	var legacy: Variant = data.get("log_name_sets", [])
+	if legacy is Array and not (legacy as Array).is_empty() and not doc.log_filter_sets.has("names"):
+		doc.log_filter_sets["names"] = legacy
 	return doc
 
 

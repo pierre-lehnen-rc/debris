@@ -61,6 +61,11 @@ var _menu_item: TreeItem
 ## editable documents. Delete stays available.
 var _log_mode := false
 
+## When set, top-level rows render as server-log entries (see the tree/table views).
+## Like _log_mode it makes rows non-editable; the rendering differs (pino records
+## rather than activity-log actions).
+var _server_log := false
+
 ## When set (endpoint results), the view renders a raw response body rather than a
 ## page of documents: rows aren't editable documents, so the context menu drops
 ## Edit/Insert/Delete, and typed actions resolve against the per-row entity object
@@ -143,6 +148,16 @@ func set_log_mode(enabled: bool) -> void:
 	_log_mode = enabled
 
 
+## Enable server-log rendering (see the tree/table views). Read-only like log mode.
+func set_server_log_mode(enabled: bool) -> void:
+	_server_log = enabled
+
+
+## Whether rows are log entries (activity or server) — not editable documents.
+func _is_log() -> bool:
+	return _log_mode or _server_log
+
+
 ## Toggle raw-response rendering (endpoint results). Drives the context menu to
 ## drop document mutations and resolve typed actions per row (see _raw_mode).
 func set_raw_mode(enabled: bool) -> void:
@@ -223,10 +238,10 @@ func _on_doc_mouse_selected(_pos: Vector2, mouse_button_index: int) -> void:
 	# Document mutations only apply to editable document pages, not raw responses
 	# or activity-log entries.
 	if not _raw_mode:
-		if not _log_mode:
+		if not _is_log():
 			_doc_menu.add_item("Edit Document…", DocAction.EDIT)
 		_doc_menu.add_item("View Document", DocAction.VIEW)
-		if not _log_mode:
+		if not _is_log():
 			_doc_menu.add_item("Insert Document…", DocAction.INSERT)
 		_doc_menu.add_separator()
 	if not is_document:

@@ -25,6 +25,22 @@ export function meteorDirOf(repoPath: string): string {
   return join(repoPath, "apps", "meteor");
 }
 
+/**
+ * A plain integer from a value that may be a number or an Extended JSON wrapper
+ * ({ $numberInt } / { $numberLong }), since the bridge's canonical-EJSON responses
+ * box integers. Anything unrecognized becomes 0.
+ */
+function toPlainInt(value: unknown): number {
+  if (typeof value === "number") return Math.trunc(value);
+  if (value && typeof value === "object") {
+    const boxed = (value as { $numberInt?: unknown; $numberLong?: unknown });
+    const raw = boxed.$numberInt ?? boxed.$numberLong;
+    if (raw !== undefined) return Math.trunc(Number(raw)) || 0;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
+}
+
 export interface RcBridgeOptions {
   /**
    * Executable used to open a Meteor shell — a bare command name to look up, or a
@@ -55,6 +71,19 @@ export interface RcBridgeStatus {
 export interface RcModelInfo {
   name: string;
   collection: string;
+}
+
+/** One captured log line: its sequence number and the raw text as the tap saw it. */
+export interface RcLogEntry {
+  seq: number;
+  line: string;
+}
+
+/** A poll of the log tap: the new lines, the high-water `seq`, and any tap error. */
+export interface RcLogsResult {
+  seq: number;
+  error: string;
+  entries: RcLogEntry[];
 }
 
 /** An error carrying an HTTP status; {@link describeError} maps it to a response. */
@@ -120,6 +149,19 @@ function buildInstaller(token: string): string {
         return { name: name, collection: collection };
       });
     }
+    // Read log lines the tap has captured since sequence \`since\` (0 for the whole
+    // retained buffer). \`seq\` is the current high-water mark to poll from next;
+    // \`error\` reports a tap that couldn't attach. Lines are returned raw — never
+    // parsed here — so the client owns formatting and a future file source fits.
+    if (body && body.op === 'logs') {
+      var LR = D.logRing || { buf: [], seq: 0, error: 'log tap not installed' };
+      var since = (body && body.since) | 0;
+      return {
+        seq: LR.seq,
+        error: LR.error || '',
+        entries: LR.buf.filter(function (e) { return e.seq > since; })
+      };
+    }
     const model = body && body.model;
     const method = body && body.method;
     const args = body && body.args;
@@ -131,6 +173,49 @@ function buildInstaller(token: string): string {
     if (typeof fn !== 'function') throw new Error('not a function: ' + model + '.' + method);
     return await materialize(await fn.apply(inst, Array.isArray(args) ? args : []));
   };
+  // Tap the shared @rocket.chat/logger pino stream so the log view can read the
+  // server's log output. Every RC logger is a child of one pino instance and shares
+  // a single destination stream; teeing its write() captures every logger's line as
+  // raw NDJSON — before pino-pretty formats it — and still forwards, so the meteor
+  // terminal is unaffected. Best-effort and idempotent: a failure here never fails
+  // the injection (the log view surfaces the reason), and re-running only re-attaches
+  // if a restart dropped the tap. Runs before the installed-guard below so a re-inject
+  // retries a tap that didn't take the first time.
+  //
+  // Finding the stream: pino keys it under Symbol('pino.stream'), which is UNIQUE per
+  // pino module copy — and Rocket.Chat resolves more than one pino (apps/meteor's vs
+  // the repo root's). Requiring our own pino would get a symbol that never matches the
+  // logger the app actually built. So find the symbol ON the logger by its description,
+  // walking the prototype chain (a child logger inherits the stream from its parent).
+  var LR = (D.logRing = D.logRing || { buf: [], seq: 0, max: 2000, error: '' });
+  try {
+    var logger = require('@rocket.chat/logger').getPino('debris-log-tap');
+    var streamSym = null;
+    for (var obj = logger; obj && !streamSym; obj = Object.getPrototypeOf(obj)) {
+      var syms = Object.getOwnPropertySymbols(obj);
+      for (var i = 0; i < syms.length; i++) {
+        if (syms[i].description === 'pino.stream') { streamSym = syms[i]; break; }
+      }
+    }
+    var stream = streamSym ? logger[streamSym] : null;
+    if (!stream || typeof stream.write !== 'function') {
+      LR.error = 'log stream not reachable (no pino stream symbol on the logger)';
+    } else if (!stream.__debrisTapped) {
+      stream.__debrisTapped = true;
+      LR.error = '';
+      var origWrite = stream.write.bind(stream);
+      stream.write = function (chunk) {
+        try {
+          var line = typeof chunk === 'string' ? chunk : String(chunk);
+          LR.buf.push({ seq: ++LR.seq, line: line });
+          if (LR.buf.length > LR.max) LR.buf.splice(0, LR.buf.length - LR.max);
+        } catch (e) { /* never let logging break logging */ }
+        return origWrite(chunk);
+      };
+    }
+  } catch (e) {
+    LR.error = 'log tap failed: ' + String((e && e.message) || e);
+  }
   if (D.installed) return 'handler-updated';
   D.installed = true;
   WebApp.connectHandlers.use(${pathLiteral}, function (req, res) {
@@ -336,6 +421,35 @@ export class RcBridge {
   async listModels(): Promise<RcModelInfo[]> {
     const result = this.unwrap(await this.post({ op: "listModels" }));
     return Array.isArray(result) ? (result as RcModelInfo[]) : [];
+  }
+
+  /**
+   * Read log lines the injected tap has captured since sequence `since` (0 for the
+   * whole retained buffer). Returns the high-water `seq` to poll from next, any
+   * tap-side `error` (e.g. the pino stream wasn't reachable), and the new lines as
+   * raw strings — never parsed here, so a future file-tail source of pretty-printed
+   * text flows through the same shape. Installs nothing; `unwrap` throws the 503
+   * "not injected" when the bridge isn't there, exactly like `call`/`listModels`.
+   */
+  async readLogs(since: number): Promise<RcLogsResult> {
+    const result = this.unwrap(await this.post({ op: "logs", since }));
+    const r = (result ?? {}) as { seq?: unknown; error?: unknown; entries?: unknown };
+    // The RC handler serializes its result as canonical Extended JSON (relaxed:
+    // false, to round-trip model data faithfully), which wraps a plain integer as
+    // { $numberInt: "1" }. Log sequences are just counters, and the client contract
+    // for logs is plain JSON — so unwrap them back to numbers here rather than leak
+    // EJSON shapes the log view would have to know about.
+    const entries = Array.isArray(r.entries)
+      ? (r.entries as Array<Record<string, unknown>>).map((e) => ({
+          seq: toPlainInt(e?.seq),
+          line: typeof e?.line === "string" ? e.line : String(e?.line ?? ""),
+        }))
+      : [];
+    return {
+      seq: toPlainInt(r.seq),
+      error: typeof r.error === "string" ? r.error : "",
+      entries,
+    };
   }
 
   /**

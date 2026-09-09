@@ -90,6 +90,20 @@ export const registerRocketChatRoutes: FastifyPluginAsync<RcRoutesOptions> = asy
     },
   );
 
+  // Poll the log tap the bridge installed: `{ target, since }` returns the lines
+  // captured after sequence `since` (0 for the retained buffer), the high-water
+  // `seq` to poll from next, and any tap error. Installs nothing — a poll that
+  // injected on the way could never report the endpoint as missing.
+  app.post<{ Body: { target: RcTarget; since?: number } }>(
+    "/rocketchat/logs",
+    { schema: { body: withTarget({ since: { type: "integer", minimum: 0 } }) } },
+    async (req) => {
+      const bridge = registry.acquire(req.body.target);
+      const logs = await bridge.readLogs(req.body.since ?? 0);
+      return { ok: true, url: bridge.url, ...logs };
+    },
+  );
+
   // Run a model method: `{ target, model, method, args }`. `args` is the JSON
   // array the user supplies, spread into the call. The result comes back as
   // canonical Extended JSON, matching the MongoDB routes' response dialect.

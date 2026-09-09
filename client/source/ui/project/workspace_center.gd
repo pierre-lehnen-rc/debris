@@ -18,10 +18,12 @@ const QUERY_TAB_SCENE := preload("res://source/ui/database/query_tab.tscn")
 const ENDPOINT_TAB_SCENE := preload("res://source/ui/workspace/endpoint_tab.tscn")
 const JSON_TAB_SCENE := preload("res://source/ui/database/json_tab.tscn")
 const RCMODELS_TAB_SCENE := preload("res://source/ui/workspace/rc_models_tab.tscn")
+const LOGS_TAB_SCENE := preload("res://source/ui/workspace/logs_tab.tscn")
 const ICON_QUERY := preload("res://source/ui/icons/collection.svg")
 const ICON_ENDPOINT := preload("res://source/ui/icons/api.svg")
 const ICON_JSON := preload("res://source/ui/icons/json.svg")
 const ICON_RCMODELS := preload("res://source/ui/icons/models.svg")
+const ICON_LOGS := preload("res://source/ui/icons/logs.svg")
 
 @onready var _tabs: TabContainer = %Tabs
 @onready var _welcome: Control = %Welcome
@@ -48,6 +50,12 @@ var _rc_repo_path := ""
 var _rc_collections: Dictionary = {}
 # Shared per-project recent/favorite query store, handed to every query tab.
 var _history: QueryHistory = null
+# The project's single server-log tail. Bound when an API is attached; every Server
+# Logs tab renders this same stream (they are views, not rival pollers).
+var _log_stream: LogStream = null
+# The project's saved filter sets (names + columns), handed to every Server Logs tab.
+var _log_name_sets: SavedSets = null
+var _log_column_sets: SavedSets = null
 
 
 func _ready() -> void:
@@ -246,6 +254,76 @@ func open_rcmodels(model: String, method: String, collection := "", signature :=
 	return tab
 
 
+# Server Logs tabs ------------------------------------------------------------
+## Bind the project's shared server-log tail, so opened tabs render it. Set when an
+## API is attached. A cached endpoint list drives tab restore synchronously while the
+## endpoints view is built — before the logs view, so before this stream exists — so
+## any logs tabs restored unbound are wired here.
+func bind_log_stream(stream: LogStream) -> void:
+	_log_stream = stream
+	for child in _tabs.get_children():
+		if child is LogsTab and not (child as LogsTab).has_stream():
+			(child as LogsTab).bind_stream(stream)
+
+
+## Bind the project's saved filter sets (names + columns), so tabs' filters can use
+## them. Called before bind_log_stream (a tab's default sets must be set before it
+## binds). Also binds any logs tabs restored before the sets existed.
+func bind_log_filter_sets(name_sets: SavedSets, column_sets: SavedSets) -> void:
+	_log_name_sets = name_sets
+	_log_column_sets = column_sets
+	for child in _tabs.get_children():
+		if child is LogsTab and not (child as LogsTab).has_filter_sets():
+			(child as LogsTab).set_filter_sets(name_sets, column_sets)
+
+
+## Open a new Server Logs view onto the shared tail, focused. Not a singleton —
+## several may be open, each with its own filters; they share one stream, so no
+## extra polling. The tab and its filters are captured into the sidecar.
+func open_logs() -> LogsTab:
+	var tab := _instance_logs_tab({})
+	_tabs.current_tab = _tabs.get_tab_idx_from_control(tab)
+	_update_welcome()
+	_emit_state_changed()
+	return tab
+
+
+## Instance a Server Logs tab (optionally restoring saved filters), wire it, bind the
+## shared stream, and give it its tab title/icon. Doesn't focus or emit — the caller
+## decides (open_logs focuses and persists; restore stays silent).
+func _instance_logs_tab(restore_state: Dictionary) -> LogsTab:
+	var tab: LogsTab = LOGS_TAB_SCENE.instantiate()
+	tab.name = "logs_%d" % _tab_counter
+	_tab_counter += 1
+	if not restore_state.is_empty():
+		tab.configure_restore(restore_state)
+	tab.state_changed.connect(_emit_state_changed)
+	_tabs.add_child(tab)
+	# Filter sets before the stream: bind_stream applies the default sets on a fresh tab.
+	if _log_name_sets != null:
+		tab.set_filter_sets(_log_name_sets, _log_column_sets)
+	if _log_stream != null:
+		tab.bind_stream(_log_stream)
+	var index := _tabs.get_tab_idx_from_control(tab)
+	_tabs.set_tab_title(index, tab.tab_title())
+	_tabs.set_tab_icon(index, ICON_LOGS)
+	return tab
+
+
+## Reopen a Server Logs tab from a sidecar snapshot (its saved filters).
+func _restore_logs_tab(state: Dictionary) -> void:
+	_instance_logs_tab(state)
+
+
+## Whether any Server Logs view is open, so selecting the view opens one only when
+## none is there rather than stacking a fresh one on every visit.
+func has_logs_tab() -> bool:
+	for child in _tabs.get_children():
+		if child is LogsTab:
+			return true
+	return false
+
+
 # Rocket.Chat endpoint tabs ---------------------------------------------------
 ## Open a tab for `endpoint`. When `restore_state` is non-empty the tab is reopened
 ## from the sidecar with its saved user/params (never auto-sending).
@@ -361,6 +439,8 @@ func capture_tabs() -> Array:
 			out.append((child as JsonTab).to_state())
 		elif child is RcModelsTab:
 			out.append((child as RcModelsTab).to_state())
+		elif child is LogsTab:
+			out.append((child as LogsTab).to_state())
 	return out
 
 
@@ -385,6 +465,8 @@ func restore_tabs(states: Array, active: int, endpoints_by_id: Dictionary) -> vo
 				_restore_json_tab(state)
 			"rcmodels":
 				_restore_rcmodels_tab(state)
+			"logs":
+				_restore_logs_tab(state)
 	_restoring = false
 	var count := _tabs.get_tab_count()
 	if count > 0:

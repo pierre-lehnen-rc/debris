@@ -36,6 +36,10 @@ var endpoints: Dictionary = {}
 ## Recent queries per collection: { collection: Array[query-entry] }, newest first,
 ## capped at RECENT_LIMIT. Each entry is a QueryHistory saved-query dict.
 var query_history: Dictionary = {}
+## Logger names seen in the server-log tail: { "url": String, "names": Array[String] },
+## or {} when none cached. Keyed by URL so the Names filter can offer them next session
+## before a line for one is seen; a changed URL drops the stale list.
+var log_names: Dictionary = {}
 
 
 ## Replace the endpoint cache with the given parsed endpoints (ApiEndpoint list)
@@ -58,6 +62,25 @@ func cached_endpoints(url: String) -> Array:
 		if d is Dictionary:
 			out.append(ApiEndpoint.from_dict(d))
 	return out
+
+
+## The cached logger names for `url`, or [] when none are cached or they belong to a
+## different URL.
+func cached_log_names(url: String) -> Array:
+	if log_names.get("url", "") != url:
+		return []
+	var out: Array = []
+	for n in log_names.get("names", []):
+		out.append(str(n))
+	return out
+
+
+## Replace the cached logger names for `url`.
+func set_log_names(url: String, names: Array) -> void:
+	var list: Array = []
+	for n in names:
+		list.append(str(n))
+	log_names = {"url": url, "names": list}
 
 
 # Recent queries --------------------------------------------------------------
@@ -104,6 +127,7 @@ func to_dict() -> Dictionary:
 		"active_tab": active_tab,
 		"endpoints": endpoints,
 		"query_history": query_history,
+		"log_names": log_names,
 	}
 
 
@@ -116,4 +140,6 @@ static func from_dict(data: Dictionary) -> WorkspaceState:
 	s.endpoints = e if e is Dictionary else {}
 	var h: Variant = data.get("query_history", {})
 	s.query_history = h if h is Dictionary else {}
+	var ln: Variant = data.get("log_names", {})
+	s.log_names = ln if ln is Dictionary else {}
 	return s
